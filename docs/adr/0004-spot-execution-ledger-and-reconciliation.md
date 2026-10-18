@@ -21,7 +21,7 @@ each order so the service can correlate the actual decision instead of inferring
 the fact.
 
 An in-memory `ExecutionLedger` stores immutable intent, risk-decision, execution,
-balance, and reconciliation entries. `MockSpotExchangeAdapter` keeps an independent
+balance, sanitized error, and reconciliation entries. `MockSpotExchangeAdapter` keeps an independent
 order/fill/balance projection and applies each newly observed fill exactly once. The
 orchestrator compares local orders and fills, order states, and base/quote balances
 against that projection.
