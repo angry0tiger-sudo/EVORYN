@@ -726,10 +726,10 @@ def run_backtest(
             )
             submitted_orders += 1
 
+        if pending is not None and not history:
+            raise RuntimeError("Pending order exists without completed history.")
         if pending is not None:
             # At the current open, only the previous completed bar's volume is knowable.
-            if not history:
-                raise RuntimeError("Pending order exists without completed history.")
             liquidity_reference = history[-1]
             available = _floor_to_step(
                 liquidity_reference.volume * config.max_bar_participation,
