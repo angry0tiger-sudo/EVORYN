@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from evoryn.domain.models import Market, MarketSnapshot, OrderRequest, OrderType, Side
-from evoryn.paper.broker import PaperBroker, PaperOrder, PaperOrderStatus
+from evoryn.paper.broker import PaperBroker, PaperOrderStatus
 from evoryn.paper.failure_injection import FailureInjector, FailureMode
 from evoryn.ports.contracts import MarketDataPort
 from evoryn.risk.engine import RiskEngine
@@ -212,6 +212,7 @@ def test_invalid_data_injection_halts_without_filling_resting_orders() -> None:
     resting = broker.submit_order(
         order("bad-data-order", order_type=OrderType.LIMIT, price="90")
     )
+    assert resting.status is PaperOrderStatus.OPEN
     injector.inject_next("market_update", FailureMode.INVALID_DATA)
 
     result = broker.process_market_update(snapshot(ask="89", bid="88"))
