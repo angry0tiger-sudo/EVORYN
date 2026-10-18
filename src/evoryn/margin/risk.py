@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from evoryn.margin.models import (
-    DelegationLimit,
+    DelegationLimitSnapshot,
     MarginHealth,
     MarginMarketSettings,
     MarginMode,
@@ -98,7 +98,7 @@ class MarginRiskPolicy:
         self,
         intent: MarginOpenIntent,
         settings: MarginMarketSettings,
-        delegation_limits: tuple[DelegationLimit, ...],
+        delegation_limits: DelegationLimitSnapshot,
         *,
         now: datetime,
     ) -> MarginOrderRiskResult:
@@ -109,30 +109,41 @@ class MarginRiskPolicy:
                 "invalid_evaluation_time",
                 "Margin evaluation time must be timezone-aware.",
             )
-        if intent.market_symbol.casefold() != settings.market_symbol.casefold():
+        if (
+            intent.market_symbol.casefold() != settings.market_symbol.casefold()
+            or delegation_limits.market_symbol.casefold()
+            != settings.market_symbol.casefold()
+        ):
             return _order_result(
                 MarginOrderDisposition.REJECT,
                 "margin_market_mismatch",
-                "Intent market does not match the venue settings.",
+                "Intent, market settings, and delegation limits must identify the same market.",
             )
-        if not _is_aware(intent.observed_at) or not _is_aware(settings.observed_at):
+        if (
+            not _is_aware(intent.observed_at)
+            or not _is_aware(settings.observed_at)
+            or not _is_aware(delegation_limits.observed_at)
+        ):
             return _order_result(
                 MarginOrderDisposition.HALT,
                 "invalid_margin_timestamp",
-                "Intent and venue settings must have timezone-aware timestamps.",
+                "Intent, market settings, and delegation limits require aware timestamps.",
             )
         intent_age = now - intent.observed_at
         settings_age = now - settings.observed_at
+        limits_age = now - delegation_limits.observed_at
         if (
             intent_age < timedelta(0)
             or settings_age < timedelta(0)
+            or limits_age < timedelta(0)
             or intent_age.total_seconds() > self.max_data_age_seconds
             or settings_age.total_seconds() > self.max_data_age_seconds
+            or limits_age.total_seconds() > self.max_data_age_seconds
         ):
             return _order_result(
                 MarginOrderDisposition.HALT,
                 "stale_margin_inputs",
-                "Intent or market capability data is stale or from the future.",
+                "Intent, market capability, or delegation-limit data is stale or from the future.",
             )
         side_enabled = (
             settings.buy_enabled if intent.side.value == "buy" else settings.sell_enabled
@@ -151,7 +162,7 @@ class MarginRiskPolicy:
             )
         matching = tuple(
             item
-            for item in delegation_limits
+            for item in delegation_limits.limits
             if item.side is intent.side and item.leverage == intent.leverage
         )
         if len(matching) != 1:
