@@ -174,14 +174,19 @@ class RiskEngine:
         now: datetime,
     ) -> tuple[str, str] | None:
         """Validate all data needed by both the risk calculation and fill simulator."""
-        if now.tzinfo is None or now.utcoffset() is None:
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
             return ("invalid_evaluation_time", "Evaluation time must include a timezone.")
-        if market_data.observed_at.tzinfo is None or market_data.observed_at.utcoffset() is None:
+        if not isinstance(market_data.observed_at, datetime) or (
+            market_data.observed_at.tzinfo is None
+            or market_data.observed_at.utcoffset() is None
+        ):
             return ("invalid_market_timestamp", "Market data timestamp is not timezone-aware.")
         if market_data.market != request.market:
             return ("market_mismatch", "Risk input market does not match the requested market.")
-        if not market_data.source.strip():
+        if not isinstance(market_data.source, str) or not market_data.source.strip():
             return ("missing_market_source", "Market data has no source identifier.")
+        if not isinstance(market_data.values, dict):
+            return ("invalid_market_values", "Market data values must be a mapping.")
         if market_data.quality_flags:
             return ("market_quality_failure", "Market data has one or more quality failure flags.")
 
