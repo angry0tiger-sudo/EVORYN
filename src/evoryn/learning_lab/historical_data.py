@@ -89,7 +89,8 @@ class HistoricalDataset:
                 if delta != self.interval:
                     if not self.allow_gaps:
                         raise ValueError(
-                            "Candle interval gap detected; set allow_gaps=True only when documented."
+                            "Candle interval gap detected; "
+                            "set allow_gaps=True only when documented."
                         )
                     if delta % self.interval != timedelta(0):
                         raise ValueError(
