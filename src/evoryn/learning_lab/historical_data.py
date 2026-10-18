@@ -299,9 +299,9 @@ def _dataset_from_bytes(metadata: dict[str, Any], candle_bytes: bytes) -> Histor
         if not isinstance(market_data, dict):
             raise ValueError("market must be an object")
         market = Market(
-            symbol=_required_string(market_data, "symbol"),
-            venue=_required_string(market_data, "venue"),
-            market_type=_required_string(market_data, "market_type"),
+            symbol=_required_string(market_data.get("symbol"), "symbol"),
+            venue=_required_string(market_data.get("venue"), "venue"),
+            market_type=_required_string(market_data.get("market_type"), "market_type"),
         )
         interval_us = metadata["interval_microseconds"]
         if isinstance(interval_us, bool) or not isinstance(interval_us, int) or interval_us <= 0:
@@ -328,17 +328,19 @@ def _dataset_from_bytes(metadata: dict[str, Any], candle_bytes: bytes) -> Histor
                 )
             )
         dataset = HistoricalDataset(
-            dataset_id=_required_string(metadata, "dataset_id"),
+            dataset_id=_required_string(metadata.get("dataset_id"), "dataset_id"),
             market=market,
             interval=timedelta(microseconds=interval_us),
-            source_name=_required_string(metadata, "source_name"),
-            source_uri=_required_string(metadata, "source_uri"),
-            source_revision=_required_string(metadata, "source_revision"),
-            license_id=_required_string(metadata, "license_id"),
-            license_uri=_required_string(metadata, "license_uri"),
-            collected_at=_parse_datetime(_required_string(metadata, "collected_at")),
+            source_name=_required_string(metadata.get("source_name"), "source_name"),
+            source_uri=_required_string(metadata.get("source_uri"), "source_uri"),
+            source_revision=_required_string(metadata.get("source_revision"), "source_revision"),
+            license_id=_required_string(metadata.get("license_id"), "license_id"),
+            license_uri=_required_string(metadata.get("license_uri"), "license_uri"),
+            collected_at=_parse_datetime(
+                _required_string(metadata.get("collected_at"), "collected_at")
+            ),
             candles=tuple(candles),
-            allow_gaps=_required_bool(metadata, "allow_gaps"),
+            allow_gaps=_required_bool(metadata.get("allow_gaps"), "allow_gaps"),
         )
     except (KeyError, TypeError, ValueError, InvalidOperation) as exc:
         raise DatasetIntegrityError("Dataset metadata or candle rows are invalid.") from exc
