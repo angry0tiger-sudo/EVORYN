@@ -20,8 +20,8 @@ from evoryn.ports.exchange_errors import (
     AuthorizationError,
     ExchangeConflict,
     ExchangeResourceNotFound,
-    ExchangeTransportError,
     ExchangeTimeout,
+    ExchangeTransportError,
     ExchangeUnavailable,
     InvalidExchangeRequest,
     MalformedExchangeResponse,
@@ -38,7 +38,7 @@ class _NoRedirectHandler(HTTPRedirectHandler):
         file_pointer: object,
         code: int,
         message: str,
-        headers: Mapping[str, str],
+        headers: object,
         new_url: str,
     ) -> None:
         """Do not follow any redirect from the fixed exchange host."""
@@ -75,7 +75,12 @@ class NobitexHTTPTransport:
     def _is_allowed_route(method: str, path: str) -> bool:
         """Return true only for explicitly reviewed read endpoints."""
         if method == "GET":
-            if path in {"/market/stats", "/market/udf/history", "/v2/wallets", "/users/wallets/list"}:
+            if path in {
+                "/market/stats",
+                "/market/udf/history",
+                "/v2/wallets",
+                "/users/wallets/list",
+            }:
                 return True
             return (
                 path.startswith("/v3/orderbook/")
@@ -87,7 +92,7 @@ class NobitexHTTPTransport:
         return method == "POST" and path == "/market/orders/status"
 
     @staticmethod
-    def _raise_http_error(error: HTTPError) -> None:
+    def _raise_http_error(error: HTTPError) -> NoReturn:
         """Translate HTTP status into the shared provider-independent taxonomy."""
         if error.code == 401:
             raise AuthenticationError("Nobitex rejected authentication.")
@@ -150,7 +155,6 @@ class NobitexHTTPTransport:
                 raw_response = response.read()
         except HTTPError as exc:
             self._raise_http_error(exc)
-            raise ExchangeTransportError("Unreachable HTTP error translation path.")
         except URLError as exc:
             if isinstance(exc.reason, (TimeoutError,)):
                 raise ExchangeTimeout("Nobitex request timed out.") from exc
