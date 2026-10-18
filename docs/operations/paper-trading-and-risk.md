@@ -57,11 +57,12 @@ no I/O and is not an exchange connector.
 
 ## CI diagnostic access limitation (recorded 2026-10-18)
 
-GitHub Actions run #165 for the Phase 8/9 branch reported `failure`. The available
-connector path returned `BlobNotFound` when requesting job logs, and no artifact was
-reported for that run. The underlying cause could not be established from the available
-evidence. Record this as a **CI diagnostic access limitation in the current environment**,
-not as a confirmed GitHub platform defect and not as proof that the code or tests passed.
+GitHub Actions runs #165 (Phase 8/9) and #177 (Phase 10) reported `failure`. For
+both runs, job-step retrieval returned no steps, job-log retrieval returned `BlobNotFound`,
+and no diagnostic artifact was reported. The underlying cause could not be established from
+the available evidence. Record this as a **CI diagnostic access limitation in the current
+environment**, not as a confirmed GitHub platform defect and not as proof that the code or
+tests passed.
 
 The Phase 8/9 tests exist in the repository, but their actual pass/fail output was not
 retrievable in this work session. Phase 10 integration tests are authored on the
