@@ -15,6 +15,13 @@ class Side(StrEnum):
     SELL = "sell"
 
 
+class OrderType(StrEnum):
+    """Normalized exchange order type supported by the common contract."""
+
+    LIMIT = "limit"
+    MARKET = "market"
+
+
 class OrderStatus(StrEnum):
     """Normalized order lifecycle labels for domain-level representation only."""
 
@@ -116,6 +123,147 @@ class ExchangeCapabilities:
     account_read: bool
     order_read: bool
     order_write: bool = False
+    candles: bool = False
+    order_book: bool = False
+    recent_trades: bool = False
+    market_stats: bool = False
+    order_submit: bool = False
+    order_cancel: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class OrderBookLevel:
+    """One normalized level in an order-book side."""
+
+    price: Decimal
+    quantity: Decimal
+
+    def __post_init__(self) -> None:
+        """Reject non-finite or non-positive order-book values."""
+        if not self.price.is_finite() or self.price <= 0:
+            raise ValueError("Order-book price must be finite and positive.")
+        if not self.quantity.is_finite() or self.quantity <= 0:
+            raise ValueError("Order-book quantity must be finite and positive.")
+
+
+@dataclass(frozen=True, slots=True)
+class OrderBookSnapshot:
+    """Timestamped normalized bids and asks for a single canonical market."""
+
+    market: Market
+    bids: tuple[OrderBookLevel, ...]
+    asks: tuple[OrderBookLevel, ...]
+    observed_at: datetime
+    source: str
+    last_trade_price: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        """Reject missing time/source metadata and invalid optional last price."""
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("Order-book timestamp must include a timezone.")
+        if not self.source.strip():
+            raise ValueError("Order-book source must not be empty.")
+        if self.last_trade_price is not None and (
+            not self.last_trade_price.is_finite() or self.last_trade_price <= 0
+        ):
+            raise ValueError("Last trade price must be finite and positive.")
+
+
+@dataclass(frozen=True, slots=True)
+class MarketTrade:
+    """One normalized trade event from an exchange feed."""
+
+    trade_id: str
+    market: Market
+    side: Side
+    price: Decimal
+    quantity: Decimal
+    occurred_at: datetime
+
+    def __post_init__(self) -> None:
+        """Enforce explicit identity, aware event time, and positive trade values."""
+        if not self.trade_id.strip():
+            raise ValueError("Trade identifier must not be empty.")
+        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
+            raise ValueError("Trade timestamp must include a timezone.")
+        if not self.price.is_finite() or self.price <= 0:
+            raise ValueError("Trade price must be finite and positive.")
+        if not self.quantity.is_finite() or self.quantity < 0:
+            raise ValueError("Trade quantity must be finite and non-negative.")
+
+
+@dataclass(frozen=True, slots=True)
+class WalletBalance:
+    """Normalized wallet balance preserving the provider's balance and blocked fields."""
+
+    currency: str
+    balance: Decimal
+    blocked: Decimal
+
+    def __post_init__(self) -> None:
+        """Reject invalid currency identifiers or negative/non-finite balances."""
+        if not self.currency.strip():
+            raise ValueError("Wallet currency must not be empty.")
+        if not self.balance.is_finite() or self.balance < 0:
+            raise ValueError("Wallet balance must be finite and non-negative.")
+        if not self.blocked.is_finite() or self.blocked < 0:
+            raise ValueError("Blocked balance must be finite and non-negative.")
+
+
+@dataclass(frozen=True, slots=True)
+class MarketStatistics:
+    """Normalized market-statistics snapshot with optional provider fields."""
+
+    market: Market
+    observed_at: datetime
+    latest: Decimal | None = None
+    best_bid: Decimal | None = None
+    best_ask: Decimal | None = None
+    base_volume: Decimal | None = None
+    quote_volume: Decimal | None = None
+    day_low: Decimal | None = None
+    day_high: Decimal | None = None
+    day_open: Decimal | None = None
+    day_close: Decimal | None = None
+    day_change_percent: Decimal | None = None
+    is_closed: bool | None = None
+
+    def __post_init__(self) -> None:
+        """Require an aware timestamp and finite values for every supplied statistic."""
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("Market-statistics timestamp must include a timezone.")
+        for name in (
+            "latest", "best_bid", "best_ask", "base_volume", "quote_volume",
+            "day_low", "day_high", "day_open", "day_close", "day_change_percent",
+        ):
+            value = getattr(self, name)
+            if value is not None and not value.is_finite():
+                raise ValueError(f"Market statistic {name} must be finite.")
+
+
+@dataclass(frozen=True, slots=True)
+class OrderRequest:
+    """Typed order intent presented to an exchange port, not permission to execute."""
+
+    client_order_id: str
+    market: Market
+    side: Side
+    order_type: OrderType
+    quantity: Decimal
+    price: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        """Validate request shape without applying venue-specific trade rules."""
+        if not self.client_order_id.strip():
+            raise ValueError("Client order identifier must not be empty.")
+        if not self.quantity.is_finite() or self.quantity <= 0:
+            raise ValueError("Order quantity must be finite and positive.")
+        if self.order_type is OrderType.LIMIT and self.price is None:
+            raise ValueError("Limit orders require a price.")
+        if self.order_type is OrderType.MARKET and self.price is not None:
+            raise ValueError("Market orders must not provide a limit price.")
+        if self.price is not None and (not self.price.is_finite() or self.price <= 0):
+            raise ValueError("Order price must be finite and positive.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,3 +345,4 @@ class MarketCandle:
             raise ValueError("High must be at least open, close, and low.")
         if self.low > min(self.open, self.close, self.high):
             raise ValueError("Low must be no greater than open, close, and high.")
+
