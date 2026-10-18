@@ -39,6 +39,10 @@ Repository: https://github.com/freqtrade/freqtrade
 
 Candidate for research and backtesting evaluation only. It is not a general software engineering agent and must not become a core EVORYN dependency before a compatibility, licensing, and architecture review. Do not assume Nobitex Margin support.
 
+## Local runtime bootstrap
+
+See [Local Runtime Bootstrap](LOCAL_RUNTIME_BOOTSTRAP.md) for the Windows + Ollama setup sequence, isolation requirements, least-privilege GitHub access policy, and evidence required before an agent can be called active. The actual development host was offline at the latest check, so installation and runtime validation remain pending.
+
 ## Activation checklist
 
 - [ ] Review this branch and merge only after human review.
