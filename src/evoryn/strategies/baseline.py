@@ -14,6 +14,7 @@ class BaselineStrategy(Protocol):
     """Pure policy contract: history ends at the last completed bar, never the fill bar."""
 
     strategy_id: str
+    strategy_version: str
 
     def parameters(self) -> dict[str, str]:
         """Return the exact parameters that must be recorded with every experiment."""
@@ -31,6 +32,7 @@ class SmaCrossoverBaseline:
     fast_window: int = 5
     slow_window: int = 20
     strategy_id: str = "sma-crossover-long-flat"
+    strategy_version: str = "1.0.0"
 
     def __post_init__(self) -> None:
         if self.fast_window <= 0 or self.slow_window <= 0:
@@ -61,6 +63,7 @@ class SmaTrendBaseline:
 
     window: int = 20
     strategy_id: str = "sma-trend-long-flat"
+    strategy_version: str = "1.0.0"
 
     def __post_init__(self) -> None:
         if self.window <= 0:
