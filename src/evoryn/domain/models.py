@@ -93,6 +93,8 @@ class Order:
     side: Side
     quantity: Decimal
     status: OrderStatus
+    price: Decimal | None = None
+    client_order_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
