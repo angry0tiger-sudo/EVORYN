@@ -432,6 +432,8 @@ class PaperBroker:
             return "stale_market_data"
         if not isinstance(snapshot.source, str) or not snapshot.source.strip():
             return "market_data_quality_failure"
+        if not isinstance(snapshot.quality_flags, tuple):
+            return "invalid_market_quality_metadata"
         if snapshot.quality_flags:
             return "market_data_quality_failure"
         if not isinstance(snapshot.values, dict):
