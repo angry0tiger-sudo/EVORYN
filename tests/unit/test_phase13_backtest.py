@@ -142,7 +142,7 @@ class BuyAndHold:
     def parameters(self) -> dict[str, str]:
         return {"pattern": "hold-long-after-first-close"}
 
-    def target_exposure(self, history: tuple[MarketCandle, ...]) -> Decimal:
+    def target_exposure(self, history: Sequence[MarketCandle]) -> Decimal:
         return Decimal("1") if history else Decimal("0")
 
 
@@ -182,6 +182,7 @@ def test_dataset_rejects_out_of_order_duplicate_or_unrecorded_gaps() -> None:
             dataset_id="duplicate-candles",
             market=MARKET,
             interval=INTERVAL,
+            volume_unit="base_asset",
             source_name=SOURCE,
             source_uri="urn:fixture",
             source_revision="rev1",
