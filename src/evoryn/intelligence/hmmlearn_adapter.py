@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import Any
 
 from evoryn.domain.models import Market, MarketCandle
+from evoryn.learning_lab.backtest import TemporalPartitions
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.intelligence.regime import (
     RegimeFeatureExtractor,
@@ -197,41 +198,39 @@ class GaussianHMMRegimeModel:
         self,
         dataset: HistoricalDataset,
         *,
-        split_name: str,
-        train_start_index: int,
-        train_end_index_exclusive: int,
+        partitions: TemporalPartitions,
+        train_start_index: int | None = None,
+        train_end_index_exclusive: int | None = None,
     ) -> HMMTrainingManifest:
-        """Fit using an exact versioned dataset slice, reducing the risk of a mismatched hash."""
-        if split_name != "train":
-            raise ValueError(
-                "HMM fitting accepts only split_name='train'; validation/test are holdouts."
-            )
+        """Fit only a subrange of Phase 13's train partition for this exact dataset version."""
+        self._clear_fitted_state()
+        if partitions.dataset_version != dataset.version:
+            raise ValueError("Temporal partitions belong to a different dataset version.")
+        if partitions.total_bars != len(dataset.candles):
+            raise ValueError("Temporal partitions do not match the supplied dataset length.")
+        start = partitions.train.start if train_start_index is None else train_start_index
+        end = (
+            partitions.train.end
+            if train_end_index_exclusive is None
+            else train_end_index_exclusive
+        )
         if (
-            type(train_start_index) is not int
-            or type(train_end_index_exclusive) is not int
-            or train_start_index < 0
-            or train_end_index_exclusive > len(dataset.candles)
-            or train_end_index_exclusive <= train_start_index
+            type(start) is not int
+            or type(end) is not int
+            or start < partitions.train.start
+            or end > partitions.train.end
+            or end <= start
         ):
-            raise ValueError("Training range is outside the supplied historical dataset.")
-        return self.fit(
-            dataset.candles[train_start_index:train_end_index_exclusive],
+            raise ValueError("Training range must be contained in the declared train partition.")
+        return self._fit_train_candles(
+            dataset.candles[start:end],
             dataset_version=dataset.version,
-            split_name=split_name,
-            train_start_index=train_start_index,
-            train_end_index_exclusive=train_end_index_exclusive,
+            train_start_index=start,
+            train_end_index_exclusive=end,
         )
 
-    def fit(
-        self,
-        training_candles: Sequence[MarketCandle],
-        *,
-        dataset_version: str,
-        split_name: str,
-        train_start_index: int,
-        train_end_index_exclusive: int,
-    ) -> HMMTrainingManifest:
-        """Fit only on an explicit train range; validation/test splits are rejected."""
+    def _clear_fitted_state(self) -> None:
+        """Clear a prior fit before any attempted refit, including rejected ranges."""
         self._model = None
         self._np = None
         self._feature_mean = None
@@ -242,10 +241,18 @@ class GaussianHMMRegimeModel:
         self._training_market = None
         self._training_interval = None
         self._manifest = None
-        if split_name != "train":
-            raise ValueError(
-                "HMM fitting accepts only split_name='train'; validation/test are holdouts."
-            )
+
+    def _fit_train_candles(
+        self,
+        training_candles: Sequence[MarketCandle],
+        *,
+        dataset_version: str,
+        train_start_index: int,
+        train_end_index_exclusive: int,
+    ) -> HMMTrainingManifest:
+        """Internal fit implementation; public fitting requires versioned temporal partitions."""
+        self._clear_fitted_state()
+        self._clear_fitted_state()
         if not _SHA256_PATTERN.fullmatch(dataset_version):
             raise ValueError("dataset_version must be a lowercase SHA-256 digest.")
         if (
@@ -375,7 +382,7 @@ class GaussianHMMRegimeModel:
             },
             "training": {
                 "dataset_version": dataset_version,
-                "split": split_name,
+                "split": "train",
                 "start_index": train_start_index,
                 "end_index_exclusive": train_end_index_exclusive,
                 "start_at": _iso_utc(train_start_at),
@@ -422,7 +429,7 @@ class GaussianHMMRegimeModel:
             scikit_learn_version=scikit_learn_version,
             python_version=python_version,
             training_dataset_version=dataset_version,
-            training_split=split_name,
+            training_split="train",
             train_start_index=train_start_index,
             train_end_index_exclusive=train_end_index_exclusive,
             train_start_at=train_start_at,
