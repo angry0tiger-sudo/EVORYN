@@ -17,8 +17,8 @@ from evoryn.domain.models import (
     OrderType,
     Side,
 )
-from evoryn.ports.contracts import MarketDataPort, RiskPort
 from evoryn.paper.failure_injection import FailureInjector, FailureMode
+from evoryn.ports.contracts import MarketDataPort, RiskPort
 from evoryn.risk.models import PortfolioSnapshot, RiskAction
 
 
@@ -81,12 +81,10 @@ class PaperBroker:
         self._market_data = market_data
         self._risk_port = risk_port
         self._cash = initial_capital
-        self._initial_capital = initial_capital
         self._position_quantity = Decimal("0")
         self._average_entry_price = Decimal("0")
         self._realized_pnl = Decimal("0")
         self._orders: dict[str, PaperOrder] = {}
-        self._latest_snapshot: MarketSnapshot | None = None
         self._max_data_age = max_market_data_age_seconds
         self._failures = failure_injector or FailureInjector()
         self._clock = clock or (lambda: datetime.now(UTC))
@@ -148,7 +146,6 @@ class PaperBroker:
                 self._risk_port.emergency_halt(fault)
                 return self._store_rejected(order_id, request, now, fault)
 
-            self._latest_snapshot = snapshot
             portfolio = self._portfolio_snapshot(snapshot)
             try:
                 decision = self._risk_port.evaluate(
@@ -212,7 +209,6 @@ class PaperBroker:
             if self._risk_port.is_halted:
                 return tuple(self._orders.values())
 
-            self._latest_snapshot = snapshot
             for key, order in tuple(self._orders.items()):
                 if order.status in (PaperOrderStatus.OPEN, PaperOrderStatus.PARTIAL):
                     self._match_order(key, snapshot)
