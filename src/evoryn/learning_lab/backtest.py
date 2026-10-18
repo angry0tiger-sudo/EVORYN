@@ -474,7 +474,9 @@ def make_walk_forward_folds(
             raise ValueError(f"{name} must be a positive integer.")
     step = test_bars if step_bars is None else step_bars
     if step < test_bars:
-        raise ValueError("step_bars must be >= test_bars so out-of-sample test windows do not overlap.")
+        raise ValueError(
+            "step_bars must be >= test_bars so out-of-sample test windows do not overlap."
+        )
     folds: list[WalkForwardFold] = []
     start = 0
     index = 0
@@ -532,7 +534,10 @@ def run_backtest(
     if not getattr(strategy, "strategy_id", "").strip():
         raise ValueError("Strategy must declare a non-empty strategy_id.")
     parameters = strategy.parameters()
-    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in parameters.items()):
+    if any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in parameters.items()
+    ):
         raise ValueError("Strategy parameters must be serializable string pairs.")
 
     cash = config.initial_cash
@@ -726,7 +731,9 @@ def run_backtest(
 
                 if pending is None and position_quantity == _ZERO and episode_quantity_bought > 0:
                     if episode_entry_time is None or episode_exit_quantity <= 0:
-                        raise RuntimeError("Closed episode lacks corresponding entry/exit accounting.")
+                        raise RuntimeError(
+                            "Closed episode lacks corresponding entry/exit accounting."
+                        )
                     gross_pnl = episode_exit_notional - episode_entry_notional
                     total_episode_fees = episode_entry_fees + episode_exit_fees
                     net_pnl = gross_pnl - total_episode_fees
@@ -989,7 +996,11 @@ def _metrics_dict(metrics: BacktestMetrics) -> dict[str, Any]:
             if metrics.expectancy_per_closed_trade is not None
             else None
         ),
-        "win_rate_fraction": str(metrics.win_rate_fraction) if metrics.win_rate_fraction is not None else None,
+        "win_rate_fraction": (
+            str(metrics.win_rate_fraction)
+            if metrics.win_rate_fraction is not None
+            else None
+        ),
         "closed_trade_count": metrics.closed_trade_count,
         "winning_trade_count": metrics.winning_trade_count,
         "losing_trade_count": metrics.losing_trade_count,
