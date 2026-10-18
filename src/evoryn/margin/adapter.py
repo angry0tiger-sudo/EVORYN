@@ -47,16 +47,21 @@ class NobitexMarginAdapter:
         payload: Mapping[str, object],
         *,
         observed_at: datetime,
+        market_symbol: str | None = None,
     ) -> MarginPosition:
-        """Normalize one documented Position object, preserving absent optional fields."""
+        """Normalize one Position object, preserving absent fields and market aliases.
+
+        If no symbol alias from the enclosing markets response is supplied, use an
+        explicit source/destination pair label instead of guessing IRT/RLS aliases.
+        """
+        src_currency = _required_string(payload, "srcCurrency").upper()
+        dst_currency = _required_string(payload, "dstCurrency").upper()
+        normalized_symbol = market_symbol or f"{src_currency}/{dst_currency}"
         return MarginPosition(
             position_id=_required_int(payload, "id"),
-            market_symbol=(
-                _required_string(payload, "srcCurrency").upper()
-                + _required_string(payload, "dstCurrency").upper()
-            ),
-            src_currency=_required_string(payload, "srcCurrency").upper(),
-            dst_currency=_required_string(payload, "dstCurrency").upper(),
+            market_symbol=normalized_symbol,
+            src_currency=src_currency,
+            dst_currency=dst_currency,
             side=_side(_required_string(payload, "side")),
             status=_status(_required_string(payload, "status")),
             margin_mode=_margin_mode(_required_string(payload, "marginType")),
