@@ -157,7 +157,7 @@ def test_position_parser_normalizes_open_margin_record() -> None:
             "marginRatio": "2",
             "liabilityInOrder": "0",
             "assetInOrder": "0",
-            "unrealizedPNL": "-1.25",
+            "unrealizedPNL": "−1.25",
             "expirationDate": "2026-10-28",
             "extensionFee": "0.2",
             "markPrice": "100",
