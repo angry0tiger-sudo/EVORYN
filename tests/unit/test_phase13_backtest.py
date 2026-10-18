@@ -39,6 +39,7 @@ def dataset(
     count: int = 60,
     *,
     dataset_id: str = "synthetic-btc-hourly",
+    market_type: str = "spot",
     closes: tuple[str, ...] | None = None,
     opens: tuple[str, ...] | None = None,
     volume: str = "100",
@@ -59,6 +60,7 @@ def dataset(
         or len(volume_values) != count
     ):
         raise ValueError("Fixture OHLCV values must match count.")
+    market = Market(symbol=MARKET.symbol, venue=MARKET.venue, market_type=market_type)
     candles: list[MarketCandle] = []
     gap_offset = 0
     for index in range(count):
@@ -70,7 +72,7 @@ def dataset(
         low = min(open_price, close_price) - Decimal("1")
         candles.append(
             MarketCandle(
-                market=MARKET,
+                market=market,
                 timestamp=NOW + INTERVAL * (index + gap_offset),
                 interval=INTERVAL,
                 open=open_price,
@@ -83,7 +85,7 @@ def dataset(
         )
     return HistoricalDataset(
         dataset_id=dataset_id,
-        market=MARKET,
+        market=market,
         interval=INTERVAL,
         volume_unit=volume_unit,
         source_name=SOURCE,
@@ -472,6 +474,17 @@ def test_walk_forward_rejects_overlapping_test_windows_and_short_data() -> None:
     with pytest.raises(ValueError, match="too short"):
         make_walk_forward_folds(
             dataset(count=20), train_bars=10, validation_bars=8, test_bars=5
+        )
+
+
+def test_backtest_rejects_non_spot_dataset_for_spot_only_accounting() -> None:
+    margin_dataset = dataset(count=10, market_type="margin")
+    with pytest.raises(ValueError, match="supports Spot datasets only"):
+        run_backtest(
+            margin_dataset,
+            SmaTrendBaseline(window=2),
+            config(),
+            segment_name="margin-must-use-separate-model",
         )
 
 
