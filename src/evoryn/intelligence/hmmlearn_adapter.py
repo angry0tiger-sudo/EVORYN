@@ -121,7 +121,6 @@ class GaussianHMMRegimeModel:
     """
 
     model_id = "evoryn.hmmlearn-gaussian-hmm-regime"
-    model_version_confidence_semantics = "hmm_posterior"
     confidence_semantics = "hmm_posterior"
     _model_version_prefix = "1.0.0"
 
