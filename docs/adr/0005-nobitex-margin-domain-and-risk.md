@@ -1,6 +1,6 @@
 # ADR 0005: Nobitex Delegated Margin Domain and Fail-Closed Risk Model
 
-- Status: Proposed for review
+- Status: Accepted (architecture/domain decision; not live-trading authorization)
 - Date: 2026-10-18
 - Scope: Roadmap Phase 11
 - Depends on: Phase 5 normalized data; Phase 6/7 read-only exchange capability boundaries
