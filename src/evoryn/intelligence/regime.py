@@ -215,6 +215,7 @@ class RegimePrediction:
 
     label: RegimeLabel
     confidence: Decimal
+    confidence_semantics: str
     probabilities: tuple[tuple[RegimeLabel, Decimal], ...]
     as_of: datetime
     model_id: str
@@ -246,6 +247,8 @@ class RegimePrediction:
             raise ValueError("Feature schema version and reason code are required.")
         if not self.model_fingerprint.strip():
             raise ValueError("Model fingerprint or an explicit unfit sentinel is required.")
+        if not self.confidence_semantics.strip():
+            raise ValueError("confidence_semantics must state how the score should be interpreted.")
         if (
             not isinstance(self.min_confidence_threshold, Decimal)
             or not self.min_confidence_threshold.is_finite()
@@ -282,6 +285,7 @@ class RegimeProbabilityModel(Protocol):
     model_id: str
     model_version: str
     model_fingerprint: str
+    confidence_semantics: str
 
     @property
     def is_ready(self) -> bool:
@@ -300,6 +304,7 @@ class RuleBasedRegimeBaseline:
 
     model_id = "evoryn.rule-regime-baseline"
     model_version = "1.0.0"
+    confidence_semantics = "heuristic_score"
 
     @property
     def model_fingerprint(self) -> str:
@@ -385,6 +390,8 @@ class AbstainingRegimeDetector:
             return self._unknown(as_of, "INVALID_HISTORY")
         if not self._model.is_ready:
             return self._unknown(as_of, "MODEL_NOT_READY")
+        if self._model.confidence_semantics != "hmm_posterior":
+            return self._unknown(as_of, "UNVALIDATED_CONFIDENCE")
 
         try:
             raw = self._model.predict_probabilities(completed_history)
@@ -409,6 +416,7 @@ class AbstainingRegimeDetector:
             return RegimePrediction(
                 label=RegimeLabel.UNKNOWN,
                 confidence=confidence,
+                confidence_semantics=self._model.confidence_semantics,
                 probabilities=ordered,
                 as_of=as_of,
                 model_id=self._model.model_id,
@@ -423,6 +431,7 @@ class AbstainingRegimeDetector:
         return RegimePrediction(
             label=label,
             confidence=confidence,
+            confidence_semantics=self._model.confidence_semantics,
             probabilities=ordered,
             as_of=as_of,
             model_id=self._model.model_id,
@@ -439,6 +448,7 @@ class AbstainingRegimeDetector:
         return RegimePrediction(
             label=RegimeLabel.UNKNOWN,
             confidence=Decimal("0"),
+            confidence_semantics=self._model.confidence_semantics,
             probabilities=(),
             as_of=as_of,
             model_id=self._model.model_id,
