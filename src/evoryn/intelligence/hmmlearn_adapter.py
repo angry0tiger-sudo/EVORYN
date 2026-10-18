@@ -452,7 +452,17 @@ class GaussianHMMRegimeModel:
         self, completed_history: Sequence[MarketCandle]
     ) -> Mapping[RegimeLabel, Decimal]:
         """Return filtered posterior probabilities for the latest known prefix only."""
-        if not self.is_ready:
+        model = self._model
+        np = self._np
+        feature_mean = self._feature_mean
+        feature_scale = self._feature_scale
+        if (
+            model is None
+            or np is None
+            or feature_mean is None
+            or feature_scale is None
+            or not self.is_ready
+        ):
             raise RuntimeError("HMM is not fitted with a usable, versioned training split.")
         if not completed_history:
             raise ValueError("No completed history supplied for HMM inference.")
@@ -469,14 +479,14 @@ class GaussianHMMRegimeModel:
         if latest_close_time < self._training_end_at:
             raise ValueError("Inference time precedes the end of the HMM training range.")
         feature_rows = self._features.extract_series(completed_history)
-        matrix = self._np.asarray(
+        matrix = np.asarray(
             [features.as_float_tuple() for features in feature_rows],
-            dtype=self._np.float64,
+            dtype=np.float64,
         )
-        scaled = (matrix - self._feature_mean) / self._feature_scale
+        scaled = (matrix - feature_mean) / feature_scale
         # Only the supplied prefix is passed to predict_proba. The final row has no later
         # observations inside this call, so it cannot be smoothed using future bars.
-        posterior = self._model.predict_proba(scaled)
+        posterior = model.predict_proba(scaled)
         last_posterior = posterior[-1]
         return {
             self._state_labels[state]: Decimal(str(float(last_posterior[state])))
