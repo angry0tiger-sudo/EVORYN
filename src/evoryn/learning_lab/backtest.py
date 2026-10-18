@@ -1085,6 +1085,7 @@ def _build_metrics(
 def _is_sha256(value: str) -> bool:
     return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
+
 def _metrics_dict(metrics: BacktestMetrics) -> dict[str, Any]:
     return {
         "initial_equity": str(metrics.initial_equity),
