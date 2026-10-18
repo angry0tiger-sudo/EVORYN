@@ -54,7 +54,9 @@ class RiskEngine:
     def clear_halt(self, *, operator_acknowledged: bool) -> None:
         """Require explicit acknowledgement before clearing a latched stop."""
         if operator_acknowledged is not True:
-            raise PermissionError("Clearing a risk halt requires explicit operator acknowledgement.")
+            raise PermissionError(
+                "Clearing a risk halt requires explicit operator acknowledgement."
+            )
         with self._lock:
             self._halt_reason = None
             self._kill_switch_active = False
@@ -222,7 +224,10 @@ class RiskEngine:
         for key in ("bid", "ask", "last", "bid_size", "ask_size"):
             value = market_data.values.get(key)
             if not isinstance(value, Decimal) or not value.is_finite():
-                return ("invalid_market_value", f"Required market value {key!r} is missing or invalid.")
+                return (
+                    "invalid_market_value",
+                    f"Required market value {key!r} is missing or invalid.",
+                )
             if key in ("bid", "ask", "last") and value <= 0:
                 return ("invalid_market_price", f"Required market price {key!r} is not positive.")
             if key in ("bid_size", "ask_size") and value < 0:
