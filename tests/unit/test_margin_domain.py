@@ -10,6 +10,7 @@ import pytest
 from evoryn.margin.adapter import NobitexMarginAdapter
 from evoryn.margin.models import (
     DelegationLimit,
+    DelegationLimitSnapshot,
     MarginHealth,
     MarginMarketSettings,
     MarginMode,
@@ -195,10 +196,14 @@ def test_delegation_limits_retain_distinct_buy_quote_and_sell_base_values() -> N
                 "buy": [{"leverage": "2", "limit": "2500"}],
                 "sell": [{"leverage": "2", "limit": "0.042"}],
             }
-        }
+        },
+        market_symbol="BTCUSDT",
+        observed_at=NOW,
     )
 
-    assert limits == (
+    assert limits.market_symbol == "BTCUSDT"
+    assert limits.observed_at == NOW
+    assert limits.limits == (
         DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("2500")),
         DelegationLimit(MarginSide.SELL, Decimal("2"), Decimal("0.042")),
     )
@@ -295,9 +300,13 @@ def test_reported_liquidated_closed_and_unknown_statuses_are_not_reinterpreted()
 
 def test_buy_order_uses_quote_limit_and_sell_order_uses_base_limit() -> None:
     policy = MarginRiskPolicy()
-    limits = (
-        DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("250")),
-        DelegationLimit(MarginSide.SELL, Decimal("2"), Decimal("0.05")),
+    limits = DelegationLimitSnapshot(
+        market_symbol="BTCUSDT",
+        observed_at=NOW,
+        limits=(
+            DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("250")),
+            DelegationLimit(MarginSide.SELL, Decimal("2"), Decimal("0.05")),
+        ),
     )
 
     buy_ok = policy.evaluate_open_intent(
@@ -322,7 +331,11 @@ def test_buy_order_uses_quote_limit_and_sell_order_uses_base_limit() -> None:
 
 def test_disabled_direction_stale_settings_and_unknown_limit_fail_closed() -> None:
     policy = MarginRiskPolicy()
-    buy_limit = (DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("1000")),)
+    buy_limit = DelegationLimitSnapshot(
+        market_symbol="BTCUSDT",
+        observed_at=NOW,
+        limits=(DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("1000")),),
+    )
 
     disabled = policy.evaluate_open_intent(
         intent(), settings(buy_enabled=False), buy_limit, now=NOW
