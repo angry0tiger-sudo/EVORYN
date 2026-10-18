@@ -21,7 +21,6 @@ from evoryn.domain.models import (
     OrderBookSnapshot,
     OrderIntent,
     OrderRequest,
-    Position,
     RiskDecision,
     Signal,
     WalletBalance,
