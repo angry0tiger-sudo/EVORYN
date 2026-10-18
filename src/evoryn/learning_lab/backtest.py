@@ -273,7 +273,7 @@ class BacktestResult:
     dataset_id: str
     dataset_version: str
     strategy_id: str
-    strategy_parameters: dict[str, str]
+    strategy_parameters: tuple[tuple[str, str], ...]
     segment_name: str
     evaluation_range: IndexRange
     warmup_start_index: int
@@ -295,7 +295,7 @@ class BacktestResult:
             "dataset_version": self.dataset_version,
             "strategy": {
                 "id": self.strategy_id,
-                "parameters": dict(sorted(self.strategy_parameters.items())),
+                "parameters": dict(self.strategy_parameters),
             },
             "segment_name": self.segment_name,
             "evaluation_range": {
@@ -797,11 +797,11 @@ def run_backtest(
         bar_count=len(evaluation),
         open_position_quantity=position_quantity,
     )
-    parameters_sorted = dict(sorted(parameters.items()))
+    parameters_sorted = tuple(sorted(parameters.items()))
     run_material = {
         "dataset_version": dataset.version,
         "strategy_id": strategy.strategy_id,
-        "strategy_parameters": parameters_sorted,
+        "strategy_parameters": dict(parameters_sorted),
         "config": config.as_dict(),
         "segment_name": segment_name,
         "evaluation_range": {"start": start_index, "end": end},
