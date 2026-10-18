@@ -312,7 +312,11 @@ def test_partial_fills_respect_per_bar_volume_participation_and_remain_open() ->
             index for index, candle in enumerate(bars.candles)
             if candle.timestamp == fill.timestamp
         )
-        assert fill.quantity <= bars.candles[candle_index].volume * Decimal("0.1")
+        assert candle_index > 0
+        prior_candle = bars.candles[candle_index - 1]
+        assert fill.liquidity_reference_candle_open == prior_candle.timestamp
+        assert fill.liquidity_reference_volume == prior_candle.volume
+        assert fill.quantity <= prior_candle.volume * Decimal("0.1")
         assert fill.volume_participation <= Decimal("0.1")
 
 
