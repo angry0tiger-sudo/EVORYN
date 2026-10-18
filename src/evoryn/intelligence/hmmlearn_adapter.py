@@ -13,27 +13,18 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from evoryn.domain.models import MarketCandle
+from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.regime import (
-    REGIME_FEATURE_SCHEMA_VERSION,
     RegimeFeatureExtractor,
     RegimeLabel,
 )
 
 
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-_STATE_LABELS = (
-    RegimeLabel.BULL_TREND,
-    RegimeLabel.BEAR_TREND,
-    RegimeLabel.RANGE_BOUND,
-    RegimeLabel.HIGH_VOLATILITY,
-)
-
-
 class RegimeDependencyUnavailable(RuntimeError):
     """Raised when optional HMM dependencies are not installed."""
 
@@ -155,6 +146,8 @@ class GaussianHMMRegimeModel:
         self._state_labels: dict[int, RegimeLabel] = {}
         self._training_start_at: datetime | None = None
         self._training_end_at: datetime | None = None
+        self._training_market: Market | None = None
+        self._training_interval: timedelta | None = None
         self._manifest: HMMTrainingManifest | None = None
 
     @property
@@ -172,6 +165,8 @@ class GaussianHMMRegimeModel:
             and self._feature_scale is not None
             and self._training_start_at is not None
             and self._training_end_at is not None
+            and self._training_market is not None
+            and self._training_interval is not None
             and self._manifest is not None
             and len(self._state_labels) == self._n_components
         )
@@ -195,6 +190,10 @@ class GaussianHMMRegimeModel:
         self._feature_mean = None
         self._feature_scale = None
         self._state_labels = {}
+        self._training_start_at = None
+        self._training_end_at = None
+        self._training_market = None
+        self._training_interval = None
         self._manifest = None
         if split_name != "train":
             raise ValueError("HMM fitting accepts only split_name='train'; validation/test are holdouts.")
@@ -293,6 +292,8 @@ class GaussianHMMRegimeModel:
         library_version = importlib.metadata.version("hmmlearn")
         train_start_at = training_candles[0].timestamp
         train_end_at = training_candles[-1].timestamp + training_candles[-1].interval
+        training_market = training_candles[0].market
+        training_interval = training_candles[0].interval
         state_label_pairs = tuple(sorted(state_labels.items(), key=lambda item: item[0]))
         state_count_pairs = tuple(
             (state, int(count)) for state, count in enumerate(counts_array.tolist())
@@ -320,6 +321,10 @@ class GaussianHMMRegimeModel:
                 "n_components": self._n_components,
                 "covariance_type": "diag",
                 "max_iterations": self._max_iterations,
+                "tol": 1e-3,
+                "min_covar": 1e-3,
+                "implementation": "log",
+                "min_state_trend_separation": str(self._min_state_trend_separation),
                 "means": candidate.means_.tolist(),
                 "covars": candidate.covars_.tolist(),
                 "startprob": candidate.startprob_.tolist(),
@@ -365,6 +370,8 @@ class GaussianHMMRegimeModel:
         self._state_labels = state_labels
         self._training_start_at = train_start_at
         self._training_end_at = train_end_at
+        self._training_market = training_market
+        self._training_interval = training_interval
         self._manifest = manifest
         return manifest
 
@@ -379,6 +386,10 @@ class GaussianHMMRegimeModel:
         self._features.validate_history(completed_history)
         if completed_history[0].timestamp != self._training_start_at:
             raise ValueError("Inference history must start at the fitted train range's first candle.")
+        if completed_history[0].market != self._training_market:
+            raise ValueError("Inference market differs from the model's training market.")
+        if completed_history[0].interval != self._training_interval:
+            raise ValueError("Inference interval differs from the model's training interval.")
         latest_close_time = completed_history[-1].timestamp + completed_history[-1].interval
         if latest_close_time < self._training_end_at:
             raise ValueError("Inference time precedes the end of the HMM training range.")
