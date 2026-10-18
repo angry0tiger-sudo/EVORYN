@@ -220,12 +220,15 @@ class MarginRiskPolicy:
                 position, now, MarginHealth.LIQUIDATED, "venue_reports_liquidated",
                 "The venue reports this position as liquidated."
             )
-        if position.status in (
-            MarginPositionStatus.CLOSED, MarginPositionStatus.EXPIRED
-        ):
+        if position.status is MarginPositionStatus.CLOSED:
             return _assessment(
-                position, now, MarginHealth.INACTIVE, "position_not_open",
-                "The venue reports this position as closed or expired."
+                position, now, MarginHealth.INACTIVE, "position_closed",
+                "The venue reports that the position has been closed."
+            )
+        if position.status is MarginPositionStatus.EXPIRED:
+            return _assessment(
+                position, now, MarginHealth.UNKNOWN, "expiry_settlement_pending",
+                "Expired positions may remain in transition until system settlement completes."
             )
         if position.status is MarginPositionStatus.UNKNOWN:
             return _assessment(
