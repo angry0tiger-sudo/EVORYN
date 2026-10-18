@@ -392,7 +392,7 @@ class AbstainingRegimeDetector:
             return self._unknown(as_of, "INSUFFICIENT_HISTORY")
         try:
             self._features.extract(completed_history)
-        except (InsufficientRegimeHistory, InvalidRegimeHistory, ValueError):
+        except ValueError:
             return self._unknown(as_of, "INVALID_HISTORY")
         if not self._model.is_ready:
             return self._unknown(as_of, "MODEL_NOT_READY")
