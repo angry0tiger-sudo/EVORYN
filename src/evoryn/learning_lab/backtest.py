@@ -385,7 +385,10 @@ class BacktestResultStore:
     def save(self, result: BacktestResult) -> Path:
         if not _is_sha256(result.run_id):
             raise ValueError("run_id must be a lowercase SHA-256 digest.")
-        report_bytes = result.to_json_bytes()
+        report_dict = result.to_report_dict()
+        if _report_identity_hash(report_dict) != result.run_id:
+            raise ValueError("Run ID does not match the report's input identity.")
+        report_bytes = _canonical_json_bytes(report_dict)
         report_hash = hashlib.sha256(report_bytes).hexdigest()
         destination = self._root / f"{result.run_id}.json"
         checksum_path = self._root / f"{result.run_id}.json.sha256"
@@ -450,22 +453,7 @@ class BacktestResultStore:
             raise ValueError("Backtest report identity does not match the requested run ID.")
         if _canonical_json_bytes(report) != report_bytes:
             raise ValueError("Backtest report is not in canonical JSON form.")
-        try:
-            strategy = report["strategy"]
-            run_material = {
-                "engine_version": report["engine_version"],
-                "dataset_version": report["dataset_version"],
-                "strategy_id": strategy["id"],
-                "strategy_version": strategy["version"],
-                "strategy_parameters": strategy["parameters"],
-                "config": report["config"],
-                "segment_name": report["segment_name"],
-                "evaluation_range": report["evaluation_range"],
-                "warmup_start_index": report["warmup_start_index"],
-            }
-        except (KeyError, TypeError) as exc:
-            raise ValueError("Backtest report omits run-identity fields.") from exc
-        expected_run_id = hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
+        expected_run_id = _report_identity_hash(report)
         if expected_run_id != run_id:
             raise ValueError("Run ID does not match the report's input identity.")
         return report
@@ -1086,6 +1074,26 @@ def _build_metrics(
         open_position_quantity=open_position_quantity,
     )
 
+
+
+def _report_identity_hash(report: dict[str, Any]) -> str:
+    """Derive the immutable run identity from canonical strategy/config/range fields."""
+    try:
+        strategy = report["strategy"]
+        run_material = {
+            "engine_version": report["engine_version"],
+            "dataset_version": report["dataset_version"],
+            "strategy_id": strategy["id"],
+            "strategy_version": strategy["version"],
+            "strategy_parameters": strategy["parameters"],
+            "config": report["config"],
+            "segment_name": report["segment_name"],
+            "evaluation_range": report["evaluation_range"],
+            "warmup_start_index": report["warmup_start_index"],
+        }
+    except (KeyError, TypeError) as exc:
+        raise ValueError("Backtest report omits run-identity fields.") from exc
+    return hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
 
 
 def _is_sha256(value: str) -> bool:
