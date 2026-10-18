@@ -97,6 +97,15 @@ class PaperBroker:
         with self._lock:
             existing = self._orders.get(request.client_order_id)
             if existing is not None:
+                same_request = (
+                    existing.request.market == request.market
+                    and existing.request.side is request.side
+                    and existing.request.order_type is request.order_type
+                    and existing.requested_quantity == request.quantity
+                    and existing.request.price == request.price
+                )
+                if not same_request:
+                    raise ValueError("Client order ID is already bound to a different request.")
                 return existing
 
             now = self._now()
@@ -211,6 +220,12 @@ class PaperBroker:
     def process_market_update(self, snapshot: MarketSnapshot) -> tuple[PaperOrder, ...]:
         """Process a deterministic market tick against all resting paper orders."""
         with self._lock:
+            if any(
+                order.status is PaperOrderStatus.UNKNOWN for order in self._orders.values()
+            ):
+                self._risk_port.emergency_halt("unresolved_unknown_order")
+                return tuple(self._orders.values())
+
             injected = self._failures.consume("market_update")
             if injected in (FailureMode.NETWORK_DISCONNECT, FailureMode.TIMEOUT):
                 self._risk_port.emergency_halt(f"paper_market_update_{injected.value}")
@@ -276,7 +291,7 @@ class PaperBroker:
         remains unresolved and cannot be cleared through this shortcut.
         """
         with self._lock:
-            if not operator_acknowledged:
+            if operator_acknowledged is not True:
                 raise PermissionError("Resolving an unknown order requires operator acknowledgement.")
             if confirmed_status is PaperOrderStatus.UNKNOWN:
                 raise ValueError("Reconciliation must resolve unknown to a known state.")
