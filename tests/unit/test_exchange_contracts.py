@@ -80,4 +80,4 @@ def test_port_protocols_are_declared_as_structural_contracts() -> None:
     """Plugin and rate-limiter contracts are runtime-checkable protocols."""
     assert getattr(ExchangePlugin, "_is_runtime_protocol", False)
     assert getattr(RateLimiterPort, "_is_runtime_protocol", False)
-    assert "request" not in signature(ExchangePort.submit_order).parameters
+    assert tuple(signature(ExchangePort.submit_order).parameters) == ("self", "request")
