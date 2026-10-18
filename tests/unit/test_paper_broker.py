@@ -9,7 +9,6 @@ from decimal import Decimal
 from evoryn.domain.models import Market, MarketSnapshot, OrderRequest, OrderType, Side
 from evoryn.paper.broker import PaperBroker, PaperOrderStatus
 from evoryn.paper.failure_injection import FailureInjector, FailureMode
-from evoryn.ports.contracts import MarketDataPort
 from evoryn.risk.engine import RiskEngine
 from evoryn.risk.models import RiskLimits
 
