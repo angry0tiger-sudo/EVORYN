@@ -53,8 +53,8 @@ class PortfolioSnapshot:
     reserved_sell_quantity: Decimal = Decimal("0")
     realized_pnl: Decimal = Decimal("0")
     unrealized_pnl: Decimal = Decimal("0")
-    account_reconciled: bool = True
-    execution_error: bool = False
+    account_reconciled: bool | None = None
+    execution_error: bool | None = None
 
     def __post_init__(self) -> None:
         """Prevent non-finite or negative balances and exposures entering the gate."""
