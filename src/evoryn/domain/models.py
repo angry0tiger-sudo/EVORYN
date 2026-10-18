@@ -163,3 +163,37 @@ class ExperimentProposal:
     hypothesis: str
     dataset_version: str
     evaluation_plan: str
+
+
+@dataclass(frozen=True, slots=True)
+class MarketCandle:
+    """Canonical OHLCV candle with explicit market identity and UTC-capable timestamp."""
+
+    market: Market
+    timestamp: datetime
+    interval: timedelta
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal
+    source: str
+
+    def __post_init__(self) -> None:
+        """Reject invalid candle invariants before a record enters the domain."""
+        if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
+            raise ValueError("Candle timestamp must include a timezone.")
+        if self.interval <= timedelta(0):
+            raise ValueError("Candle interval must be positive.")
+        if not self.source.strip():
+            raise ValueError("Candle source must not be empty.")
+
+        prices = (self.open, self.high, self.low, self.close)
+        if any(not value.is_finite() or value <= 0 for value in prices):
+            raise ValueError("OHLC prices must be finite and greater than zero.")
+        if not self.volume.is_finite() or self.volume < 0:
+            raise ValueError("Volume must be finite and non-negative.")
+        if self.high < max(self.open, self.close, self.low):
+            raise ValueError("High must be at least open, close, and low.")
+        if self.low > min(self.open, self.close, self.high):
+            raise ValueError("Low must be no greater than open, close, and high.")
