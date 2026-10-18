@@ -10,6 +10,8 @@ import pytest
 
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.hmmlearn_adapter import GaussianHMMRegimeModel
+from evoryn.learning_lab.backtest import chronological_split
+from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.intelligence.regime import (
     AbstainingRegimeDetector,
     InvalidRegimeHistory,
@@ -91,6 +93,24 @@ class FixedProbabilityModel:
         self.calls += 1
         assert completed_history
         return self.probabilities
+
+
+def versioned_dataset(count: int = 100) -> HistoricalDataset:
+    """Bind an explicit synthetic source/license to the same dataset version used by Phase 13."""
+    history = candles(count)
+    return HistoricalDataset(
+        dataset_id="synthetic-regime-train-test",
+        market=MARKET,
+        interval=INTERVAL,
+        volume_unit="base_asset",
+        source_name=SOURCE,
+        source_uri="urn:evoryn:synthetic-regime-fixture:v1",
+        source_revision="synthetic-v1",
+        license_id="CC0-1.0",
+        license_uri="https://spdx.org/licenses/CC0-1.0.html",
+        collected_at=history[-1].timestamp + INTERVAL + timedelta(minutes=1),
+        candles=history,
+    )
 
 
 def strong_bull_probabilities() -> dict[RegimeLabel, Decimal]:
@@ -308,34 +328,53 @@ def test_rule_baseline_is_deterministic_and_has_no_future_data_port() -> None:
     assert sum(prefix_probabilities.values(), Decimal("0")) == Decimal("1")
 
 
-def test_hmm_training_refuses_validation_or_test_split_without_importing_optional_model() -> None:
-    history = candles(30)
+def test_hmm_training_refuses_validation_or_test_partition_without_optional_import() -> None:
+    dataset = versioned_dataset()
+    partitions = chronological_split(dataset)
     model = GaussianHMMRegimeModel(feature_extractor=RegimeFeatureExtractor(lookback=5))
 
-    with pytest.raises(ValueError, match="only split_name='train'"):
-        model.fit(
-            history,
-            dataset_version="a" * 64,
-            split_name="test",
-            train_start_index=0,
-            train_end_index_exclusive=len(history),
+    with pytest.raises(ValueError, match="contained in the declared train partition"):
+        model.fit_dataset(
+            dataset,
+            partitions=partitions,
+            train_start_index=partitions.validation.start,
+            train_end_index_exclusive=partitions.validation.end,
         )
 
     assert not model.is_ready
     assert model.training_manifest is None
+    assert not hasattr(model, "fit")
 
 
-def test_hmm_training_requires_declared_range_to_match_candle_count() -> None:
-    history = candles(30)
+def test_hmm_training_requires_matching_dataset_version_and_train_range() -> None:
+    dataset = versioned_dataset()
+    partitions = chronological_split(dataset)
     model = GaussianHMMRegimeModel(feature_extractor=RegimeFeatureExtractor(lookback=5))
 
-    with pytest.raises(ValueError, match="must match"):
-        model.fit(
-            history,
-            dataset_version="a" * 64,
-            split_name="train",
-            train_start_index=0,
-            train_end_index_exclusive=len(history) - 1,
+    with pytest.raises(ValueError, match="different dataset version"):
+        model.fit_dataset(
+            versioned_dataset().__class__(
+                dataset_id="alternate-regime-dataset",
+                market=dataset.market,
+                interval=dataset.interval,
+                volume_unit=dataset.volume_unit,
+                source_name=dataset.source_name,
+                source_uri=dataset.source_uri,
+                source_revision="changed-source-revision",
+                license_id=dataset.license_id,
+                license_uri=dataset.license_uri,
+                collected_at=dataset.collected_at,
+                candles=dataset.candles,
+            ),
+            partitions=partitions,
+        )
+
+    with pytest.raises(ValueError, match="contained in the declared train partition"):
+        model.fit_dataset(
+            dataset,
+            partitions=partitions,
+            train_start_index=partitions.train.start,
+            train_end_index_exclusive=partitions.train.end + 1,
         )
 
     assert not model.is_ready
