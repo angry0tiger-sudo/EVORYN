@@ -103,7 +103,7 @@ features = RegimeFeatureExtractor(lookback=20)
 model = GaussianHMMRegimeModel(feature_extractor=features)
 manifest = model.fit_dataset(
     dataset,
-    split_name="train",
+    partitions=parts,
     train_start_index=parts.train.start,
     train_end_index_exclusive=parts.train.end,
 )
