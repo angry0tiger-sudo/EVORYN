@@ -47,9 +47,9 @@ against that projection.
   incremental partial fills, idempotency, unknown outcomes, balance drift, and missing
   venue orders.
 - At authoring time, the test suite has **not been executed in a verified runner**.
-  GitHub Actions run #165 for Phase 8/9 failed, its logs could not be retrieved through
-  the available connector (`BlobNotFound`), and no artifact was exposed. Root cause is
-  unconfirmed; this is a diagnostic access limitation, not a verified platform defect.
+  GitHub Actions runs #165 (Phase 8/9) and #177 (Phase 10) failed; job-step retrieval was
+  empty, log retrieval returned `BlobNotFound`, and no artifacts were exposed. Root cause
+  is unconfirmed; this is a diagnostic access limitation, not a verified platform defect.
 - No test pass, production readiness, or live trading approval is claimed.
 
 ## Rollback
