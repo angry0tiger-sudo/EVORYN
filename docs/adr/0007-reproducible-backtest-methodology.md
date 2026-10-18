@@ -16,8 +16,9 @@ store or evaluate its content.
 ## Decision
 
 1. Add a local, immutable, content-addressed historical dataset store. Every dataset requires
-   a market identity, interval, candle timestamp semantics, source name/reference/revision,
-   collection time, explicit license identifier/reference, and validated OHLCV candles.
+   a market identity, interval, candle timestamp semantics, explicit volume unit (base or quote),
+   source name/reference/revision, collection time, explicit license identifier/reference, and
+   validated OHLCV candles. The Spot simulator rejects anything other than base-asset volume.
 2. Canonicalize time to UTC and decimal values to strings; calculate SHA-256 addresses over
    canonical metadata and candle CSV bytes. Store immutable files under
    `<root>/<dataset_id>/<dataset_version>/manifest.json` and `candles.csv`. Re-saving the
