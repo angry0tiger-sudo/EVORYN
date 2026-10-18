@@ -163,6 +163,7 @@ def test_position_parser_normalizes_open_margin_record() -> None:
             "markPrice": "100",
         },
         observed_at=NOW,
+        market_symbol="BTCUSDT",
     )
 
     assert normalized.market_symbol == "BTCUSDT"
