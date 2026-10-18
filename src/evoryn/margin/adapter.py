@@ -157,8 +157,9 @@ def _required_decimal(payload: Mapping[str, object], key: str) -> Decimal:
         raise ValueError(f"Required Margin field {key!r} must not be a float or boolean.")
     if not isinstance(value, (str, int, Decimal)):
         raise ValueError(f"Required Margin field {key!r} is missing or invalid.")
+    normalized = str(value).replace("\u2212", "-")
     try:
-        result = Decimal(str(value))
+        result = Decimal(normalized)
     except InvalidOperation as exc:
         raise ValueError(f"Required Margin field {key!r} is not decimal.") from exc
     if not result.is_finite():
