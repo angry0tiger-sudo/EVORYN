@@ -3,6 +3,7 @@
 from evoryn.margin.adapter import NobitexMarginAdapter
 from evoryn.margin.models import (
     DelegationLimit,
+    DelegationLimitSnapshot,
     MarginHealth,
     MarginMarketSettings,
     MarginMode,
@@ -19,6 +20,7 @@ from evoryn.margin.risk import MarginCalculator, MarginReconciler, MarginRiskPol
 
 __all__ = [
     "DelegationLimit",
+    "DelegationLimitSnapshot",
     "MarginCalculator",
     "MarginHealth",
     "MarginMarketSettings",
