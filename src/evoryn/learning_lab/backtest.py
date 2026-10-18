@@ -21,7 +21,7 @@ from typing import Any
 
 from evoryn.domain.models import MarketCandle, Side
 from evoryn.learning_lab.historical_data import HistoricalDataset
-from evoryn.strategies.baseline import BaselineStrategy
+from evoryn.strategies.contracts import CausalTargetStrategy
 
 
 BACKTEST_ENGINE_VERSION = "1.0.0"
@@ -587,7 +587,7 @@ def make_walk_forward_folds(
 
 def run_backtest(
     dataset: HistoricalDataset,
-    strategy: BaselineStrategy,
+    strategy: CausalTargetStrategy,
     config: BacktestConfig,
     *,
     start_index: int = 0,
