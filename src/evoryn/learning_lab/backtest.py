@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, ROUND_FLOOR
 from pathlib import Path
 from typing import Any
@@ -591,9 +591,7 @@ def run_backtest(
             cancelled_orders += 1
             pending = None
 
-        if pending is None and target == _ONE and position_quantity == _ZERO:
-            if not history:
-                continue
+        if pending is None and target == _ONE and position_quantity == _ZERO and history:
             reference_close = history[-1].close
             marked_equity = cash + position_quantity * reference_close
             estimated_cost_per_unit = reference_close * (
@@ -614,9 +612,7 @@ def run_backtest(
                     created_at=history[-1].timestamp + history[-1].interval,
                 )
                 submitted_orders += 1
-        elif pending is None and target == _ZERO and position_quantity > _ZERO:
-            if not history:
-                continue
+        elif pending is None and target == _ZERO and position_quantity > _ZERO and history:
             order_sequence += 1
             pending = _PendingOrder(
                 order_id=f"{segment_key}:order:{order_sequence}",
@@ -1022,5 +1018,4 @@ def _require_aware(value: datetime, label: str) -> None:
 
 def _iso_utc(value: datetime) -> str:
     _require_aware(value, "timestamp")
-    from datetime import UTC
     return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
