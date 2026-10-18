@@ -65,7 +65,7 @@
 ### Hugging Face: AAdevloper/market-regime-classifier
 
 - Model card: https://huggingface.co/AAdevloper/market-regime-classifier
-- Reviewed revision: `7325a77fe660bfe08798ca05a32afd012c65c57c`
+- Reviewed immutable model-card revision: `5219379338751d0bf804161f409167429a3df3d3`
 - Listed license: MIT.
 - Declared model: XGBoost binary `RISK_ON/RISK_OFF` for Indian/NIFTY 50 conditions with India VIX,
   RSI-14, MA-50 and MA-200 features. The model card says its training data is synthetic NIFTY 50
