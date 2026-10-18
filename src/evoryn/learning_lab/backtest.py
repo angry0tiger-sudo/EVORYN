@@ -924,7 +924,7 @@ def run_backtest(
 
 def evaluate_train_validation_test(
     dataset: HistoricalDataset,
-    strategy: BaselineStrategy,
+    strategy: CausalTargetStrategy,
     config: BacktestConfig,
     *,
     train_fraction: Decimal = Decimal("0.6"),
@@ -968,7 +968,7 @@ def evaluate_train_validation_test(
 
 def evaluate_walk_forward(
     dataset: HistoricalDataset,
-    strategy: BaselineStrategy,
+    strategy: CausalTargetStrategy,
     config: BacktestConfig,
     *,
     train_bars: int,
