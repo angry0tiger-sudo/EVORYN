@@ -612,6 +612,10 @@ def run_backtest(
         raise ValueError("warmup_start_index must be between zero and evaluation start.")
     if not segment_name.strip():
         raise ValueError("segment_name must not be empty.")
+    if dataset.volume_unit != "base_asset":
+        raise ValueError(
+            "Backtest fill constraints require base-asset volume; quote-volume datasets are unsupported."
+        )
     if dataset.gap_count and not config.allow_gaps:
         raise ValueError("Dataset contains gaps; allow_gaps must be explicitly enabled in config.")
     evaluation = dataset.candles[start_index:end]
