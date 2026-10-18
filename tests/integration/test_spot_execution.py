@@ -21,7 +21,7 @@ from evoryn.execution.spot import (
     SpotExecutionService,
     SpotIntent,
 )
-from evoryn.paper.broker import PaperBroker, PaperOrderStatus
+from evoryn.paper.broker import PaperBroker, PaperOrder, PaperOrderStatus
 from evoryn.paper.failure_injection import FailureInjector, FailureMode
 from evoryn.risk.engine import RiskEngine
 from evoryn.risk.models import RiskAction, RiskLimits
@@ -40,6 +40,14 @@ class MutableClock:
 
     def __call__(self) -> datetime:
         return self.current
+
+
+class ExplodingPaperBroker(PaperBroker):
+    """Test double that proves unexpected broker errors are correlated and fail closed."""
+
+    def submit_order(self, request: OrderRequest) -> PaperOrder:
+        del request
+        raise RuntimeError("synthetic broker fault")
 
 
 class StaticMarketData:
@@ -90,6 +98,7 @@ def build_system(
     initial_cash: Decimal = INITIAL_CASH,
     market_snapshot: MarketSnapshot | None = None,
     failures: FailureInjector | None = None,
+    broker_type: type[PaperBroker] = PaperBroker,
 ) -> tuple[
     SpotExecutionService,
     PaperBroker,
@@ -111,7 +120,7 @@ def build_system(
             max_market_data_age_seconds=10,
         )
     )
-    broker = PaperBroker(
+    broker = broker_type(
         market=MARKET,
         market_data=feed,
         risk_port=risk,
@@ -291,6 +300,24 @@ def test_missing_venue_order_is_detected_even_when_balances_match() -> None:
     assert any("order_missing_from_mock_venue" in item for item in report.differences)
     assert risk.is_halted
     assert broker.get_order("missing-1") is not None
+
+
+def test_unexpected_broker_error_is_recorded_and_latches_halt() -> None:
+    service, _, risk, _, ledger, _, _ = build_system(
+        broker_type=ExplodingPaperBroker
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic broker fault"):
+        service.execute(intent("corr-broker-error", "broker-error-1"))
+
+    assert risk.is_halted
+    assert len(ledger.intents) == 1
+    assert len(ledger.errors) == 1
+    assert ledger.errors[0].correlation_id == "corr-broker-error"
+    assert ledger.errors[0].client_order_id == "broker-error-1"
+    assert ledger.errors[0].component == "paper_broker"
+    assert ledger.errors[0].reason_code == "spot_execution_exception"
+    assert ledger.executions == ()
 
 
 def test_correlation_and_client_order_ids_cannot_be_reused_for_new_payloads() -> None:
