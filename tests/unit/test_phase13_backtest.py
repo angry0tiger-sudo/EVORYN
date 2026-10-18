@@ -416,6 +416,14 @@ def test_backtest_runs_and_json_reports_are_reproducible_and_immutable(tmp_path:
     path = store.save(first)
     assert store.save(repeated) == path
     assert path.read_bytes() == first.to_json_bytes()
+    stored_report = store.load(first.run_id)
+    assert stored_report["run_id"] == first.run_id
+    assert stored_report["dataset_version"] == source.version
+    assert (tmp_path / f"{first.run_id}.json.sha256").exists()
+
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="checksum"):
+        store.load(first.run_id)
 
 
 def test_config_requires_explicit_valid_cost_and_fill_assumptions() -> None:
