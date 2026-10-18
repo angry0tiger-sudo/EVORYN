@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Protocol, Sequence, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from evoryn.domain.models import (
-    ExchangeCapabilities, ExecutionPlan, ExecutionResult, ExperimentProposal,
-    LearningEvent, Market, MarketSnapshot, Order, OrderIntent, Position,
-    RiskDecision, Signal,
+    ExchangeCapabilities,
+    ExecutionPlan,
+    ExecutionResult,
+    ExperimentProposal,
+    LearningEvent,
+    Market,
+    MarketSnapshot,
+    Order,
+    OrderIntent,
+    Position,
+    RiskDecision,
+    Signal,
 )
 
 
