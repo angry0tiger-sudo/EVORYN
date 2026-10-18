@@ -115,6 +115,7 @@ or expectancy as if capital were continuously compounded.
 | Fill count | Individual simulated fills; separate from order count |
 | Partial fill count | Fill events that leave residual order quantity |
 | Time in market | Fraction of evaluation bars closed with nonzero position |
+| Volume unit | Source-declared base/quote volume unit; simulator requires base-asset volume |
 | Fees / spread / slippage | Commissions and estimated friction components reported separately |
 | Open position / order | Reported separately at evaluation end, not relabeled as closed trades |
 
