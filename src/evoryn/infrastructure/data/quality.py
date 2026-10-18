@@ -175,7 +175,10 @@ def evaluate_market_data(
                 issues.append(
                     DataQualityIssue(
                         code=DataQualityCode.TIME_GAP,
-                        message=f"Temporal gap detected; at least {missing} interval(s) are missing.",
+                        message=(
+                            f"Temporal gap detected; at least {missing} interval(s) "
+                            "are missing."
+                        ),
                         timestamp=timestamp,
                         missing_intervals=missing,
                     )
