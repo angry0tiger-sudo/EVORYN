@@ -2,6 +2,13 @@
 
 from evoryn.domain.models import (
     ExchangeCapabilities,
+    MarketStatistics,
+    MarketTrade,
+    OrderBookLevel,
+    OrderBookSnapshot,
+    OrderRequest,
+    OrderType,
+    WalletBalance,
     ExecutionPlan,
     ExecutionResult,
     ExperimentProposal,
@@ -21,7 +28,8 @@ from evoryn.domain.models import (
 )
 
 __all__ = [
-    "ExchangeCapabilities", "ExecutionPlan", "ExecutionResult", "ExperimentProposal",
+    "ExchangeCapabilities", "MarketStatistics", "MarketTrade", "OrderBookLevel",
+    "OrderBookSnapshot", "OrderRequest", "OrderType", "WalletBalance", "ExecutionPlan", "ExecutionResult", "ExperimentProposal",
     "Fill", "LearningEvent", "Market", "MarketCandle", "MarketSnapshot", "Order", "OrderIntent",
     "OrderStatus", "Position", "RiskDecision", "RiskDisposition", "Side", "Signal",
 ]
