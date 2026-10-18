@@ -24,6 +24,7 @@ from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.strategies.baseline import BaselineStrategy
 
 
+BACKTEST_ENGINE_VERSION = "1.0.0"
 _BPS_DENOMINATOR = Decimal("10000")
 _ZERO = Decimal("0")
 _ONE = Decimal("1")
@@ -270,9 +271,11 @@ class BacktestResult:
     """Content-addressed research result tied to exact dataset, strategy, config and range."""
 
     run_id: str
+    engine_version: str
     dataset_id: str
     dataset_version: str
     strategy_id: str
+    strategy_version: str
     strategy_parameters: tuple[tuple[str, str], ...]
     segment_name: str
     evaluation_range: IndexRange
@@ -291,10 +294,12 @@ class BacktestResult:
         return {
             "schema_version": 1,
             "run_id": self.run_id,
+            "engine_version": self.engine_version,
             "dataset_id": self.dataset_id,
             "dataset_version": self.dataset_version,
             "strategy": {
                 "id": self.strategy_id,
+                "version": self.strategy_version,
                 "parameters": dict(self.strategy_parameters),
             },
             "segment_name": self.segment_name,
@@ -533,6 +538,9 @@ def run_backtest(
         raise ValueError("Warm-up candles overlap the evaluation period.")
     if not getattr(strategy, "strategy_id", "").strip():
         raise ValueError("Strategy must declare a non-empty strategy_id.")
+    strategy_version = getattr(strategy, "strategy_version", "")
+    if not isinstance(strategy_version, str) or not strategy_version.strip():
+        raise ValueError("Strategy must declare a non-empty strategy_version.")
     parameters = strategy.parameters()
     if any(
         not isinstance(key, str) or not isinstance(value, str)
@@ -799,8 +807,10 @@ def run_backtest(
     )
     parameters_sorted = tuple(sorted(parameters.items()))
     run_material = {
+        "engine_version": BACKTEST_ENGINE_VERSION,
         "dataset_version": dataset.version,
         "strategy_id": strategy.strategy_id,
+        "strategy_version": strategy_version,
         "strategy_parameters": dict(parameters_sorted),
         "config": config.as_dict(),
         "segment_name": segment_name,
@@ -810,9 +820,11 @@ def run_backtest(
     run_id = hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
     return BacktestResult(
         run_id=run_id,
+        engine_version=BACKTEST_ENGINE_VERSION,
         dataset_id=dataset.dataset_id,
         dataset_version=dataset.version,
         strategy_id=strategy.strategy_id,
+        strategy_version=strategy_version,
         strategy_parameters=parameters_sorted,
         segment_name=segment_name,
         evaluation_range=IndexRange(start_index, end),
