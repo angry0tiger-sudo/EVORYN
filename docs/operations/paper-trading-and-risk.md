@@ -48,7 +48,7 @@ no I/O and is not an exchange connector.
   unresolved even if the mock mirror also says `unknown`.
 - Missing/extra orders, changed order state, divergent fills, or balance differences
   latch the same RiskEngine Auto-Halt.
-- Decision, execution, balance, and reconciliation entries are append-only in memory.
+- Decision, execution, balance, sanitized error, and reconciliation entries are append-only in memory.
   Durable persistence and tamper-evident storage are not implemented by this phase.
 - Call `SpotExecutionService.reconcile_all(correlation_id=...)` from the host's periodic
   scheduler. This module intentionally creates no background thread and picks no interval.
