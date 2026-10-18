@@ -53,7 +53,7 @@ class RiskEngine:
 
     def clear_halt(self, *, operator_acknowledged: bool) -> None:
         """Require explicit acknowledgement before clearing a latched stop."""
-        if not operator_acknowledged:
+        if operator_acknowledged is not True:
             raise PermissionError("Clearing a risk halt requires explicit operator acknowledgement.")
         with self._lock:
             self._halt_reason = None
