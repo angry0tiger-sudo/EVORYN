@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -21,7 +21,6 @@ from evoryn.domain.models import (
     OrderBookSnapshot,
     OrderRequest,
     OrderStatus,
-    OrderType,
     Side,
     WalletBalance,
 )
@@ -116,7 +115,7 @@ class NobitexExchangeAdapter:
     transport: NobitexTransportPort
     token: str | None = None
     rate_limiter: RateLimiterPort = field(default_factory=SlidingWindowRateLimiter)
-    clock: object = field(default_factory=lambda: lambda: datetime.now(UTC), repr=False)
+    clock: Callable[[], datetime] = field(default_factory=lambda: lambda: datetime.now(UTC), repr=False)
 
     def get_capabilities(self) -> ExchangeCapabilities:
         """Declare currently implemented capabilities; no order-writing is available."""
@@ -234,7 +233,9 @@ class NobitexExchangeAdapter:
         fields = tuple(response.get(key) for key in ("t", "o", "h", "l", "c", "v"))
         if not all(isinstance(field_value, list) for field_value in fields):
             raise MalformedExchangeResponse("Nobitex OHLCV fields must all be arrays.")
-        timestamps, opens, highs, lows, closes, volumes = fields
+        timestamps, opens, highs, lows, closes, volumes = (
+            field_value for field_value in fields if isinstance(field_value, list)
+        )
         lengths = {len(values) for values in (timestamps, opens, highs, lows, closes, volumes)}
         if len(lengths) != 1:
             raise MalformedExchangeResponse("Nobitex OHLCV arrays have inconsistent lengths.")
@@ -395,13 +396,8 @@ class NobitexExchangeAdapter:
         closed_raw = raw_stats.get("isClosed")
         if closed_raw is not None and not isinstance(closed_raw, bool):
             raise MalformedExchangeResponse("Nobitex isClosed field must be boolean.")
-        clock = self.clock
-        if not callable(clock):
-            raise RuntimeError("Nobitex adapter clock must be callable.")
-        observed_at = clock()
-        if not isinstance(observed_at, datetime) or (
-            observed_at.tzinfo is None or observed_at.utcoffset() is None
-        ):
+        observed_at = self.clock()
+        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
             raise RuntimeError("Nobitex adapter clock must return an aware datetime.")
         return MarketStatistics(
             market=market,
