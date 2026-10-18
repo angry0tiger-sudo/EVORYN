@@ -81,6 +81,53 @@ are non-finite, state occupancy is inadequate, or trend-state mapping is ambiguo
 records dataset version, exact training range, feature schema/lookback, Python and library versions,
 random seed, state mapping/counts and model parameter fingerprint.
 
+## Example: fit on train, then classify a chronological prefix
+
+```python
+from decimal import Decimal
+
+from evoryn.intelligence import (
+    AbstainingRegimeDetector,
+    GaussianHMMRegimeModel,
+    RegimeFeatureExtractor,
+    RegimeThresholds,
+)
+from evoryn.learning_lab.backtest import chronological_split
+from evoryn.learning_lab.historical_data import HistoricalDatasetStore
+
+dataset = HistoricalDatasetStore("data/historical").load(
+    "authorized-dataset-id", "the-64-character-dataset-version"
+)
+parts = chronological_split(dataset)
+features = RegimeFeatureExtractor(lookback=20)
+model = GaussianHMMRegimeModel(feature_extractor=features)
+manifest = model.fit_dataset(
+    dataset,
+    split_name="train",
+    train_start_index=parts.train.start,
+    train_end_index_exclusive=parts.train.end,
+)
+detector = AbstainingRegimeDetector(
+    model,
+    feature_extractor=features,
+    thresholds=RegimeThresholds(
+        min_confidence=Decimal("0.65"),
+        max_data_age_intervals=2,
+    ),
+)
+current_index = parts.validation.start + 100
+result = detector.classify(
+    dataset.candles[parts.train.start : current_index + 1],
+    now=dataset.candles[current_index].timestamp
+        + dataset.candles[current_index].interval,
+)
+# Inspect result.label, result.confidence, result.reason_code and result.model_fingerprint.
+# UNKNOWN remains UNKNOWN; it is not coerced into a trading signal.
+```
+
+The numeric index above is illustrative. Ensure `current_index` is within the dataset and after the
+end of the training range, and store `manifest.to_dict()` beside the experiment report.
+
 ## Abstention policy
 
 The default `RegimeThresholds` are:
