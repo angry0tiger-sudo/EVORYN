@@ -1,6 +1,6 @@
 # ADR 0006: Freqtrade and CCXT Integration Boundaries
 
-- Status: Proposed for review
+- Status: Accepted (architecture/domain decision; not live-trading authorization)
 - Date checked: 2026-10-18
 - Scope: Roadmap Phase 12
 - Decision vocabulary: adopt / integrate as research tool / adapter only / reject
