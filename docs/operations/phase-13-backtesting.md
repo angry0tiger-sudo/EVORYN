@@ -38,6 +38,10 @@ interval, timestamp semantics, gap policy, candle count and first/last candle. A
 license change, source-revision change or provenance change creates a different version.
 Tampering, incomplete existing versions and conflicting bytes are rejected. The store never
 fetches data and never assumes that a public data URL permits machine use or persistence.
+An authorized canonical CSV export can be imported with
+`dataset_from_canonical_csv(...)`, which requires explicit market, interval, source/revision,
+license and collection-time parameters and rejects any candle that was not closed by that
+collection time.
 
 Gaps are rejected by default. They can only be recorded when `allow_gaps=True` is explicit in
 the dataset and `BacktestConfig.allow_gaps=True` is separately enabled for a run.
