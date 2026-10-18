@@ -192,10 +192,7 @@ class MarginRiskPolicy:
     ) -> MarginRiskAssessment:
         """Classify a venue-reported open position without inventing execution state."""
         if not _is_aware(now):
-            return _assessment(
-                position, now, MarginHealth.UNKNOWN, "invalid_evaluation_time",
-                "Evaluation time is not timezone-aware."
-            )
+            raise ValueError("Margin risk evaluation time must be timezone-aware.")
         if not _is_aware(position.observed_at):
             return _assessment(
                 position, now, MarginHealth.UNKNOWN, "invalid_position_timestamp",
@@ -231,11 +228,6 @@ class MarginRiskPolicy:
                 position, now, MarginHealth.UNSUPPORTED_MODE, "unsupported_margin_mode",
                 "The observed margin mode is not enabled by the current policy."
             )
-        if position.margin_ratio is None:
-            return _assessment(
-                position, now, MarginHealth.UNKNOWN, "margin_ratio_missing",
-                "The source did not provide marginRatio; health cannot be verified."
-            )
         if position.mark_price is None:
             return _assessment(
                 position, now, MarginHealth.UNKNOWN, "mark_price_missing",
@@ -253,6 +245,11 @@ class MarginRiskPolicy:
                     "reported_liquidation_threshold_crossed",
                     "Observed mark price has crossed the venue-reported liquidation threshold."
                 )
+        if position.margin_ratio is None:
+            return _assessment(
+                position, now, MarginHealth.UNKNOWN, "margin_ratio_missing",
+                "The source did not provide marginRatio; health cannot be verified."
+            )
         if position.margin_ratio <= self.maintenance_margin_ratio:
             return _assessment(
                 position, now, MarginHealth.AT_RISK,
