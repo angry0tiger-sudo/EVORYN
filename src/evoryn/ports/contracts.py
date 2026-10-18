@@ -27,6 +27,7 @@ from evoryn.domain.models import (
     WalletBalance,
 )
 from evoryn.ports.rate_limits import RateLimitPolicy
+from evoryn.risk.models import PortfolioSnapshot, RiskResult
 
 
 @runtime_checkable
@@ -131,10 +132,26 @@ class StrategyPort(Protocol):
 
 @runtime_checkable
 class RiskPort(Protocol):
-    """Evaluate an intent against portfolio context using deterministic policy."""
+    """Deterministic, model-independent gate required before execution."""
 
-    def evaluate(self, intent: OrderIntent, positions: Sequence[Position]) -> RiskDecision:
-        """Return a structured allow, reduce, reject, or halt decision."""
+    @property
+    def is_halted(self) -> bool:
+        """Return whether automatic halt or the manual kill switch is latched."""
+        ...
+
+    def evaluate(
+        self,
+        request: OrderRequest,
+        portfolio: PortfolioSnapshot,
+        market_data: MarketSnapshot,
+        *,
+        now: datetime,
+    ) -> RiskResult:
+        """Return exactly ALLOW, REDUCE, REJECT, or HALT."""
+        ...
+
+    def emergency_halt(self, reason: str) -> None:
+        """Latch a fail-closed stop after a critical data or execution fault."""
         ...
 
 
