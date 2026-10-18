@@ -19,7 +19,8 @@ The normalizer follows the documented fields from:
 - GET /positions/list and GET /positions/:positionId:/status
 
 Market settings are account/depth dependent. A market's buyEnabled and sellEnabled flags
-are checked at evaluation time; no direction is presumed enabled. Leverage is accepted
+are checked at evaluation time; no direction is presumed enabled. Nobitex's official
+Margin documentation labels BUY as beta; side availability must be read for each market. Leverage is accepted
 only when it is within maxLeverage and exactly matches a source-reported delegation-limit
 row for that side. The delegation-limit response is itself a timestamped snapshot bound to
 a market; stale, future, duplicate, or different-market rows cannot authorize an opening.
@@ -50,7 +51,9 @@ missing required market capability fields raise a normalization error.
   liquidation price, or missing margin ratio cannot be classified healthy.
 - A known threshold crossing is detected with the venue-reported liquidationPrice:
   BUY: markPrice <= liquidationPrice; SELL: markPrice >= liquidationPrice.
-- Only the venue status Liquidated is called confirmed liquidation by this model.
+- Only the current venue status Liquidated is represented as the venue's liquidated state.
+- An Expired status remains UNKNOWN/settlement-pending until settlement is verified, because
+  the official documentation describes transitional status changes around system settlement.
 - Cross Margin remains disabled because official docs describe it as future.
 - The official extensionFee is authoritative. The local linear estimate based on the
   current positionFeeRate is only a scenario estimate because Nobitex documents a tiered
