@@ -41,6 +41,7 @@ def dataset(
     closes: tuple[str, ...] | None = None,
     opens: tuple[str, ...] | None = None,
     volume: str = "100",
+    volume_unit: str = "base_asset",
     volumes: tuple[str, ...] | None = None,
     gap_indices: tuple[int, ...] = (),
     allow_gaps: bool = False,
@@ -83,6 +84,7 @@ def dataset(
         dataset_id=dataset_id,
         market=MARKET,
         interval=INTERVAL,
+        volume_unit=volume_unit,
         source_name=SOURCE,
         source_uri="urn:evoryn:synthetic-fixture:phase13:v1",
         source_revision=source_revision,
@@ -162,6 +164,7 @@ def test_dataset_requires_source_revision_and_license_provenance() -> None:
             dataset_id="bad-dataset",
             market=MARKET,
             interval=INTERVAL,
+            volume_unit="base_asset",
             source_name=SOURCE,
             source_uri="urn:fixture",
             source_revision="rev1",
@@ -207,6 +210,7 @@ def test_canonical_csv_ingestion_requires_and_preserves_explicit_provenance(
         dataset_id=original.dataset_id,
         market=original.market,
         interval=original.interval,
+        volume_unit=original.volume_unit,
         source_name=original.source_name,
         source_uri=original.source_uri,
         source_revision=original.source_revision,
@@ -227,6 +231,7 @@ def test_dataset_rejects_candles_not_closed_by_collection_time() -> None:
             dataset_id=source.dataset_id,
             market=source.market,
             interval=source.interval,
+            volume_unit=source.volume_unit,
             source_name=source.source_name,
             source_uri=source.source_uri,
             source_revision=source.source_revision,
@@ -465,6 +470,17 @@ def test_walk_forward_rejects_overlapping_test_windows_and_short_data() -> None:
     with pytest.raises(ValueError, match="too short"):
         make_walk_forward_folds(
             dataset(count=20), train_bars=10, validation_bars=8, test_bars=5
+        )
+
+
+def test_backtest_rejects_quote_volume_when_fill_cap_requires_base_volume() -> None:
+    quote_volume_dataset = dataset(count=10, volume_unit="quote_asset")
+    with pytest.raises(ValueError, match="require base-asset volume"):
+        run_backtest(
+            quote_volume_dataset,
+            SmaTrendBaseline(window=2),
+            config(),
+            segment_name="invalid-volume-unit",
         )
 
 
