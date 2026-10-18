@@ -509,6 +509,10 @@ def test_backtest_runs_and_json_reports_are_reproducible_and_immutable(tmp_path:
     store = BacktestResultStore(tmp_path)
     with pytest.raises(ValueError, match="SHA-256"):
         store.save(replace(first, run_id="../unsafe"))
+    mismatched_id = "0" * 64
+    with pytest.raises(ValueError, match="does not match"):
+        store.save(replace(first, run_id=mismatched_id))
+    assert not (tmp_path / f"{mismatched_id}.json").exists()
     path = store.save(first)
     assert store.save(repeated) == path
     assert path.read_bytes() == first.to_json_bytes()
