@@ -81,12 +81,26 @@ class RiskEngine:
                 self.emergency_halt(unsafe_data[0])
                 return self._result(RiskAction.HALT, unsafe_data[0], unsafe_data[1])
 
+            if portfolio.execution_error is None:
+                self.emergency_halt("execution_status_unknown")
+                return self._result(
+                    RiskAction.HALT,
+                    "execution_status_unknown",
+                    "Execution-fault state is unknown; further orders are halted.",
+                )
             if portfolio.execution_error:
                 self.emergency_halt("execution_error")
                 return self._result(
                     RiskAction.HALT,
                     "execution_error",
                     "An execution fault is unresolved; further orders are halted.",
+                )
+            if portfolio.account_reconciled is None:
+                self.emergency_halt("account_state_unknown")
+                return self._result(
+                    RiskAction.HALT,
+                    "account_state_unknown",
+                    "Account reconciliation state is unknown.",
                 )
             if not portfolio.account_reconciled:
                 self.emergency_halt("account_mismatch")
