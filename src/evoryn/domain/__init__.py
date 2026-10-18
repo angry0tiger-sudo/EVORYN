@@ -8,6 +8,7 @@ from evoryn.domain.models import (
     Fill,
     LearningEvent,
     Market,
+    MarketCandle,
     MarketSnapshot,
     Order,
     OrderIntent,
@@ -21,6 +22,6 @@ from evoryn.domain.models import (
 
 __all__ = [
     "ExchangeCapabilities", "ExecutionPlan", "ExecutionResult", "ExperimentProposal",
-    "Fill", "LearningEvent", "Market", "MarketSnapshot", "Order", "OrderIntent",
+    "Fill", "LearningEvent", "Market", "MarketCandle", "MarketSnapshot", "Order", "OrderIntent",
     "OrderStatus", "Position", "RiskDecision", "RiskDisposition", "Side", "Signal",
 ]
