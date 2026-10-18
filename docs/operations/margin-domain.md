@@ -21,7 +21,8 @@ The normalizer follows the documented fields from:
 Market settings are account/depth dependent. A market's buyEnabled and sellEnabled flags
 are checked at evaluation time; no direction is presumed enabled. Leverage is accepted
 only when it is within maxLeverage and exactly matches a source-reported delegation-limit
-row for that side.
+row for that side. The delegation-limit response is itself a timestamped snapshot bound to
+a market; stale, future, duplicate, or different-market rows cannot authorize an opening.
 
 Nobitex's documented delegation limits have different units by side. For BUY, the order
 notional price × amount is compared to the destination-currency limit. For SELL, amount
