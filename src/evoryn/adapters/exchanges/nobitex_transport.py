@@ -11,10 +11,10 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import NoReturn
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
-from typing import NoReturn
 
 from evoryn.ports.exchange_errors import (
     AuthenticationError,
