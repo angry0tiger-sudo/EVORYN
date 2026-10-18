@@ -14,7 +14,7 @@ import os
 import re
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -90,6 +90,14 @@ class HistoricalDataset:
                         "Candle interval gap detected; set allow_gaps=True only when documented."
                     )
             previous = candle
+
+        # Canonicalize time zones once so save/load equality is semantic, not offset-dependent.
+        object.__setattr__(self, "collected_at", self.collected_at.astimezone(UTC))
+        object.__setattr__(
+            self,
+            "candles",
+            tuple(replace(candle, timestamp=candle.timestamp.astimezone(UTC)) for candle in self.candles),
+        )
 
     @property
     def interval_microseconds(self) -> int:
