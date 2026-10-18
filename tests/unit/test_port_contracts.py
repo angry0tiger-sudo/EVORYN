@@ -5,7 +5,12 @@ from __future__ import annotations
 import inspect
 
 from evoryn.ports.contracts import (
-    ExchangePort, ExecutionPort, LearningPort, MarketDataPort, RiskPort, StrategyPort,
+    ExchangePort,
+    ExecutionPort,
+    LearningPort,
+    MarketDataPort,
+    RiskPort,
+    StrategyPort,
 )
 
 
