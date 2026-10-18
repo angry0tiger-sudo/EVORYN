@@ -109,6 +109,8 @@ class DelegationLimit:
     limit: Decimal
 
     def __post_init__(self) -> None:
+        if not isinstance(self.side, MarginSide):
+            raise ValueError("Delegation side must be MarginSide.")
         if (
             not isinstance(self.leverage, Decimal)
             or not self.leverage.is_finite()
@@ -129,11 +131,15 @@ class DelegationLimitSnapshot:
     def __post_init__(self) -> None:
         _require_nonempty(self.market_symbol, "market_symbol")
         _require_aware(self.observed_at, "Delegation limit timestamp")
+        if not isinstance(self.limits, tuple):
+            raise ValueError("Delegation limits must be an immutable tuple.")
         seen: set[tuple[MarginSide, Decimal]] = set()
         for item in self.limits:
+            if not isinstance(item, DelegationLimit):
+                raise ValueError("Delegation rows must use the typed domain model.")
             key = (item.side, item.leverage)
             if key in seen:
-                raise ValueError("Delegation limit snapshot contains duplicate side/leverage rows.")
+                raise ValueError("Duplicate side/leverage rows in delegation limit snapshot.")
             seen.add(key)
 
 
@@ -180,6 +186,12 @@ class MarginPosition:
     def __post_init__(self) -> None:
         if self.position_id <= 0:
             raise ValueError("position_id must be positive.")
+        if not isinstance(self.side, MarginSide):
+            raise ValueError("Position side must be MarginSide.")
+        if not isinstance(self.status, MarginPositionStatus):
+            raise ValueError("Position status must be MarginPositionStatus.")
+        if not isinstance(self.margin_mode, MarginMode):
+            raise ValueError("Position margin_mode must be MarginMode.")
         for name in ("market_symbol", "src_currency", "dst_currency"):
             _require_nonempty(getattr(self, name), name)
         if self.src_currency.casefold() == self.dst_currency.casefold():
@@ -252,6 +264,8 @@ class MarginOpenIntent:
 
     def __post_init__(self) -> None:
         _require_nonempty(self.market_symbol, "market_symbol")
+        if not isinstance(self.side, MarginSide):
+            raise ValueError("Intent side must be MarginSide.")
         _require_aware(self.observed_at, "Intent timestamp")
         for name in ("amount", "price", "leverage"):
             value = getattr(self, name)
@@ -271,6 +285,8 @@ class MarginOrderRiskResult:
     estimated_initial_collateral: Decimal | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.disposition, MarginOrderDisposition):
+            raise ValueError("Order disposition must be MarginOrderDisposition.")
         _require_nonempty(self.reason_code, "reason_code")
         _require_nonempty(self.explanation, "explanation")
         if self.estimated_initial_collateral is not None:
@@ -296,6 +312,8 @@ class MarginRiskAssessment:
     def __post_init__(self) -> None:
         if self.position_id <= 0:
             raise ValueError("position_id must be positive.")
+        if not isinstance(self.health, MarginHealth):
+            raise ValueError("Risk health must be MarginHealth.")
         _require_aware(self.assessed_at, "Risk assessment timestamp")
         _require_nonempty(self.reason_code, "reason_code")
         _require_nonempty(self.explanation, "explanation")
