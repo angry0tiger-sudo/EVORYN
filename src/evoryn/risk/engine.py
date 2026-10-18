@@ -148,7 +148,7 @@ class RiskEngine:
                 max_by_order = self._limits.max_order_notional / risk_price
                 allowed = min(requested, available, max_by_order)
             else:
-                free_capital = portfolio.free_capital - portfolio.reserved_buy_notional
+                free_capital = portfolio.free_capital
                 remaining_total = (
                     self._limits.max_total_exposure - portfolio.total_exposure
                 )
