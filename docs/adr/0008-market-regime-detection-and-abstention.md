@@ -3,7 +3,8 @@
 - Status: Proposed for review
 - Date: 2026-10-19
 - Scope: Roadmap Phase 14
-- Depends on: Phase 13 versioned datasets and chronological evaluation; ADR 0006 open-source model policy
+- Depends on: Phase 13 versioned datasets and chronological evaluation; ADR 0006 open-source
+  model policy
 
 ## Decision
 
