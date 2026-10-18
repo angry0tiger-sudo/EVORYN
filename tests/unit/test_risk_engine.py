@@ -47,8 +47,8 @@ def portfolio(
     reserved_sell_quantity: Decimal = Decimal("0"),
     realized_pnl: Decimal = Decimal("0"),
     unrealized_pnl: Decimal = Decimal("0"),
-    account_reconciled: bool = True,
-    execution_error: bool = False,
+    account_reconciled: bool | None = True,
+    execution_error: bool | None = False,
 ) -> PortfolioSnapshot:
     """Return a safe synthetic ledger that tests can override one field at a time."""
     return PortfolioSnapshot(
@@ -161,7 +161,9 @@ def test_account_mismatch_execution_error_and_max_loss_auto_halt() -> None:
     """Each critical account/exec/PnL condition independently trips Auto-Halt."""
     for context, expected in (
         (portfolio(account_reconciled=False), "account_mismatch"),
+        (portfolio(account_reconciled=None), "account_state_unknown"),
         (portfolio(execution_error=True), "execution_error"),
+        (portfolio(execution_error=None), "execution_status_unknown"),
         (portfolio(realized_pnl=Decimal("-250")), "max_loss_exceeded"),
     ):
         risk = engine()
