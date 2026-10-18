@@ -356,6 +356,49 @@ def test_disabled_direction_stale_settings_and_unknown_limit_fail_closed() -> No
     assert missing.reason_code == "delegation_limit_unknown"
 
 
+def test_delegation_limit_snapshot_must_be_fresh_and_same_market() -> None:
+    policy = MarginRiskPolicy()
+    fresh_settings = settings()
+    valid_intent = intent()
+    current_limit = DelegationLimit(
+        MarginSide.BUY, Decimal("2"), Decimal("1000")
+    )
+    stale_limits = DelegationLimitSnapshot(
+        market_symbol="BTCUSDT",
+        observed_at=NOW - timedelta(seconds=31),
+        limits=(current_limit,),
+    )
+    wrong_market_limits = DelegationLimitSnapshot(
+        market_symbol="ETHUSDT",
+        observed_at=NOW,
+        limits=(current_limit,),
+    )
+
+    stale = policy.evaluate_open_intent(
+        valid_intent, fresh_settings, stale_limits, now=NOW
+    )
+    wrong_market = policy.evaluate_open_intent(
+        valid_intent, fresh_settings, wrong_market_limits, now=NOW
+    )
+
+    assert stale.disposition is MarginOrderDisposition.HALT
+    assert stale.reason_code == "stale_margin_inputs"
+    assert wrong_market.disposition is MarginOrderDisposition.REJECT
+    assert wrong_market.reason_code == "margin_market_mismatch"
+
+
+def test_duplicate_side_leverage_rows_are_rejected() -> None:
+    with pytest.raises(ValueError, match="duplicate"):
+        DelegationLimitSnapshot(
+            market_symbol="BTCUSDT",
+            observed_at=NOW,
+            limits=(
+                DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("100")),
+                DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("200")),
+            ),
+        )
+
+
 def test_margin_position_reconciliation_reports_every_material_mismatch() -> None:
     expected = position()
     observed = position(collateral="199", margin_ratio=Decimal("1.2"))
