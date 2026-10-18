@@ -84,3 +84,22 @@ The PoC is successful only if the same input dataset and cost assumptions yield 
 - The Desktop Commander usage quota was exhausted in the current environment; it is not used as verification evidence.
 - GitHub Actions log/artifact access has been unreliable. Tests and benchmarks are not described as passed or executed without observable results.
 - This research note documents the decision inputs and a reproducible experiment plan; it does not claim production or exchange compatibility.
+
+
+## Future Intelligence phases: open-source-only model selection policy
+
+For later market-regime and NLP/news phases (roadmap Phases 14 and 16), EVORYN will not
+train a general model from scratch as the default plan. The evaluation shortlist must start
+from existing open-source releases and model repositories on Hugging Face or GitHub. For
+each candidate, record the exact revision/model card, license and redistribution/use
+terms, supported framework/runtime, language and domain coverage, memory/latency/cost,
+reproducibility, dataset/provenance constraints, security history, and an isolated offline
+evaluation against a simple EVORYN baseline. "Open source" is not inferred from a repository
+being public: the license must explicitly permit the intended use.
+
+Models remain advisory only. They cannot change risk limits, authorize Margin/Spot orders,
+clear Auto-Halt, or write directly to exchange adapters. Regime detection must emit an
+explicit unknown/abstain state when confidence, freshness, or out-of-sample evidence is
+insufficient. News/NLP must preserve source, publication/receipt timestamps, language,
+deduplication and stale/manipulated-source indicators. No model is adopted merely because
+it performs well on a single backtest.
