@@ -35,7 +35,10 @@ def candles(
     source: str = SOURCE,
 ) -> tuple[MarketCandle, ...]:
     """Create a strictly synthetic closed-candle sequence with explicit identity."""
-    close_values = closes or tuple(str(Decimal("100") + Decimal(index) / Decimal("10")) for index in range(count))
+    close_values = closes or tuple(
+        str(Decimal("100") + Decimal(index) / Decimal("10"))
+        for index in range(count)
+    )
     if len(close_values) != count:
         raise ValueError("close fixture length must equal count")
     result: list[MarketCandle] = []
@@ -65,6 +68,7 @@ class FixedProbabilityModel:
 
     model_id = "test.fixed-regime-model"
     model_version = "test-1.0.0"
+    model_fingerprint = "test-artifact-sha256"
 
     def __init__(
         self,
@@ -155,6 +159,9 @@ def test_detector_classifies_only_when_confidence_meets_threshold() -> None:
     assert result.confidence == Decimal("0.82")
     assert not result.abstained
     assert result.reason_code == "CLASSIFIED"
+    assert result.model_fingerprint == model.model_fingerprint
+    assert result.min_confidence_threshold == Decimal("0.65")
+    assert result.max_data_age_intervals == 2
     assert sum((p for _, p in result.probabilities), Decimal("0")) == Decimal("1")
 
 
