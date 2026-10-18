@@ -383,6 +383,8 @@ class BacktestResultStore:
         self._root = Path(root).expanduser().resolve()
 
     def save(self, result: BacktestResult) -> Path:
+        if not _is_sha256(result.run_id):
+            raise ValueError("run_id must be a lowercase SHA-256 digest.")
         report_bytes = result.to_json_bytes()
         report_hash = hashlib.sha256(report_bytes).hexdigest()
         destination = self._root / f"{result.run_id}.json"
@@ -435,8 +437,8 @@ class BacktestResultStore:
         try:
             report_bytes = report_path.read_bytes()
             checksum_text = checksum_path.read_text(encoding="ascii")
-        except OSError as exc:
-            raise ValueError("Backtest report or checksum sidecar is missing.") from exc
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError("Backtest report or checksum sidecar is missing or invalid.") from exc
         actual_hash = hashlib.sha256(report_bytes).hexdigest()
         if checksum_text != f"{actual_hash}\n":
             raise ValueError("Backtest report checksum does not match stored bytes.")
