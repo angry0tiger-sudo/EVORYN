@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -123,6 +123,25 @@ def test_feature_extractor_rejects_insufficient_history_and_time_gaps() -> None:
 
     with pytest.raises(InvalidRegimeHistory, match="interval gap"):
         extractor.extract(candles(30, gap_at=20))
+
+
+def test_feature_extractor_requires_canonical_utc_timestamps() -> None:
+    source = candles(25)
+    offset = timezone(timedelta(hours=4))
+    first = source[0]
+    shifted = MarketCandle(
+        market=first.market,
+        timestamp=first.timestamp.astimezone(offset),
+        interval=first.interval,
+        open=first.open,
+        high=first.high,
+        low=first.low,
+        close=first.close,
+        volume=first.volume,
+        source=first.source,
+    )
+    with pytest.raises(InvalidRegimeHistory, match="canonical UTC"):
+        RegimeFeatureExtractor(lookback=5).extract((shifted,) + source[1:])
 
 
 def test_feature_extractor_rejects_mixed_market_interval_or_source() -> None:
