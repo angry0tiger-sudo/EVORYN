@@ -506,6 +506,8 @@ def test_backtest_runs_and_json_reports_are_reproducible_and_immutable(tmp_path:
     assert first.run_id == repeated.run_id
     assert first.to_json_bytes() == repeated.to_json_bytes()
     store = BacktestResultStore(tmp_path)
+    with pytest.raises(ValueError, match="SHA-256"):
+        store.save(replace(first, run_id="../unsafe"))
     path = store.save(first)
     assert store.save(repeated) == path
     assert path.read_bytes() == first.to_json_bytes()
