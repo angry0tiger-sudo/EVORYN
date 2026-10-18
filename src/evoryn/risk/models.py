@@ -43,7 +43,11 @@ class RiskLimits:
 
 @dataclass(frozen=True, slots=True)
 class PortfolioSnapshot:
-    """Sufficient, caller-supplied ledger state for one configured Spot market."""
+    """Portfolio state for one Spot market.
+
+    free_capital is spendable quote capital after all outstanding buy reservations.
+    reserved_buy_notional is retained separately for exposure and audit calculations.
+    """
 
     free_capital: Decimal
     total_exposure: Decimal
