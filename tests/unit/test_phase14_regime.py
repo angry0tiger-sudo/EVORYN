@@ -224,7 +224,10 @@ def test_unfitted_model_and_short_history_abstain_before_inference() -> None:
     history = candles(40)
     now = history[-1].timestamp + INTERVAL
 
-    assert detector.classify(history[:5], now=now).reason_code == "INSUFFICIENT_HISTORY"
+    short_history = history[:5]
+    assert detector.classify(
+        short_history, now=short_history[-1].timestamp + INTERVAL
+    ).reason_code == "INSUFFICIENT_HISTORY"
     result = detector.classify(history, now=now)
 
     assert result.label is RegimeLabel.UNKNOWN
