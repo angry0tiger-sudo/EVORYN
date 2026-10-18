@@ -88,7 +88,7 @@ def dataset(
         source_revision=source_revision,
         license_id=license_id,
         license_uri="https://spdx.org/licenses/CC0-1.0.html",
-        collected_at=NOW + timedelta(days=1),
+        collected_at=NOW + INTERVAL * (count + gap_offset) + timedelta(minutes=1),
         candles=tuple(candles),
         allow_gaps=allow_gaps,
     )
