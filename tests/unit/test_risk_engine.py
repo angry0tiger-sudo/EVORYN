@@ -205,7 +205,6 @@ def test_manual_kill_switch_requires_explicit_operator_acknowledgement() -> None
     assert not risk.is_halted
 
 
-
 def test_total_and_market_exposure_each_reduce_order_size() -> None:
     """A pre-existing position at either exposure cap leaves only residual capacity."""
     risk = RiskEngine(
