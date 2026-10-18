@@ -10,8 +10,6 @@ import pytest
 
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.hmmlearn_adapter import GaussianHMMRegimeModel
-from evoryn.learning_lab.backtest import chronological_split
-from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.intelligence.regime import (
     AbstainingRegimeDetector,
     InvalidRegimeHistory,
@@ -20,6 +18,8 @@ from evoryn.intelligence.regime import (
     RegimeThresholds,
     RuleBasedRegimeBaseline,
 )
+from evoryn.learning_lab.backtest import chronological_split
+from evoryn.learning_lab.historical_data import HistoricalDataset
 
 
 BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
