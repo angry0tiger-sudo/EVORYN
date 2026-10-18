@@ -194,8 +194,8 @@ def test_timeout_injection_marks_outcome_unknown_and_latches_halt() -> None:
     assert risk.is_halted
 
 
-def test_network_failure_on_market_update_marks_active_orders_unknown() -> None:
-    """Execution-report loss freezes active orders and triggers Auto-Halt."""
+def test_network_failure_unknown_order_requires_manual_reconciliation() -> None:
+    """A lost update latches the halt until status is reconciled and separately cleared."""
     injector = FailureInjector()
     broker, _, risk = build_broker(failures=injector)
     resting = broker.submit_order(
@@ -205,9 +205,42 @@ def test_network_failure_on_market_update_marks_active_orders_unknown() -> None:
 
     injector.inject_next("market_update", FailureMode.NETWORK_DISCONNECT)
     result = broker.process_market_update(snapshot())
-
     assert result[0].status is PaperOrderStatus.UNKNOWN
+    assert result[0].last_confirmed_status is PaperOrderStatus.OPEN
     assert risk.is_halted
+
+    try:
+        broker.resolve_unknown_order(
+            resting.order_id,
+            confirmed_status=PaperOrderStatus.OPEN,
+            operator_acknowledged=False,
+        )
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("Unknown order resolution must require operator acknowledgement.")
+
+    try:
+        broker.resolve_unknown_order(
+            resting.order_id,
+            confirmed_status=PaperOrderStatus.FILLED,
+            operator_acknowledged=True,
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("The broker must not invent missing fill records.")
+
+    reconciled = broker.resolve_unknown_order(
+        resting.order_id,
+        confirmed_status=PaperOrderStatus.OPEN,
+        operator_acknowledged=True,
+    )
+    assert reconciled.status is PaperOrderStatus.OPEN
+    assert risk.is_halted
+
+    risk.clear_halt(operator_acknowledged=True)
+    assert not risk.is_halted
 
 
 def test_invalid_data_injection_halts_without_filling_resting_orders() -> None:
