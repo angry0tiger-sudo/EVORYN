@@ -274,6 +274,7 @@ class BacktestResult:
     engine_version: str
     dataset_id: str
     dataset_version: str
+    dataset_metadata_json: str
     strategy_id: str
     strategy_version: str
     strategy_parameters: tuple[tuple[str, str], ...]
@@ -297,6 +298,7 @@ class BacktestResult:
             "engine_version": self.engine_version,
             "dataset_id": self.dataset_id,
             "dataset_version": self.dataset_version,
+            "dataset_provenance": json.loads(self.dataset_metadata_json),
             "strategy": {
                 "id": self.strategy_id,
                 "version": self.strategy_version,
@@ -905,6 +907,7 @@ def run_backtest(
         engine_version=BACKTEST_ENGINE_VERSION,
         dataset_id=dataset.dataset_id,
         dataset_version=dataset.version,
+        dataset_metadata_json=_canonical_json_bytes(dataset.metadata()).decode("utf-8"),
         strategy_id=strategy.strategy_id,
         strategy_version=strategy_version,
         strategy_parameters=parameters_sorted,
