@@ -40,6 +40,7 @@ def dataset(
     closes: tuple[str, ...] | None = None,
     opens: tuple[str, ...] | None = None,
     volume: str = "100",
+    volumes: tuple[str, ...] | None = None,
     gap_indices: tuple[int, ...] = (),
     allow_gaps: bool = False,
     source_revision: str = "synthetic-v1",
@@ -48,8 +49,13 @@ def dataset(
     """Create a deterministic fixture whose provenance explicitly declares synthetic data."""
     close_values = closes or tuple(str(Decimal("100") + Decimal(index)) for index in range(count))
     open_values = opens or tuple(str(Decimal(value) - Decimal("0.25")) for value in close_values)
-    if len(close_values) != count or len(open_values) != count:
-        raise ValueError("Fixture open/close values must match count.")
+    volume_values = volumes or tuple(volume for _ in range(count))
+    if (
+        len(close_values) != count
+        or len(open_values) != count
+        or len(volume_values) != count
+    ):
+        raise ValueError("Fixture OHLCV values must match count.")
     candles: list[MarketCandle] = []
     gap_offset = 0
     for index in range(count):
@@ -68,7 +74,7 @@ def dataset(
                 high=high,
                 low=low,
                 close=close_price,
-                volume=Decimal(volume),
+                volume=Decimal(volume_values[index]),
                 source=SOURCE,
             )
         )
@@ -184,8 +190,8 @@ def test_dataset_rejects_out_of_order_duplicate_or_unrecorded_gaps() -> None:
     with pytest.raises(ValueError, match="gap detected"):
         dataset(count=4, gap_indices=(2,), allow_gaps=False)
 
-    documented_gaps = dataset(count=4, gap_indices=(2,), allow_gaps=True)
-    assert documented_gaps.gap_count == 1
+    documented_gaps = dataset(count=5, gap_indices=(2, 3), allow_gaps=True)
+    assert documented_gaps.gap_count == 2
 
 
 def test_dataset_store_saves_loads_verifies_and_is_idempotent(tmp_path: Path) -> None:
@@ -260,6 +266,32 @@ def test_backtest_uses_completed_history_then_fills_only_at_next_open() -> None:
         signal.first_eligible_at for signal in result.signals
         if signal.target_exposure == (Decimal("1") if fill.side is Side.BUY else Decimal("0"))
     ) for fill in result.fills)
+
+
+def test_open_fill_capacity_never_uses_the_current_candle_full_volume() -> None:
+    base = dataset(
+        count=4,
+        opens=("100", "102", "110", "108"),
+        closes=("100", "105", "109", "108"),
+        volumes=("100", "0", "100", "100"),
+    )
+    changed_current_volume = dataset(
+        count=4,
+        opens=("100", "102", "110", "108"),
+        closes=("100", "105", "109", "108"),
+        volumes=("100", "1000000", "100", "100"),
+    )
+
+    base_result = run_backtest(base, BuyAndHold(), config(participation="0.1"))
+    changed_result = run_backtest(
+        changed_current_volume, BuyAndHold(), config(participation="0.1")
+    )
+
+    assert base_result.fills[0].timestamp == base.candles[1].timestamp
+    assert changed_result.fills[0].timestamp == changed_current_volume.candles[1].timestamp
+    assert base_result.fills[0].liquidity_reference_volume == Decimal("100")
+    assert changed_result.fills[0].liquidity_reference_volume == Decimal("100")
+    assert base_result.fills[0].quantity == changed_result.fills[0].quantity
 
 
 def test_backtest_accounts_for_commission_spread_slippage_and_closed_trade_metrics() -> None:
