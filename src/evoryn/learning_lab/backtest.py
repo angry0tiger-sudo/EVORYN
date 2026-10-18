@@ -594,6 +594,8 @@ def run_backtest(
     to decide a fill at that same candle open. A pending market order can partially fill
     across later bars using each bar's explicit participation cap.
     """
+    if dataset.market.market_type.casefold() != "spot":
+        raise ValueError("Phase 13 backtester supports Spot datasets only, not Margin or derivatives.")
     total = len(dataset.candles)
     end = total if end_index is None else end_index
     if start_index < 0 or end <= start_index or end > total:
