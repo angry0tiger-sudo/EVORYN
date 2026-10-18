@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import NoReturn
 from urllib.error import HTTPError, URLError
@@ -52,7 +52,7 @@ class NobitexHTTPTransport:
     """Perform allowlisted HTTPS reads against the official Nobitex API host."""
 
     base_url: str = "https://apiv2.nobitex.ir"
-    token: str | None = None
+    token: str | None = field(default=None, repr=False)
     timeout_seconds: float = 10.0
 
     def __post_init__(self) -> None:
