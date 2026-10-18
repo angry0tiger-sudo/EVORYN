@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import platform
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -38,6 +39,10 @@ class HMMTrainingManifest:
     library_name: str
     library_version: str
     library_license: str
+    numpy_version: str
+    scipy_version: str
+    scikit_learn_version: str
+    python_version: str
     training_dataset_version: str
     training_split: str
     train_start_index: int
@@ -65,6 +70,10 @@ class HMMTrainingManifest:
                 "name": self.library_name,
                 "version": self.library_version,
                 "license": self.library_license,
+                "numpy_version": self.numpy_version,
+                "scipy_version": self.scipy_version,
+                "scikit_learn_version": self.scikit_learn_version,
+                "python_version": self.python_version,
             },
             "training": {
                 "dataset_version": self.training_dataset_version,
@@ -308,6 +317,10 @@ class GaussianHMMRegimeModel:
         }
 
         library_version = importlib.metadata.version("hmmlearn")
+        numpy_version = importlib.metadata.version("numpy")
+        scipy_version = importlib.metadata.version("scipy")
+        scikit_learn_version = importlib.metadata.version("scikit-learn")
+        python_version = platform.python_version()
         train_start_at = training_candles[0].timestamp
         train_end_at = training_candles[-1].timestamp + training_candles[-1].interval
         training_market = training_candles[0].market
@@ -319,7 +332,15 @@ class GaussianHMMRegimeModel:
         fingerprint_material = {
             "model_id": self.model_id,
             "model_version_prefix": self._model_version_prefix,
-            "library": {"name": "hmmlearn", "version": library_version, "license": "BSD-3-Clause"},
+            "library": {
+                "name": "hmmlearn",
+                "version": library_version,
+                "license": "BSD-3-Clause",
+                "numpy_version": numpy_version,
+                "scipy_version": scipy_version,
+                "scikit_learn_version": scikit_learn_version,
+                "python_version": python_version,
+            },
             "training": {
                 "dataset_version": dataset_version,
                 "split": split_name,
@@ -364,6 +385,10 @@ class GaussianHMMRegimeModel:
             library_name="hmmlearn",
             library_version=library_version,
             library_license="BSD-3-Clause",
+            numpy_version=numpy_version,
+            scipy_version=scipy_version,
+            scikit_learn_version=scikit_learn_version,
+            python_version=python_version,
             training_dataset_version=dataset_version,
             training_split=split_name,
             train_start_index=train_start_index,
