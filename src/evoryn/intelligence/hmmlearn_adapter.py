@@ -151,6 +151,12 @@ class GaussianHMMRegimeModel:
         self._manifest: HMMTrainingManifest | None = None
 
     @property
+    def model_fingerprint(self) -> str:
+        if self._manifest is not None:
+            return self._manifest.model_fingerprint
+        return "UNFITTED"
+
+    @property
     def model_version(self) -> str:
         if self._manifest is not None:
             return self._manifest.model_version
@@ -196,7 +202,9 @@ class GaussianHMMRegimeModel:
         self._training_interval = None
         self._manifest = None
         if split_name != "train":
-            raise ValueError("HMM fitting accepts only split_name='train'; validation/test are holdouts.")
+            raise ValueError(
+                "HMM fitting accepts only split_name='train'; validation/test are holdouts."
+            )
         if not _SHA256_PATTERN.fullmatch(dataset_version):
             raise ValueError("dataset_version must be a lowercase SHA-256 digest.")
         if (
@@ -245,6 +253,14 @@ class GaussianHMMRegimeModel:
             implementation="log",
         )
         candidate.fit(scaled)
+        learned_parameters = (
+            candidate.means_,
+            candidate.covars_,
+            candidate.startprob_,
+            candidate.transmat_,
+        )
+        if any(not np.isfinite(values).all() for values in learned_parameters):
+            raise ValueError("HMM fitted non-finite parameters; refusing to use the model.")
         if not bool(candidate.monitor_.converged):
             raise ValueError("HMM did not converge within max_iterations; model remains unusable.")
 
@@ -273,7 +289,9 @@ class GaussianHMMRegimeModel:
             key=lambda state: (float(raw_means[state, trend_column]), state),
         )
         if bull_state == bear_state:
-            raise ValueError("HMM states are not separable by trend strength; refusing label mapping.")
+            raise ValueError(
+                "HMM states are not separable by trend strength; refusing label mapping."
+            )
         separation = Decimal(
             str(float(raw_means[bull_state, trend_column] - raw_means[bear_state, trend_column]))
         )
@@ -385,7 +403,9 @@ class GaussianHMMRegimeModel:
             raise ValueError("No completed history supplied for HMM inference.")
         self._features.validate_history(completed_history)
         if completed_history[0].timestamp != self._training_start_at:
-            raise ValueError("Inference history must start at the fitted train range's first candle.")
+            raise ValueError(
+                "Inference history must start at the fitted train range's first candle."
+            )
         if completed_history[0].market != self._training_market:
             raise ValueError("Inference market differs from the model's training market.")
         if completed_history[0].interval != self._training_interval:
