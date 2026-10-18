@@ -19,7 +19,7 @@ No licensed real market dataset is embedded in the repository.
 Construct a `HistoricalDataset` with:
 
 - `dataset_id`: a safe logical identifier, not a filesystem path.
-- `Market` and fixed candle interval.
+- `Market`, fixed candle interval, and explicit `volume_unit` (`base_asset` or `quote_asset`).
 - `source_name`, `source_uri`, `source_revision`, and a timezone-aware `collected_at`.
 - `license_id` and `license_uri` describing the actual right to store and evaluate the data.
 - A tuple of validated `MarketCandle` records whose market, interval, source and timestamps
@@ -68,9 +68,10 @@ not optimized strategies and not claims of profitability.
 2. At the next candle open, the engine passes only earlier completed candles to the strategy.
 3. A changed target may create a simulated market order, eligible at that next open.
 4. Execution price applies the configured half-spread plus adverse slippage to the next open.
-5. The fill cap is max_bar_participation × the volume of the latest completed candle. This is
-   available before the new open and avoids using the current candle's full future volume to
-   authorize an open-time fill.
+5. The fill cap is max_bar_participation × the base-asset volume of the latest completed candle.
+   That volume unit is explicit in the dataset metadata. Quote-volume datasets are rejected by
+   the simulator rather than silently treated as base volume. The cap is known before the new
+   open and avoids using the current candle's full future volume to authorize an open-time fill.
 6. Unfilled quantity remains pending across bars. If the target flips, remaining quantity is
    canceled and any necessary opposite action is separately simulated.
 7. Buy quantity is reduced if current cash at the observed execution price cannot cover notional
