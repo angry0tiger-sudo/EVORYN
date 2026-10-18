@@ -127,7 +127,7 @@ class HistoricalDataset:
         """Count missing interval boundaries between adjacent candle-open timestamps."""
         return sum(
             max(0, (right.timestamp - left.timestamp) // self.interval - 1)
-            for left, right in zip(self.candles, self.candles[1:])
+            for left, right in zip(self.candles, self.candles[1:], strict=False)
         )
 
     def metadata(self) -> dict[str, Any]:
