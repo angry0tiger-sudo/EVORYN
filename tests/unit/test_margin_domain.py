@@ -281,7 +281,7 @@ def test_stale_snapshot_unknown_liquidation_price_and_unsupported_cross_fail_clo
     assert cross.health is MarginHealth.UNSUPPORTED_MODE
 
 
-def test_reported_liquidated_closed_and_unknown_statuses_are_not_reinterpreted() -> None:
+def test_reported_liquidated_closed_expired_and_unknown_statuses_are_not_reinterpreted() -> None:
     policy = MarginRiskPolicy()
 
     liquidated = policy.assess_position(
@@ -290,12 +290,18 @@ def test_reported_liquidated_closed_and_unknown_statuses_are_not_reinterpreted()
     closed = policy.assess_position(
         position(status=MarginPositionStatus.CLOSED), now=NOW
     )
+    expired = policy.assess_position(
+        position(status=MarginPositionStatus.EXPIRED), now=NOW
+    )
     unknown = policy.assess_position(
         position(status=MarginPositionStatus.UNKNOWN), now=NOW
     )
 
     assert liquidated.health is MarginHealth.LIQUIDATED
     assert closed.health is MarginHealth.INACTIVE
+    assert expired.health is MarginHealth.UNKNOWN
+    assert expired.reason_code == "expiry_settlement_pending"
+    assert not expired.new_risk_permitted
     assert unknown.health is MarginHealth.UNKNOWN
 
 
