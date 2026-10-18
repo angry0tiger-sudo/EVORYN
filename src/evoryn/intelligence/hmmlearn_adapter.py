@@ -252,7 +252,6 @@ class GaussianHMMRegimeModel:
     ) -> HMMTrainingManifest:
         """Internal fit implementation; public fitting requires versioned temporal partitions."""
         self._clear_fitted_state()
-        self._clear_fitted_state()
         if not _SHA256_PATTERN.fullmatch(dataset_version):
             raise ValueError("dataset_version must be a lowercase SHA-256 digest.")
         if (
