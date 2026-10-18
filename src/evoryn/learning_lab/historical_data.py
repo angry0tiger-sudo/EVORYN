@@ -100,7 +100,8 @@ class HistoricalDataset:
 
         if self.candles[-1].timestamp + self.interval > self.collected_at:
             raise ValueError(
-                "Every candle must be complete by collected_at; partial candles cannot be versioned."
+                "Every candle must be complete by collected_at; "
+                "partial candles cannot be versioned."
             )
 
         # Canonicalize time zones once so save/load equality is semantic, not offset-dependent.
