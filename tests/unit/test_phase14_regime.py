@@ -69,6 +69,7 @@ class FixedProbabilityModel:
     model_id = "test.fixed-regime-model"
     model_version = "test-1.0.0"
     model_fingerprint = "test-artifact-sha256"
+    confidence_semantics = "hmm_posterior"
 
     def __init__(
         self,
@@ -271,6 +272,23 @@ def test_invalid_model_probabilities_abstain() -> None:
 
     assert result.label is RegimeLabel.UNKNOWN
     assert result.reason_code == "INVALID_MODEL_OUTPUT"
+
+
+def test_rule_baseline_scores_are_not_treated_as_calibrated_confidence() -> None:
+    history = candles(40)
+    features = RegimeFeatureExtractor(lookback=10)
+    baseline = RuleBasedRegimeBaseline(features)
+    detector = AbstainingRegimeDetector(
+        baseline,
+        feature_extractor=features,
+        thresholds=RegimeThresholds(min_confidence=Decimal("0.65")),
+    )
+
+    result = detector.classify(history, now=history[-1].timestamp + INTERVAL)
+
+    assert result.label is RegimeLabel.UNKNOWN
+    assert result.reason_code == "UNVALIDATED_CONFIDENCE"
+    assert result.confidence_semantics == "heuristic_score"
 
 
 def test_rule_baseline_is_deterministic_and_has_no_future_data_port() -> None:
