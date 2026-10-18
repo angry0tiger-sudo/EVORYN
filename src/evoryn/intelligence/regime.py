@@ -148,6 +148,8 @@ class RegimeFeatureExtractor:
                 raise InvalidRegimeHistory("History mixes candle data sources.")
             if candle.timestamp.tzinfo is None or candle.timestamp.utcoffset() is None:
                 raise InvalidRegimeHistory("Every candle timestamp must be timezone-aware.")
+            if candle.timestamp.utcoffset() != timedelta(0):
+                raise InvalidRegimeHistory("Regime features require canonical UTC timestamps.")
             if previous is not None:
                 delta = candle.timestamp - previous.timestamp
                 if delta <= timedelta(0):
@@ -245,7 +247,8 @@ class RegimePrediction:
         if not self.model_fingerprint.strip():
             raise ValueError("Model fingerprint or an explicit unfit sentinel is required.")
         if (
-            not self.min_confidence_threshold.is_finite()
+            not isinstance(self.min_confidence_threshold, Decimal)
+            or not self.min_confidence_threshold.is_finite()
             or self.min_confidence_threshold <= 0
             or self.min_confidence_threshold > 1
         ):
