@@ -374,7 +374,10 @@ def _candles_from_bytes(
     interval: timedelta,
 ) -> tuple[MarketCandle, ...]:
     """Decode exact canonical columns into validated domain candles."""
-    text = candle_bytes.decode("utf-8")
+    try:
+        text = candle_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Candle CSV must be UTF-8 encoded.") from exc
     reader = csv.DictReader(io.StringIO(text, newline=""))
     if tuple(reader.fieldnames or ()) != _CANDLE_COLUMNS:
         raise ValueError("Unexpected candle CSV columns.")
@@ -438,7 +441,7 @@ def _dataset_from_bytes(metadata: dict[str, Any], candle_bytes: bytes) -> Histor
             candles=candles,
             allow_gaps=_required_bool(metadata.get("allow_gaps"), "allow_gaps"),
         )
-    except (KeyError, TypeError, ValueError, InvalidOperation) as exc:
+    except (KeyError, TypeError, ValueError, InvalidOperation, UnicodeDecodeError) as exc:
         raise DatasetIntegrityError("Dataset metadata or candle rows are invalid.") from exc
     if dataset.metadata() != metadata:
         raise DatasetIntegrityError("Manifest metadata differs from reconstructed records.")
