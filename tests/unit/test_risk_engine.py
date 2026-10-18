@@ -202,3 +202,46 @@ def test_manual_kill_switch_requires_explicit_operator_acknowledgement() -> None
 
     risk.clear_halt(operator_acknowledged=True)
     assert not risk.is_halted
+
+
+
+def test_total_and_market_exposure_each_reduce_order_size() -> None:
+    """A pre-existing position at either exposure cap leaves only residual capacity."""
+    risk = RiskEngine(
+        RiskLimits(
+            max_total_exposure=Decimal("100"),
+            max_market_exposure=Decimal("100"),
+            max_order_notional=Decimal("1000"),
+            max_loss=Decimal("250"),
+        )
+    )
+
+    total_limited = risk.evaluate(
+        request("0.1"),
+        portfolio(total_exposure=Decimal("95")),
+        market_snapshot(),
+        now=NOW,
+    )
+    market_limited = risk.evaluate(
+        request("0.1"),
+        portfolio(market_exposure=Decimal("95")),
+        market_snapshot(),
+        now=NOW,
+    )
+
+    assert total_limited.action is RiskAction.REDUCE
+    assert total_limited.approved_quantity is not None
+    assert total_limited.approved_quantity * Decimal("101") <= Decimal("5")
+    assert market_limited.action is RiskAction.REDUCE
+    assert market_limited.approved_quantity is not None
+    assert market_limited.approved_quantity * Decimal("101") <= Decimal("5")
+
+
+def test_risk_action_vocabulary_is_exactly_four_uppercase_values() -> None:
+    """No advisory, unknown, or lowercase disposition may enter the RiskPort."""
+    assert {action.value for action in RiskAction} == {
+        "ALLOW",
+        "REDUCE",
+        "REJECT",
+        "HALT",
+    }
