@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from collections.abc import Sequence
 
 import pytest
 
@@ -117,7 +118,7 @@ class BuyThenFlat:
     def parameters(self) -> dict[str, str]:
         return {"pattern": "one-completed-bar-long"}
 
-    def target_exposure(self, history: tuple[MarketCandle, ...]) -> Decimal:
+    def target_exposure(self, history: Sequence[MarketCandle]) -> Decimal:
         return Decimal("1") if len(history) == 1 else Decimal("0")
 
 
@@ -227,9 +228,12 @@ def test_sma_baselines_are_deterministic_and_only_accept_supplied_history() -> N
     assert crossover.target_exposure(candles[:10]) == Decimal("1")
     assert trend.target_exposure(candles[:4]) == Decimal("0")
     assert trend.target_exposure(candles[:8]) == Decimal("1")
+    same_prefix_with_different_future = tuple(candles[:10]) + tuple(
+        reversed(candles[10:])
+    )
     assert crossover.target_exposure(candles[:10]) == crossover.target_exposure(
-        tuple(candles[:10]) + tuple(candles[10:])
-    ) if False else True
+        same_prefix_with_different_future[:10]
+    )
 
 
 def test_backtest_uses_completed_history_then_fills_only_at_next_open() -> None:
