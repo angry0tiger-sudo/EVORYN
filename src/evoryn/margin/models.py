@@ -111,6 +111,25 @@ class DelegationLimit:
 
 
 @dataclass(frozen=True, slots=True)
+class DelegationLimitSnapshot:
+    """Timestamped source response for one market's side-specific remaining limits."""
+
+    market_symbol: str
+    observed_at: datetime
+    limits: tuple[DelegationLimit, ...]
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self.market_symbol, "market_symbol")
+        _require_aware(self.observed_at, "Delegation limit timestamp")
+        seen: set[tuple[MarginSide, Decimal]] = set()
+        for item in self.limits:
+            key = (item.side, item.leverage)
+            if key in seen:
+                raise ValueError("Delegation limit snapshot contains duplicate side/leverage rows.")
+            seen.add(key)
+
+
+@dataclass(frozen=True, slots=True)
 class MarginPosition:
     """Normalized read-only Nobitex Position object.
 
