@@ -72,6 +72,10 @@ class PortfolioSnapshot:
         for name in ("realized_pnl", "unrealized_pnl"):
             if not getattr(self, name).is_finite():
                 raise ValueError(f"{name} must be finite.")
+        for name in ("account_reconciled", "execution_error"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, bool):
+                raise ValueError(f"{name} must be true, false, or unknown (None).")
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,8 +89,12 @@ class RiskResult:
 
     def __post_init__(self) -> None:
         """Ensure only a positive, finite quantity can be authorized."""
+        if not isinstance(self.action, RiskAction):
+            raise ValueError("Risk action must be one of the four RiskAction values.")
         if self.approved_quantity is not None and (
-            not self.approved_quantity.is_finite() or self.approved_quantity <= 0
+            not isinstance(self.approved_quantity, Decimal)
+            or not self.approved_quantity.is_finite()
+            or self.approved_quantity <= 0
         ):
             raise ValueError("approved_quantity must be finite and positive.")
         if self.action in (RiskAction.ALLOW, RiskAction.REDUCE) and (
