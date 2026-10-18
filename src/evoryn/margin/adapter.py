@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 
 from evoryn.margin.models import (
     DelegationLimit,
+    DelegationLimitSnapshot,
     MarginMarketSettings,
     MarginMode,
     MarginPosition,
@@ -86,8 +87,11 @@ class NobitexMarginAdapter:
     @staticmethod
     def normalize_delegation_limits(
         payload: Mapping[str, object],
-    ) -> tuple[DelegationLimit, ...]:
-        """Normalize side-specific limits from /margin/v2/delegation-limit.
+        *,
+        market_symbol: str,
+        observed_at: datetime,
+    ) -> DelegationLimitSnapshot:
+        """Normalize a time-scoped /margin/v2/delegation-limit response.
 
         BUY limits are quote/destination currency; SELL limits are base/source currency.
         A missing or malformed side is an error, not an empty/unlimited allowance.
@@ -110,7 +114,11 @@ class NobitexMarginAdapter:
                         limit=_required_decimal(row, "limit"),
                     )
                 )
-        return tuple(normalized)
+        return DelegationLimitSnapshot(
+            market_symbol=market_symbol,
+            observed_at=observed_at,
+            limits=tuple(normalized),
+        )
 
 
 def _required_string(payload: Mapping[str, object], key: str) -> str:
