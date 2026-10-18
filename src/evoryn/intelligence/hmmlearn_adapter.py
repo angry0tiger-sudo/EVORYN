@@ -456,27 +456,35 @@ class GaussianHMMRegimeModel:
         np = self._np
         feature_mean = self._feature_mean
         feature_scale = self._feature_scale
+        training_start_at = self._training_start_at
+        training_end_at = self._training_end_at
+        training_market = self._training_market
+        training_interval = self._training_interval
         if (
             model is None
             or np is None
             or feature_mean is None
             or feature_scale is None
+            or training_start_at is None
+            or training_end_at is None
+            or training_market is None
+            or training_interval is None
             or not self.is_ready
         ):
             raise RuntimeError("HMM is not fitted with a usable, versioned training split.")
         if not completed_history:
             raise ValueError("No completed history supplied for HMM inference.")
         self._features.validate_history(completed_history)
-        if completed_history[0].timestamp != self._training_start_at:
+        if completed_history[0].timestamp != training_start_at:
             raise ValueError(
                 "Inference history must start at the fitted train range's first candle."
             )
-        if completed_history[0].market != self._training_market:
+        if completed_history[0].market != training_market:
             raise ValueError("Inference market differs from the model's training market.")
-        if completed_history[0].interval != self._training_interval:
+        if completed_history[0].interval != training_interval:
             raise ValueError("Inference interval differs from the model's training interval.")
         latest_close_time = completed_history[-1].timestamp + completed_history[-1].interval
-        if latest_close_time < self._training_end_at:
+        if latest_close_time < training_end_at:
             raise ValueError("Inference time precedes the end of the HMM training range.")
         feature_rows = self._features.extract_series(completed_history)
         matrix = np.asarray(
