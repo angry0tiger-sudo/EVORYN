@@ -497,9 +497,12 @@ def test_backtest_runs_and_json_reports_are_reproducible_and_immutable(tmp_path:
     assert stored_report["dataset_version"] == source.version
     assert stored_report["dataset_provenance"]["license_id"] == source.license_id
     assert stored_report["dataset_provenance"]["source_revision"] == source.source_revision
-    assert stored_report["dataset_provenance"]["collected_at"] == (
-        source.collected_at.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    expected_collected_at = (
+        source.collected_at.astimezone(UTC)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
     )
+    assert stored_report["dataset_provenance"]["collected_at"] == expected_collected_at
     assert (tmp_path / f"{first.run_id}.json.sha256").exists()
 
     path.write_bytes(path.read_bytes() + b" ")
