@@ -103,6 +103,14 @@ class PaperBroker:
                 return self._store_rejected(
                     order_id, request, now, "requested_market_mismatch"
                 )
+            if any(
+                item.status is PaperOrderStatus.UNKNOWN for item in self._orders.values()
+            ):
+                self._risk_port.emergency_halt("unresolved_unknown_order")
+            if self._risk_port.is_halted:
+                return self._store_rejected(
+                    order_id, request, now, "risk_halt_latched"
+                )
 
             injected = self._failures.consume("submit")
             if injected in (FailureMode.NETWORK_DISCONNECT, FailureMode.TIMEOUT):
@@ -367,6 +375,8 @@ class PaperBroker:
             reserved_sell_quantity=reserved_sell,
             realized_pnl=self._realized_pnl,
             unrealized_pnl=unrealized,
+            account_reconciled=True,
+            execution_error=False,
         )
 
     def _snapshot_fault(self, snapshot: MarketSnapshot, now: datetime) -> str | None:
