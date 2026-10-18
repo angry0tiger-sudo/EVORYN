@@ -32,7 +32,8 @@ Relevant documented endpoints and semantics:
 - Official docs identify Open, Closed, Liquidated and Expired states, Isolated Margin as
   the current margin mode, an initial commitment ratio of 2, and a minimum safe ratio of
   1.1. A position may remain in a transitional state around liquidation/expiry while
-  settlement orders complete.
+  settlement orders complete. An `Expired` status is therefore settlement-pending and
+  locally classified as `UNKNOWN`, not proof that the position has settled.
 
 ## Decision
 
