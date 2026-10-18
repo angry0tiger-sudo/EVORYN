@@ -85,10 +85,16 @@ class HistoricalDataset:
             if previous is not None:
                 if candle.timestamp <= previous.timestamp:
                     raise ValueError("Candles must be strictly chronological without duplicates.")
-                if candle.timestamp - previous.timestamp != self.interval and not self.allow_gaps:
-                    raise ValueError(
-                        "Candle interval gap detected; set allow_gaps=True only when documented."
-                    )
+                delta = candle.timestamp - previous.timestamp
+                if delta != self.interval:
+                    if not self.allow_gaps:
+                        raise ValueError(
+                            "Candle interval gap detected; set allow_gaps=True only when documented."
+                        )
+                    if delta % self.interval != timedelta(0):
+                        raise ValueError(
+                            "Allowed gaps must remain aligned to whole dataset intervals."
+                        )
             previous = candle
 
         # Canonicalize time zones once so save/load equality is semantic, not offset-dependent.
@@ -111,9 +117,8 @@ class HistoricalDataset:
     def gap_count(self) -> int:
         """Count missing interval boundaries between adjacent candle-open timestamps."""
         return sum(
-            1
+            max(0, (right.timestamp - left.timestamp) // self.interval - 1)
             for left, right in zip(self.candles, self.candles[1:])
-            if right.timestamp - left.timestamp != self.interval
         )
 
     def metadata(self) -> dict[str, Any]:
@@ -243,7 +248,7 @@ class HistoricalDatasetStore:
             manifest_bytes = (directory / "manifest.json").read_bytes()
             candle_bytes = (directory / "candles.csv").read_bytes()
             manifest = json.loads(manifest_bytes)
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise DatasetIntegrityError("Dataset manifest or candle file cannot be read.") from exc
         if (
             not isinstance(manifest, dict)
