@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from evoryn.domain.models import Market, MarketSnapshot, OrderRequest, OrderType, Side
@@ -20,6 +20,7 @@ MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 
 def snapshot(
     *,
+    observed_at: datetime = NOW,
     bid: str = "99",
     ask: str = "101",
     last: str = "100",
@@ -29,7 +30,7 @@ def snapshot(
     """Create one synthetic normalized book tick."""
     return MarketSnapshot(
         market=MARKET,
-        observed_at=NOW,
+        observed_at=observed_at,
         source="paper-test-fixture",
         values={
             "bid": Decimal(bid),
@@ -110,7 +111,9 @@ def order(
 
 def test_market_order_partially_fills_then_completes_from_new_market_data() -> None:
     """Market order fills only visible ask liquidity and accounts for every fill."""
-    broker, feed, risk = build_broker(snapshot(ask_size="0.2"))
+    broker, feed, risk = build_broker(
+        snapshot(ask_size="0.2", observed_at=NOW - timedelta(seconds=1))
+    )
     submitted = broker.submit_order(order("market-partial", quantity="0.25"))
 
     assert submitted.status is PaperOrderStatus.PARTIAL
@@ -120,7 +123,9 @@ def test_market_order_partially_fills_then_completes_from_new_market_data() -> N
     assert broker.position_quantity == Decimal("0.2")
     assert broker.cash == Decimal("9979.8")
 
-    filled = broker.process_market_update(snapshot(ask_size="0.1"))[0]
+    filled = broker.process_market_update(
+        snapshot(ask_size="0.1", observed_at=NOW)
+    )[0]
 
     assert filled.status is PaperOrderStatus.FILLED
     assert filled.filled_quantity == Decimal("0.25")
@@ -237,3 +242,22 @@ def test_malformed_market_data_is_rejected_before_order_bookkeeping() -> None:
     assert rejected.status is PaperOrderStatus.REJECTED
     assert rejected.fills == ()
     assert risk.is_halted
+
+
+
+def test_multiple_orders_share_the_same_snapshot_liquidity() -> None:
+    """Two orders cannot both consume the same displayed top-of-book volume."""
+    broker, _, _ = build_broker(snapshot(ask_size="1"))
+
+    first = broker.submit_order(
+        order("shared-liquidity-1", order_type=OrderType.LIMIT, quantity="0.8", price="110")
+    )
+    second = broker.submit_order(
+        order("shared-liquidity-2", order_type=OrderType.LIMIT, quantity="0.8", price="110")
+    )
+
+    assert first.status is PaperOrderStatus.FILLED
+    assert first.filled_quantity == Decimal("0.8")
+    assert second.status is PaperOrderStatus.PARTIAL
+    assert second.filled_quantity == Decimal("0.2")
+    assert first.filled_quantity + second.filled_quantity == Decimal("1")
