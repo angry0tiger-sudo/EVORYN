@@ -93,6 +93,7 @@ class HMMTrainingManifest:
             },
             "model_config": {
                 "family": "GaussianHMM",
+                "confidence_semantics": "hmm_posterior",
                 "n_components": self.n_components,
                 "covariance_type": "diag",
                 "max_iterations": self.max_iterations,
@@ -120,6 +121,8 @@ class GaussianHMMRegimeModel:
     """
 
     model_id = "evoryn.hmmlearn-gaussian-hmm-regime"
+    model_version_confidence_semantics = "hmm_posterior"
+    confidence_semantics = "hmm_posterior"
     _model_version_prefix = "1.0.0"
 
     def __init__(
