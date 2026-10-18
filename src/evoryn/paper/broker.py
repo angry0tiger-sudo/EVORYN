@@ -143,6 +143,11 @@ class PaperBroker:
                     order_id, request, now, "market_data_read_failure"
                 )
 
+            fault = self._snapshot_fault(snapshot, now)
+            if fault is not None:
+                self._risk_port.emergency_halt(fault)
+                return self._store_rejected(order_id, request, now, fault)
+
             self._latest_snapshot = snapshot
             portfolio = self._portfolio_snapshot(snapshot)
             try:
