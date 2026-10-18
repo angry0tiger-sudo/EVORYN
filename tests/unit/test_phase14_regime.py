@@ -353,8 +353,8 @@ def test_hmm_training_requires_matching_dataset_version_and_train_range() -> Non
 
     with pytest.raises(ValueError, match="different dataset version"):
         model.fit_dataset(
-            versioned_dataset().__class__(
-                dataset_id="alternate-regime-dataset",
+            HistoricalDataset(
+                dataset_id=dataset.dataset_id,
                 market=dataset.market,
                 interval=dataset.interval,
                 volume_unit=dataset.volume_unit,
