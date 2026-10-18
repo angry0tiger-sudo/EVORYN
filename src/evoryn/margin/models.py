@@ -85,7 +85,11 @@ class MarginMarketSettings:
         _require_nonnegative(self.position_fee_rate, "position_fee_rate")
         if self.position_fee_rate > Decimal("1"):
             raise ValueError("position_fee_rate must not exceed 1.")
-        if not self.max_leverage.is_finite() or self.max_leverage < Decimal("1"):
+        if (
+            not isinstance(self.max_leverage, Decimal)
+            or not self.max_leverage.is_finite()
+            or self.max_leverage < Decimal("1")
+        ):
             raise ValueError("max_leverage must be finite and at least 1.")
         if type(self.buy_enabled) is not bool or type(self.sell_enabled) is not bool:
             raise ValueError("Margin side capabilities must be explicit booleans.")
@@ -105,7 +109,11 @@ class DelegationLimit:
     limit: Decimal
 
     def __post_init__(self) -> None:
-        if not self.leverage.is_finite() or self.leverage < Decimal("1"):
+        if (
+            not isinstance(self.leverage, Decimal)
+            or not self.leverage.is_finite()
+            or self.leverage < Decimal("1")
+        ):
             raise ValueError("Delegation leverage must be finite and at least 1.")
         _require_nonnegative(self.limit, "delegation limit")
 
@@ -181,9 +189,17 @@ class MarginPosition:
             value = getattr(self, name)
             if value is not None:
                 _require_aware(value, name)
-        if not self.collateral.is_finite() or self.collateral < 0:
+        if (
+            not isinstance(self.collateral, Decimal)
+            or not self.collateral.is_finite()
+            or self.collateral < 0
+        ):
             raise ValueError("collateral must be finite and non-negative.")
-        if not self.leverage.is_finite() or self.leverage < Decimal("1"):
+        if (
+            not isinstance(self.leverage, Decimal)
+            or not self.leverage.is_finite()
+            or self.leverage < Decimal("1")
+        ):
             raise ValueError("leverage must be finite and at least 1.")
         for name in (
             "liquidation_price",
@@ -192,7 +208,9 @@ class MarginPosition:
             "mark_price",
         ):
             value = getattr(self, name)
-            if value is not None and (not value.is_finite() or value <= 0):
+            if value is not None and (
+                not isinstance(value, Decimal) or not value.is_finite() or value <= 0
+            ):
                 raise ValueError(f"{name} must be positive and finite when present.")
         for name in (
             "delegated_amount",
@@ -213,7 +231,9 @@ class MarginPosition:
             "realized_pnl_percent",
         ):
             value = getattr(self, name)
-            if value is not None and not value.is_finite():
+            if value is not None and (
+                not isinstance(value, Decimal) or not value.is_finite()
+            ):
                 raise ValueError(f"{name} must be finite when present.")
         if self.margin_ratio is not None and self.margin_ratio < 0:
             raise ValueError("margin_ratio must not be negative.")
@@ -235,7 +255,7 @@ class MarginOpenIntent:
         _require_aware(self.observed_at, "Intent timestamp")
         for name in ("amount", "price", "leverage"):
             value = getattr(self, name)
-            if not value.is_finite() or value <= 0:
+            if not isinstance(value, Decimal) or not value.is_finite() or value <= 0:
                 raise ValueError(f"{name} must be finite and positive.")
         if self.leverage < Decimal("1"):
             raise ValueError("leverage must be at least 1.")
