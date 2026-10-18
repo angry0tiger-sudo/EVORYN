@@ -45,6 +45,7 @@ class HistoricalDataset:
     dataset_id: str
     market: Market
     interval: timedelta
+    volume_unit: str
     source_name: str
     source_uri: str
     source_revision: str
@@ -63,6 +64,8 @@ class HistoricalDataset:
                 raise ValueError(f"Market {name} must not be empty.")
         if self.interval <= timedelta(0):
             raise ValueError("Dataset interval must be positive.")
+        if self.volume_unit not in {"base_asset", "quote_asset"}:
+            raise ValueError("volume_unit must explicitly be base_asset or quote_asset.")
         _require_aware(self.collected_at, "collected_at")
         for name in ("source_name", "source_uri", "source_revision", "license_id", "license_uri"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
@@ -139,6 +142,7 @@ class HistoricalDataset:
             },
             "interval_microseconds": self.interval_microseconds,
             "timestamp_semantics": "candle_open_time_utc",
+            "volume_unit": self.volume_unit,
             "source_name": self.source_name,
             "source_uri": self.source_uri,
             "source_revision": self.source_revision,
@@ -328,6 +332,7 @@ def dataset_from_canonical_csv(
     dataset_id: str,
     market: Market,
     interval: timedelta,
+    volume_unit: str,
     source_name: str,
     source_uri: str,
     source_revision: str,
@@ -351,6 +356,7 @@ def dataset_from_canonical_csv(
         dataset_id=dataset_id,
         market=market,
         interval=interval,
+        volume_unit=volume_unit,
         source_name=source_name,
         source_uri=source_uri,
         source_revision=source_revision,
@@ -420,6 +426,7 @@ def _dataset_from_bytes(metadata: dict[str, Any], candle_bytes: bytes) -> Histor
             dataset_id=_required_string(metadata.get("dataset_id"), "dataset_id"),
             market=market,
             interval=timedelta(microseconds=interval_us),
+            volume_unit=_required_string(metadata.get("volume_unit"), "volume_unit"),
             source_name=_required_string(metadata.get("source_name"), "source_name"),
             source_uri=_required_string(metadata.get("source_uri"), "source_uri"),
             source_revision=_required_string(metadata.get("source_revision"), "source_revision"),
