@@ -193,6 +193,17 @@ def test_timeout_injection_marks_outcome_unknown_and_latches_halt() -> None:
     assert feed.reads == 0
     assert risk.is_halted
 
+    try:
+        broker.submit_order(order("timeout-order", quantity="0.2"))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Reusing a client ID with a different payload must fail.")
+
+    risk.clear_halt(operator_acknowledged=True)
+    broker.process_market_update(snapshot())
+    assert risk.is_halted, "An unresolved unknown order must relatch Auto-Halt."
+
 
 def test_network_failure_unknown_order_requires_manual_reconciliation() -> None:
     """A lost update latches the halt until status is reconciled and separately cleared."""
