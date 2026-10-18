@@ -3,6 +3,7 @@
 from evoryn.execution.spot import (
     BalanceLedgerEntry,
     BalanceSnapshot,
+    ExecutionErrorEntry,
     ExecutionLedger,
     ExecutionLedgerEntry,
     ExecutionState,
@@ -19,6 +20,7 @@ from evoryn.execution.spot import (
 __all__ = [
     "BalanceLedgerEntry",
     "BalanceSnapshot",
+    "ExecutionErrorEntry",
     "ExecutionLedger",
     "ExecutionLedgerEntry",
     "ExecutionState",
