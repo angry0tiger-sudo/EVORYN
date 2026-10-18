@@ -89,16 +89,15 @@ class HistoricalDataset:
                 if candle.timestamp <= previous.timestamp:
                     raise ValueError("Candles must be strictly chronological without duplicates.")
                 delta = candle.timestamp - previous.timestamp
-                if delta != self.interval:
-                    if not self.allow_gaps:
-                        raise ValueError(
-                            "Candle interval gap detected; "
-                            "set allow_gaps=True only when documented."
-                        )
-                    if delta % self.interval != timedelta(0):
-                        raise ValueError(
-                            "Allowed gaps must remain aligned to whole dataset intervals."
-                        )
+                if delta != self.interval and not self.allow_gaps:
+                    raise ValueError(
+                        "Candle interval gap detected; "
+                        "set allow_gaps=True only when documented."
+                    )
+                if delta != self.interval and delta % self.interval != timedelta(0):
+                    raise ValueError(
+                        "Allowed gaps must remain aligned to whole dataset intervals."
+                    )
             previous = candle
 
         if self.candles[-1].timestamp + self.interval > self.collected_at:
@@ -441,7 +440,7 @@ def _dataset_from_bytes(metadata: dict[str, Any], candle_bytes: bytes) -> Histor
             candles=candles,
             allow_gaps=_required_bool(metadata.get("allow_gaps"), "allow_gaps"),
         )
-    except (KeyError, TypeError, ValueError, InvalidOperation, UnicodeDecodeError) as exc:
+    except (KeyError, TypeError, ValueError, InvalidOperation) as exc:
         raise DatasetIntegrityError("Dataset metadata or candle rows are invalid.") from exc
     if dataset.metadata() != metadata:
         raise DatasetIntegrityError("Manifest metadata differs from reconstructed records.")
