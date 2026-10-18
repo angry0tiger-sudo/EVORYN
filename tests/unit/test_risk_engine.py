@@ -37,19 +37,32 @@ def market_snapshot(
     )
 
 
-def portfolio(**overrides: object) -> PortfolioSnapshot:
+def portfolio(
+    *,
+    free_capital: Decimal = Decimal("10000"),
+    total_exposure: Decimal = Decimal("0"),
+    market_exposure: Decimal = Decimal("0"),
+    position_quantity: Decimal = Decimal("0"),
+    reserved_buy_notional: Decimal = Decimal("0"),
+    reserved_sell_quantity: Decimal = Decimal("0"),
+    realized_pnl: Decimal = Decimal("0"),
+    unrealized_pnl: Decimal = Decimal("0"),
+    account_reconciled: bool = True,
+    execution_error: bool = False,
+) -> PortfolioSnapshot:
     """Return a safe synthetic ledger that tests can override one field at a time."""
-    values: dict[str, object] = {
-        "free_capital": Decimal("10000"),
-        "total_exposure": Decimal("0"),
-        "market_exposure": Decimal("0"),
-        "position_quantity": Decimal("0"),
-        "account_reconciled": True,
-        "execution_error": False,
-    }
-    values.update(overrides)
-    return PortfolioSnapshot(**values)  # type: ignore[arg-type]
-
+    return PortfolioSnapshot(
+        free_capital=free_capital,
+        total_exposure=total_exposure,
+        market_exposure=market_exposure,
+        position_quantity=position_quantity,
+        reserved_buy_notional=reserved_buy_notional,
+        reserved_sell_quantity=reserved_sell_quantity,
+        realized_pnl=realized_pnl,
+        unrealized_pnl=unrealized_pnl,
+        account_reconciled=account_reconciled,
+        execution_error=execution_error,
+    )
 
 def request(quantity: str = "0.1") -> OrderRequest:
     """Create a validated Spot market buy request."""
