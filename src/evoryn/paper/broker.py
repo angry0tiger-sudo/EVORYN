@@ -371,17 +371,24 @@ class PaperBroker:
 
     def _snapshot_fault(self, snapshot: MarketSnapshot, now: datetime) -> str | None:
         """Reject stale, unrelated, or malformed market data before simulating fills."""
-        if now.tzinfo is None or now.utcoffset() is None:
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
             return "invalid_paper_clock"
         if snapshot.market != self._market:
             return "paper_market_mismatch"
-        if snapshot.observed_at.tzinfo is None or snapshot.observed_at.utcoffset() is None:
+        if not isinstance(snapshot.observed_at, datetime) or (
+            snapshot.observed_at.tzinfo is None
+            or snapshot.observed_at.utcoffset() is None
+        ):
             return "invalid_market_timestamp"
         age = now - snapshot.observed_at
         if age < timedelta(0) or age.total_seconds() > self._max_data_age:
             return "stale_market_data"
-        if not snapshot.source.strip() or snapshot.quality_flags:
+        if not isinstance(snapshot.source, str) or not snapshot.source.strip():
             return "market_data_quality_failure"
+        if snapshot.quality_flags:
+            return "market_data_quality_failure"
+        if not isinstance(snapshot.values, dict):
+            return "invalid_market_values"
         required = ("bid", "ask", "last", "bid_size", "ask_size")
         for name in required:
             value = snapshot.values.get(name)
