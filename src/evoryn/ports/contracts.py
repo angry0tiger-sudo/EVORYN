@@ -101,7 +101,10 @@ class ExchangePort(Protocol):
 class ExchangePlugin(Protocol):
     """Provider plugin contract discovered through the 'evoryn.exchanges' entry-point group."""
 
-    name: str
+    @property
+    def name(self) -> str:
+        """Return the stable lowercase plugin identifier."""
+        ...
 
     def build_adapter(self, config: Mapping[str, str]) -> ExchangePort:
         """Build an adapter from non-secret configuration plus explicitly supplied secrets."""
