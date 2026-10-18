@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from evoryn.domain.models import MarketCandle, Market
+from evoryn.domain.models import Market, MarketCandle
 
 
 class DataQualityCode(StrEnum):
