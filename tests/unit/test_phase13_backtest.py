@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from collections.abc import Sequence
+
+from pathlib import Path
 
 import pytest
 
@@ -185,7 +187,7 @@ def test_dataset_rejects_out_of_order_duplicate_or_unrecorded_gaps() -> None:
     assert documented_gaps.gap_count == 1
 
 
-def test_dataset_store_saves_loads_verifies_and_is_idempotent(tmp_path) -> None:
+def test_dataset_store_saves_loads_verifies_and_is_idempotent(tmp_path: Path) -> None:
     source = dataset()
     store = HistoricalDatasetStore(tmp_path)
 
@@ -200,7 +202,7 @@ def test_dataset_store_saves_loads_verifies_and_is_idempotent(tmp_path) -> None:
     assert restored == source
 
 
-def test_dataset_store_refuses_tampered_candle_bytes(tmp_path) -> None:
+def test_dataset_store_refuses_tampered_candle_bytes(tmp_path: Path) -> None:
     source = dataset(count=5)
     store = HistoricalDatasetStore(tmp_path)
     reference = store.save(source)
@@ -401,7 +403,7 @@ def test_gapped_dataset_requires_explicit_backtest_opt_in() -> None:
     assert allowed.dataset_version == gapped.version
 
 
-def test_backtest_runs_and_json_reports_are_reproducible_and_immutable(tmp_path) -> None:
+def test_backtest_runs_and_json_reports_are_reproducible_and_immutable(tmp_path: Path) -> None:
     source = dataset(count=12)
     strategy = SmaTrendBaseline(window=3)
     first = run_backtest(source, strategy, config(), segment_name="reproducibility")
