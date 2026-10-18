@@ -25,7 +25,12 @@ from evoryn.margin.risk import MarginCalculator, MarginReconciler, MarginRiskPol
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 
 
-def settings(*, buy_enabled: bool = True, sell_enabled: bool = True) -> MarginMarketSettings:
+def settings(
+    *,
+    buy_enabled: bool = True,
+    sell_enabled: bool = True,
+    observed_at: datetime = NOW,
+) -> MarginMarketSettings:
     return MarginMarketSettings(
         market_symbol="BTCUSDT",
         src_currency="btc",
@@ -34,7 +39,7 @@ def settings(*, buy_enabled: bool = True, sell_enabled: bool = True) -> MarginMa
         max_leverage=Decimal("5"),
         buy_enabled=buy_enabled,
         sell_enabled=sell_enabled,
-        observed_at=NOW,
+        observed_at=observed_at,
     )
 
 
@@ -323,16 +328,10 @@ def test_disabled_direction_stale_settings_and_unknown_limit_fail_closed() -> No
         intent(), settings(buy_enabled=False), buy_limit, now=NOW
     )
     stale = policy.evaluate_open_intent(
-        intent(), settings().__class__(
-            market_symbol="BTCUSDT",
-            src_currency="btc",
-            dst_currency="usdt",
-            position_fee_rate=Decimal("0.001"),
-            max_leverage=Decimal("5"),
-            buy_enabled=True,
-            sell_enabled=True,
-            observed_at=NOW - timedelta(minutes=2),
-        ), buy_limit, now=NOW
+        intent(),
+        settings(observed_at=NOW - timedelta(minutes=2)),
+        buy_limit,
+        now=NOW,
     )
     missing = policy.evaluate_open_intent(intent(leverage="1.5"), settings(), buy_limit, now=NOW)
 
