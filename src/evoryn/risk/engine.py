@@ -108,7 +108,7 @@ class RiskEngine:
             prices = market_data.values
             side_price = prices["ask"] if request.side is Side.BUY else prices["bid"]
             risk_price = (
-                request.price
+                max(request.price, side_price)
                 if request.order_type is OrderType.LIMIT and request.price is not None
                 else side_price
             )
