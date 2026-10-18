@@ -123,6 +123,18 @@ class BalanceLedgerEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutionErrorEntry:
+    """Sanitized, correlation-linked record of a fail-closed execution error."""
+
+    event_id: str
+    correlation_id: str
+    occurred_at: datetime
+    client_order_id: str
+    component: str
+    reason_code: str
+
+
+@dataclass(frozen=True, slots=True)
 class ReconciliationReport:
     """Immutable result comparing the internal paper ledger with the mock venue mirror."""
 
@@ -180,6 +192,7 @@ class ExecutionLedger:
         self._risk_decisions: list[RiskLedgerEntry] = []
         self._executions: list[ExecutionLedgerEntry] = []
         self._balances: list[BalanceLedgerEntry] = []
+        self._errors: list[ExecutionErrorEntry] = []
         self._reconciliations: list[ReconciliationReport] = []
 
     @property
@@ -203,9 +216,18 @@ class ExecutionLedger:
             return tuple(self._balances)
 
     @property
+    def errors(self) -> tuple[ExecutionErrorEntry, ...]:
+        with self._lock:
+            return tuple(self._errors)
+
+    @property
     def reconciliations(self) -> tuple[ReconciliationReport, ...]:
         with self._lock:
             return tuple(self._reconciliations)
+
+    def record_error(self, entry: ExecutionErrorEntry) -> None:
+        with self._lock:
+            self._errors.append(entry)
 
     def record_intent(self, entry: IntentLedgerEntry) -> None:
         with self._lock:
@@ -393,6 +415,7 @@ class SpotExecutionService:
         self._last_order_fingerprints: dict[str, tuple[object, ...]] = {}
         self._execution_sequence = 0
         self._balance_sequence = 0
+        self._error_sequence = 0
         self._reconciliation_sequence = 0
 
     def execute(self, intent: SpotIntent) -> SpotExecutionResult:
@@ -431,11 +454,23 @@ class SpotExecutionService:
                 order = self._broker.submit_order(intent.request)
             except Exception:
                 self._broker.emergency_halt("spot_execution_exception")
+                self._record_error(
+                    intent.correlation_id,
+                    intent.request.client_order_id,
+                    "paper_broker",
+                    "spot_execution_exception",
+                )
                 raise
             try:
                 self._mock_venue.observe_order(order)
             except Exception:
                 self._broker.emergency_halt("mock_venue_mirror_failure")
+                self._record_error(
+                    intent.correlation_id,
+                    intent.request.client_order_id,
+                    "mock_venue",
+                    "mock_venue_mirror_failure",
+                )
                 raise
 
             risk = self._broker.get_risk_decision(intent.request.client_order_id)
@@ -458,12 +493,31 @@ class SpotExecutionService:
     ) -> tuple[tuple[PaperOrder, ...], ReconciliationReport]:
         """Advance resting paper orders, mirror their state, then reconcile the full ledger."""
         with self._lock:
-            orders = self._broker.process_market_update(snapshot)
+            try:
+                orders = self._broker.process_market_update(snapshot)
+            except Exception:
+                self._broker.emergency_halt("paper_market_update_exception")
+                self._record_error(
+                    f"market-tick:{snapshot.observed_at.isoformat()}",
+                    "<market-update>",
+                    "paper_broker",
+                    "paper_market_update_exception",
+                )
+                raise
             for order in orders:
                 try:
                     self._mock_venue.observe_order(order)
                 except Exception:
                     self._broker.emergency_halt("mock_venue_mirror_failure")
+                    self._record_error(
+                        self._correlation_by_client_id.get(
+                            order.request.client_order_id,
+                            f"orphan:{order.request.client_order_id}",
+                        ),
+                        order.request.client_order_id,
+                        "mock_venue",
+                        "mock_venue_mirror_failure",
+                    )
                     raise
                 correlation_id = self._correlation_by_client_id.get(
                     order.request.client_order_id,
@@ -484,12 +538,25 @@ class SpotExecutionService:
             raise ValueError("Reconciliation correlation_id must not be empty.")
         with self._lock:
             checked_at = self._now()
-            internal_balance = self._internal_balance(checked_at)
-            venue_balance = self._mock_venue.get_balances(captured_at=checked_at)
+            try:
+                internal_balance = self._internal_balance(checked_at)
+                venue_balance = self._mock_venue.get_balances(captured_at=checked_at)
+                internal_orders = {
+                    order.order_id: order for order in self._broker.list_orders()
+                }
+                venue_orders = {
+                    order.order_id: order for order in self._mock_venue.get_orders()
+                }
+            except Exception:
+                self._broker.emergency_halt("paper_reconciliation_read_failure")
+                self._record_error(
+                    correlation_id,
+                    "<reconciliation>",
+                    "reconciliation",
+                    "paper_reconciliation_read_failure",
+                )
+                raise
             differences = self._balance_differences(internal_balance, venue_balance)
-
-            internal_orders = {order.order_id: order for order in self._broker.list_orders()}
-            venue_orders = {order.order_id: order for order in self._mock_venue.get_orders()}
             for order_id in sorted(internal_orders.keys() - venue_orders.keys()):
                 differences.append(f"order_missing_from_mock_venue:{order_id}")
             for order_id in sorted(venue_orders.keys() - internal_orders.keys()):
@@ -594,6 +661,25 @@ class SpotExecutionService:
                 correlation_id=correlation_id,
                 recorded_at=now,
                 balance=self._internal_balance(now),
+            )
+        )
+
+    def _record_error(
+        self,
+        correlation_id: str,
+        client_order_id: str,
+        component: str,
+        reason_code: str,
+    ) -> None:
+        self._error_sequence += 1
+        self.ledger.record_error(
+            ExecutionErrorEntry(
+                event_id=f"{correlation_id}:error:{self._error_sequence}",
+                correlation_id=correlation_id,
+                occurred_at=self._now(),
+                client_order_id=client_order_id,
+                component=component,
+                reason_code=reason_code,
             )
         )
 
