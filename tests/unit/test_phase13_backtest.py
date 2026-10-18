@@ -116,6 +116,7 @@ class BuyThenFlat:
     """Test-only causal signal: buy after the first completed candle, then exit."""
 
     strategy_id = "test-buy-then-flat"
+    strategy_version = "1.0.0"
 
     def parameters(self) -> dict[str, str]:
         return {"pattern": "one-completed-bar-long"}
@@ -128,6 +129,7 @@ class BuyAndHold:
     """Test-only causal signal that goes long after any completed candle."""
 
     strategy_id = "test-buy-and-hold"
+    strategy_version = "1.0.0"
 
     def parameters(self) -> dict[str, str]:
         return {"pattern": "hold-long-after-first-close"}
