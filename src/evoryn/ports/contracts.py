@@ -1,9 +1,9 @@
-"""Typed port contracts only; no exchange adapter or execution implementation exists here."""
+"""Typed port contracts separating EVORYN core logic from providers and plugins."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import datetime
+from collections.abc import Mapping, Sequence
+from datetime import datetime, timedelta
 from typing import Protocol, runtime_checkable
 
 from evoryn.domain.models import (
@@ -13,13 +13,20 @@ from evoryn.domain.models import (
     ExperimentProposal,
     LearningEvent,
     Market,
+    MarketCandle,
     MarketSnapshot,
+    MarketStatistics,
+    MarketTrade,
     Order,
+    OrderBookSnapshot,
+    OrderRequest,
     OrderIntent,
     Position,
     RiskDecision,
     Signal,
+    WalletBalance,
 )
+from evoryn.ports.rate_limits import RateLimitPolicy
 
 
 @runtime_checkable
@@ -39,14 +46,74 @@ class MarketDataPort(Protocol):
 
 @runtime_checkable
 class ExchangePort(Protocol):
-    """Describe provider capabilities and normalized read-only query contracts."""
+    """Full common exchange contract; each implementation declares its real capabilities.
+
+    The contract includes writes for architecture completeness. An implementation
+    must fail closed for unsupported writes, and the EVORYN Phase 6/7 Nobitex adapter
+    intentionally does not implement an order-writing transport path.
+    """
 
     def get_capabilities(self) -> ExchangeCapabilities:
-        """Return an explicit capability declaration for this provider."""
+        """Return explicit capabilities; omitted or false capabilities are unavailable."""
         ...
 
-    def get_order(self, order_id: str) -> Order | None:
-        """Return a normalized known order, or None when it is not found."""
+    def get_market_candles(
+        self,
+        market: Market,
+        *,
+        interval: timedelta,
+        start: datetime,
+        end: datetime,
+    ) -> Sequence[MarketCandle]:
+        """Read and normalize OHLCV candles for a market and closed time range."""
+        ...
+
+    def get_order_book(self, market: Market) -> OrderBookSnapshot:
+        """Read a normalized point-in-time order-book snapshot."""
+        ...
+
+    def get_recent_trades(self, market: Market, *, limit: int) -> Sequence[MarketTrade]:
+        """Read a bounded set of normalized recent trades."""
+        ...
+
+    def get_market_stats(self, market: Market) -> MarketStatistics:
+        """Read normalized market statistics."""
+        ...
+
+    def get_balances(self) -> Sequence[WalletBalance]:
+        """Read balances for the authenticated account; never access withdrawal APIs."""
+        ...
+
+    def get_order(self, order_id: str, market: Market) -> Order | None:
+        """Read one order's current state, using caller-supplied canonical market identity."""
+        ...
+
+    def submit_order(self, request: OrderRequest) -> Order:
+        """Submit an order only if a future separately reviewed execution gate permits it."""
+        ...
+
+    def cancel_order(self, order_id: str) -> Order:
+        """Cancel an order only if a future separately reviewed execution gate permits it."""
+        ...
+
+
+@runtime_checkable
+class ExchangePlugin(Protocol):
+    """Provider plugin contract discovered through the 'evoryn.exchanges' entry-point group."""
+
+    name: str
+
+    def build_adapter(self, config: Mapping[str, str]) -> ExchangePort:
+        """Build an adapter from non-secret configuration plus explicitly supplied secrets."""
+        ...
+
+
+@runtime_checkable
+class RateLimiterPort(Protocol):
+    """Endpoint-independent rate-budget contract shared by exchange adapters."""
+
+    def acquire(self, key: str, policy: RateLimitPolicy) -> None:
+        """Consume one request slot or raise RateLimitExceeded with a retry delay."""
         ...
 
 
@@ -70,7 +137,7 @@ class RiskPort(Protocol):
 
 @runtime_checkable
 class ExecutionPort(Protocol):
-    """Define an execution boundary without implementing live order submission."""
+    """Define an execution boundary without implementing or enabling live order submission."""
 
     def prepare(self, intent: OrderIntent, decision: RiskDecision) -> ExecutionPlan:
         """Prepare a reviewable plan from an intent and explicit risk decision."""
