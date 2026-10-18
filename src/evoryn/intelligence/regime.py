@@ -247,6 +247,12 @@ class RegimePrediction:
             raise ValueError("Feature schema version and reason code are required.")
         if not self.model_fingerprint.strip():
             raise ValueError("Model fingerprint or an explicit unfit sentinel is required.")
+        if self.confidence_semantics not in {
+            "hmm_posterior",
+            "calibrated_probability",
+            "heuristic_score",
+        }:
+            raise ValueError("confidence_semantics is not a supported interpretation.")
         if not self.confidence_semantics.strip():
             raise ValueError("confidence_semantics must state how the score should be interpreted.")
         if (
@@ -390,7 +396,10 @@ class AbstainingRegimeDetector:
             return self._unknown(as_of, "INVALID_HISTORY")
         if not self._model.is_ready:
             return self._unknown(as_of, "MODEL_NOT_READY")
-        if self._model.confidence_semantics != "hmm_posterior":
+        if self._model.confidence_semantics not in {
+            "hmm_posterior",
+            "calibrated_probability",
+        }:
             return self._unknown(as_of, "UNVALIDATED_CONFIDENCE")
 
         try:
