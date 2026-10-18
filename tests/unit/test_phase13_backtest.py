@@ -23,6 +23,7 @@ from evoryn.learning_lab.historical_data import (
     DatasetIntegrityError,
     HistoricalDataset,
     HistoricalDatasetStore,
+    dataset_from_canonical_csv,
 )
 from evoryn.strategies.baseline import SmaCrossoverBaseline, SmaTrendBaseline
 
@@ -192,6 +193,30 @@ def test_dataset_rejects_out_of_order_duplicate_or_unrecorded_gaps() -> None:
 
     documented_gaps = dataset(count=5, gap_indices=(2, 3), allow_gaps=True)
     assert documented_gaps.gap_count == 2
+
+
+def test_canonical_csv_ingestion_requires_and_preserves_explicit_provenance(
+    tmp_path: Path,
+) -> None:
+    original = dataset(count=5)
+    source_export = tmp_path / "authorized-export.csv"
+    source_export.write_bytes(original.candles_csv_bytes())
+
+    imported = dataset_from_canonical_csv(
+        source_export,
+        dataset_id=original.dataset_id,
+        market=original.market,
+        interval=original.interval,
+        source_name=original.source_name,
+        source_uri=original.source_uri,
+        source_revision=original.source_revision,
+        license_id=original.license_id,
+        license_uri=original.license_uri,
+        collected_at=original.collected_at,
+    )
+
+    assert imported == original
+    assert imported.version == original.version
 
 
 def test_dataset_store_saves_loads_verifies_and_is_idempotent(tmp_path: Path) -> None:
