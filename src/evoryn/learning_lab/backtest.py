@@ -604,7 +604,8 @@ def run_backtest(
         raise ValueError("segment_name must not be empty.")
     if dataset.volume_unit != "base_asset":
         raise ValueError(
-            "Backtest fill constraints require base-asset volume; quote-volume datasets are unsupported."
+            "Backtest fill constraints require base-asset volume; "
+            "quote-volume datasets are unsupported."
         )
     if dataset.gap_count and not config.allow_gaps:
         raise ValueError("Dataset contains gaps; allow_gaps must be explicitly enabled in config.")
