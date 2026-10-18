@@ -1,1 +1,9 @@
-"""Exchange-specific adapter namespace; no exchange integration is implemented."""
+"""Exchange adapter plugins shipped with EVORYN."""
+
+from evoryn.adapters.exchanges.nobitex import (
+    NobitexExchangeAdapter,
+    NobitexExchangePlugin,
+    NobitexHTTPTransport,
+)
+
+__all__ = ["NobitexExchangeAdapter", "NobitexExchangePlugin", "NobitexHTTPTransport"]
