@@ -19,7 +19,7 @@ from evoryn.domain.models import (
 )
 from evoryn.paper.failure_injection import FailureInjector, FailureMode
 from evoryn.ports.contracts import MarketDataPort, RiskPort
-from evoryn.risk.models import PortfolioSnapshot, RiskAction
+from evoryn.risk.models import PortfolioSnapshot, RiskAction, RiskResult
 
 
 class PaperOrderStatus(StrEnum):
@@ -85,6 +85,7 @@ class PaperBroker:
         self._average_entry_price = Decimal("0")
         self._realized_pnl = Decimal("0")
         self._orders: dict[str, PaperOrder] = {}
+        self._liquidity_used: dict[tuple[datetime, Side], Decimal] = {}
         self._max_data_age = max_market_data_age_seconds
         self._failures = failure_injector or FailureInjector()
         self._clock = clock or (lambda: datetime.now(UTC))
@@ -163,11 +164,26 @@ class PaperBroker:
                 self._risk_port.emergency_halt("risk_engine_failure")
                 return self._store_rejected(order_id, request, now, "risk_engine_failure")
 
+            if not isinstance(decision, RiskResult):
+                self._risk_port.emergency_halt("invalid_risk_decision")
+                return self._store_rejected(order_id, request, now, "invalid_risk_decision")
             if decision.action in (RiskAction.REJECT, RiskAction.HALT):
                 return self._store_rejected(
                     order_id, request, now, f"{decision.reason_code}: {decision.explanation}"
                 )
-            if decision.approved_quantity is None:
+            if (
+                decision.action not in (RiskAction.ALLOW, RiskAction.REDUCE)
+                or decision.approved_quantity is None
+                or decision.approved_quantity > request.quantity
+                or (
+                    decision.action is RiskAction.ALLOW
+                    and decision.approved_quantity != request.quantity
+                )
+                or (
+                    decision.action is RiskAction.REDUCE
+                    and decision.approved_quantity >= request.quantity
+                )
+            ):
                 self._risk_port.emergency_halt("invalid_risk_decision")
                 return self._store_rejected(order_id, request, now, "invalid_risk_decision")
 
@@ -278,6 +294,11 @@ class PaperBroker:
         if order.request.side is Side.BUY:
             execution_price = prices["ask"]
             available = prices["ask_size"]
+            liquidity_key = (snapshot.observed_at, Side.BUY)
+            available = max(
+                Decimal("0"),
+                available - self._liquidity_used.get(liquidity_key, Decimal("0")),
+            )
             crosses = (
                 order.request.order_type is OrderType.MARKET
                 or (
@@ -288,6 +309,11 @@ class PaperBroker:
         else:
             execution_price = prices["bid"]
             available = prices["bid_size"]
+            liquidity_key = (snapshot.observed_at, Side.SELL)
+            available = max(
+                Decimal("0"),
+                available - self._liquidity_used.get(liquidity_key, Decimal("0")),
+            )
             crosses = (
                 order.request.order_type is OrderType.MARKET
                 or (
@@ -310,6 +336,17 @@ class PaperBroker:
         )
         if not self._apply_fill(order.request.side, fill_quantity, execution_price):
             return order
+        liquidity_key = (snapshot.observed_at, order.request.side)
+        self._liquidity_used[liquidity_key] = (
+            self._liquidity_used.get(liquidity_key, Decimal("0")) + fill_quantity
+        )
+        if len(self._liquidity_used) > 256:
+            active_timestamp = snapshot.observed_at
+            self._liquidity_used = {
+                key: value
+                for key, value in self._liquidity_used.items()
+                if key[0] == active_timestamp
+            }
         total_filled = order.filled_quantity + fill_quantity
         status = (
             PaperOrderStatus.FILLED
