@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import Any
 
 from evoryn.domain.models import Market, MarketCandle
+from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.intelligence.regime import (
     RegimeFeatureExtractor,
     RegimeLabel,
@@ -189,6 +190,35 @@ class GaussianHMMRegimeModel:
     @property
     def training_manifest(self) -> HMMTrainingManifest | None:
         return self._manifest
+
+    def fit_dataset(
+        self,
+        dataset: HistoricalDataset,
+        *,
+        split_name: str,
+        train_start_index: int,
+        train_end_index_exclusive: int,
+    ) -> HMMTrainingManifest:
+        """Fit using an exact versioned dataset slice, reducing the risk of a mismatched hash."""
+        if split_name != "train":
+            raise ValueError(
+                "HMM fitting accepts only split_name='train'; validation/test are holdouts."
+            )
+        if (
+            type(train_start_index) is not int
+            or type(train_end_index_exclusive) is not int
+            or train_start_index < 0
+            or train_end_index_exclusive > len(dataset.candles)
+            or train_end_index_exclusive <= train_start_index
+        ):
+            raise ValueError("Training range is outside the supplied historical dataset.")
+        return self.fit(
+            dataset.candles[train_start_index:train_end_index_exclusive],
+            dataset_version=dataset.version,
+            split_name=split_name,
+            train_start_index=train_start_index,
+            train_end_index_exclusive=train_end_index_exclusive,
+        )
 
     def fit(
         self,
