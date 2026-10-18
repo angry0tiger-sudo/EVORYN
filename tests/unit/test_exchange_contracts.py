@@ -7,7 +7,7 @@ from inspect import signature
 import pytest
 
 from evoryn.domain.models import ExchangeCapabilities
-from evoryn.ports.contracts import ExchangePort, ExchangePlugin, RateLimiterPort
+from evoryn.ports.contracts import ExchangePlugin, ExchangePort, RateLimiterPort
 from evoryn.ports.exchange_errors import (
     ExchangeErrorCode,
     RateLimitExceeded,
