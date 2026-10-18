@@ -1,8 +1,9 @@
 """Deterministic, long/flat OHLCV backtesting with causal signals and explicit costs.
 
 Signals use only completed historical bars. Orders become eligible at the next candle open.
-Fills are constrained by configured participation of that candle's reported base volume.
-Spread and slippage are configurable assumptions because OHLCV alone does not reveal
+Fills are constrained by configured participation of the latest completed candle's
+reported base volume, known before the next-open execution. Spread and slippage are
+configurable assumptions because OHLCV alone does not reveal
 historical bid/ask spread or true order-book depth. Nothing in this module sends orders.
 """
 
@@ -179,6 +180,8 @@ class SimulatedFill:
     requested_quantity: Decimal
     quantity: Decimal
     reference_open: Decimal
+    liquidity_reference_candle_open: datetime
+    liquidity_reference_volume: Decimal
     execution_price: Decimal
     notional: Decimal
     commission: Decimal
@@ -189,6 +192,7 @@ class SimulatedFill:
 
     def __post_init__(self) -> None:
         _require_aware(self.timestamp, "fill timestamp")
+        _require_aware(self.liquidity_reference_candle_open, "liquidity reference timestamp")
         if self.quantity <= 0 or self.quantity > self.requested_quantity:
             raise ValueError("Fill quantity must be positive and no greater than requested.")
         if self.volume_participation < 0 or self.volume_participation > 1:
@@ -321,6 +325,10 @@ class BacktestResult:
                     "requested_quantity": str(fill.requested_quantity),
                     "quantity": str(fill.quantity),
                     "reference_open": str(fill.reference_open),
+                    "liquidity_reference_candle_open": _iso_utc(
+                        fill.liquidity_reference_candle_open
+                    ),
+                    "liquidity_reference_volume": str(fill.liquidity_reference_volume),
                     "execution_price": str(fill.execution_price),
                     "notional": str(fill.notional),
                     "commission": str(fill.commission),
@@ -625,8 +633,13 @@ def run_backtest(
             submitted_orders += 1
 
         if pending is not None:
+            # At the current open, only the previous completed bar's volume is knowable.
+            if not history:
+                raise RuntimeError("Pending order exists without completed history.")
+            liquidity_reference = history[-1]
             available = _floor_to_step(
-                candle.volume * config.max_bar_participation, config.quantity_step
+                liquidity_reference.volume * config.max_bar_participation,
+                config.quantity_step,
             )
             raw_fill = min(pending.remaining_quantity, available)
             if pending.side is Side.BUY:
@@ -656,12 +669,18 @@ def run_backtest(
                     requested_quantity=pending.requested_quantity,
                     quantity=quantity,
                     reference_open=candle.open,
+                    liquidity_reference_candle_open=liquidity_reference.timestamp,
+                    liquidity_reference_volume=liquidity_reference.volume,
                     execution_price=execution_price,
                     notional=notional,
                     commission=fee,
                     estimated_spread_cost=spread_cost,
                     estimated_slippage_cost=slippage_cost,
-                    volume_participation=quantity / candle.volume if candle.volume > 0 else _ZERO,
+                    volume_participation=(
+                        quantity / liquidity_reference.volume
+                        if liquidity_reference.volume > 0
+                        else _ZERO
+                    ),
                     partial=was_partial,
                 )
                 fills.append(fill)
