@@ -86,6 +86,7 @@ class PaperBroker:
         self._average_entry_price = Decimal("0")
         self._realized_pnl = Decimal("0")
         self._orders: dict[str, PaperOrder] = {}
+        self._risk_decisions: dict[str, RiskResult] = {}
         self._liquidity_used: dict[tuple[datetime, Side], Decimal] = {}
         self._max_data_age = max_market_data_age_seconds
         self._failures = failure_injector or FailureInjector()
@@ -177,6 +178,7 @@ class PaperBroker:
             if not isinstance(decision, RiskResult):
                 self._risk_port.emergency_halt("invalid_risk_decision")
                 return self._store_rejected(order_id, request, now, "invalid_risk_decision")
+            self._risk_decisions[request.client_order_id] = decision
             if decision.action in (RiskAction.REJECT, RiskAction.HALT):
                 return self._store_rejected(
                     order_id, request, now, f"{decision.reason_code}: {decision.explanation}"
@@ -276,6 +278,20 @@ class PaperBroker:
         """Return an order by client identifier or deterministic paper order id."""
         with self._lock:
             return self._orders.get(self._resolve_key(order_reference))
+
+    def get_risk_decision(self, order_reference: str) -> RiskResult | None:
+        """Return the exact deterministic risk result used for this paper order."""
+        with self._lock:
+            return self._risk_decisions.get(self._resolve_key(order_reference))
+
+    def list_orders(self) -> tuple[PaperOrder, ...]:
+        """Return an immutable point-in-time view of every paper order."""
+        with self._lock:
+            return tuple(self._orders.values())
+
+    def emergency_halt(self, reason: str) -> None:
+        """Expose the same latched risk stop to execution/reconciliation orchestration."""
+        self._risk_port.emergency_halt(reason)
 
     def resolve_unknown_order(
         self,

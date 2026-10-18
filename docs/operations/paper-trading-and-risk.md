@@ -31,3 +31,40 @@ Buy capacity is constrained by free capital after reservations, per-order notion
 ## Deliberate limitations
 
 This phase models one Spot market per PaperBroker instance. It uses visible top-of-book liquidity only and does not yet model exchange fees, slippage curves, queue priority, multi-market collateral, full portfolio persistence, or live reconciliation. These are not implicitly approximated. This implementation does not enable live order submission; Phases 8 and 9 are not approval for Phase 10 or real capital.
+
+
+## Phase 10: Spot execution orchestration (paper-only)
+
+`SpotExecutionService` connects a correlation-scoped `SpotIntent` to the existing
+`PaperBroker`, captures the exact risk decision used by the broker, records order/fill
+state transitions and paper balances, then compares all paper orders and base/quote
+balances against a separate `MockSpotExchangeAdapter` ledger. The mock adapter performs
+no I/O and is not an exchange connector.
+
+- A repeated correlation ID with a different request is rejected. A repeated identical
+  intent returns the original result rather than creating another order.
+- A client order ID cannot be rebound to a different correlation ID.
+- Unknown order outcomes are never treated as rejected, and reconciliation marks them
+  unresolved even if the mock mirror also says `unknown`.
+- Missing/extra orders, changed order state, divergent fills, or balance differences
+  latch the same RiskEngine Auto-Halt.
+- Decision, execution, balance, sanitized error, and reconciliation entries are append-only in memory.
+  Durable persistence and tamper-evident storage are not implemented by this phase.
+- Call `SpotExecutionService.reconcile_all(correlation_id=...)` from the host's periodic
+  scheduler. This module intentionally creates no background thread and picks no interval.
+- Integration tests use synthetic market data, PaperBroker, and an in-memory mock venue.
+  No live exchange API, credentials, or exchange order write is invoked.
+
+## CI diagnostic access limitation (recorded 2026-10-18)
+
+GitHub Actions runs #165 (Phase 8/9) and #177 (Phase 10) reported `failure`. For
+both runs, job-step retrieval returned no steps, job-log retrieval returned `BlobNotFound`,
+and no diagnostic artifact was reported. The underlying cause could not be established from
+the available evidence. Record this as a **CI diagnostic access limitation in the current
+environment**, not as a confirmed GitHub platform defect and not as proof that the code or
+tests passed.
+
+The Phase 8/9 tests exist in the repository, but their actual pass/fail output was not
+retrievable in this work session. Phase 10 integration tests are authored on the
+`feat/spot-execution-phase10` branch; they must not be described as executed or passed
+unless a run's output is observed. All execution work remains paper-only.
