@@ -64,6 +64,7 @@ def portfolio(
         execution_error=execution_error,
     )
 
+
 def request(quantity: str = "0.1") -> OrderRequest:
     """Create a validated Spot market buy request."""
     return OrderRequest(
