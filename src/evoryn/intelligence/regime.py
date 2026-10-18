@@ -6,6 +6,7 @@ Callers must pass completed candles only; all outputs are advisory metadata.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -505,8 +506,6 @@ def _label_tie_break_order(label: RegimeLabel) -> int:
 
 
 def _sha256_text(value: str) -> str:
-    import hashlib
-
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
