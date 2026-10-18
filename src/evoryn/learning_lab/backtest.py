@@ -475,9 +475,11 @@ def make_walk_forward_folds(
         ("validation_bars", validation_bars),
         ("test_bars", test_bars),
     ):
-        if value <= 0:
+        if type(value) is not int or value <= 0:
             raise ValueError(f"{name} must be a positive integer.")
     step = test_bars if step_bars is None else step_bars
+    if type(step) is not int or step <= 0:
+        raise ValueError("step_bars must be a positive integer.")
     if step < test_bars:
         raise ValueError(
             "step_bars must be >= test_bars so out-of-sample test windows do not overlap."
@@ -591,6 +593,8 @@ def run_backtest(
         target = strategy.target_exposure(history)
         if not isinstance(target, Decimal) or not target.is_finite() or target not in (_ZERO, _ONE):
             raise ValueError("Baseline strategy must return Decimal('0') or Decimal('1').")
+        if not history and target != _ZERO:
+            raise ValueError("A strategy must remain flat until at least one candle has closed.")
 
         if target != prior_target and history:
             last_known = history[-1]
