@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+
 from evoryn.domain.models import MarketCandle
 from evoryn.strategies.contracts import CausalTargetStrategy
 
