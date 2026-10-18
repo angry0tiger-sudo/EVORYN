@@ -115,7 +115,10 @@ class NobitexExchangeAdapter:
     transport: NobitexTransportPort
     token: str | None = None
     rate_limiter: RateLimiterPort = field(default_factory=SlidingWindowRateLimiter)
-    clock: Callable[[], datetime] = field(default_factory=lambda: lambda: datetime.now(UTC), repr=False)
+    clock: Callable[[], datetime] = field(
+        default_factory=lambda: lambda: datetime.now(UTC),
+        repr=False,
+    )
 
     def get_capabilities(self) -> ExchangeCapabilities:
         """Declare currently implemented capabilities; no order-writing is available."""
@@ -470,7 +473,9 @@ class NobitexExchangeAdapter:
         if isinstance(response_market, str):
             normalized_remote = response_market.upper().replace("/", "").replace("-", "")
             if normalized_remote != self._api_symbol(market):
-                raise MalformedExchangeResponse("Nobitex order market mismatches the requested market.")
+                raise MalformedExchangeResponse(
+                    "Nobitex order market mismatches the requested market."
+                )
         side_raw = _required_text(order_raw.get("type"), field_name="order.type").lower()
         try:
             side = Side(side_raw)
