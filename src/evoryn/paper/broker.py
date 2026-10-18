@@ -292,7 +292,9 @@ class PaperBroker:
         """
         with self._lock:
             if operator_acknowledged is not True:
-                raise PermissionError("Resolving an unknown order requires operator acknowledgement.")
+                raise PermissionError(
+                    "Resolving an unknown order requires operator acknowledgement."
+                )
             if confirmed_status is PaperOrderStatus.UNKNOWN:
                 raise ValueError("Reconciliation must resolve unknown to a known state.")
             key = self._resolve_key(order_reference)
