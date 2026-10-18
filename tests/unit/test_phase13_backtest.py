@@ -219,6 +219,25 @@ def test_canonical_csv_ingestion_requires_and_preserves_explicit_provenance(
     assert imported.version == original.version
 
 
+def test_dataset_rejects_candles_not_closed_by_collection_time() -> None:
+    source = dataset(count=3)
+
+    with pytest.raises(ValueError, match="partial candles"):
+        HistoricalDataset(
+            dataset_id=source.dataset_id,
+            market=source.market,
+            interval=source.interval,
+            source_name=source.source_name,
+            source_uri=source.source_uri,
+            source_revision=source.source_revision,
+            license_id=source.license_id,
+            license_uri=source.license_uri,
+            collected_at=source.candles[-1].timestamp,
+            candles=source.candles,
+            allow_gaps=source.allow_gaps,
+        )
+
+
 def test_dataset_store_saves_loads_verifies_and_is_idempotent(tmp_path: Path) -> None:
     source = dataset()
     store = HistoricalDatasetStore(tmp_path)
@@ -245,7 +264,7 @@ def test_dataset_store_refuses_tampered_candle_bytes(tmp_path: Path) -> None:
         store.load(reference.dataset_id, reference.version)
 
 
-def test_dataset_store_rejects_unsafe_ids_and_non_digest_versions(tmp_path) -> None:
+def test_dataset_store_rejects_unsafe_ids_and_non_digest_versions(tmp_path: Path) -> None:
     store = HistoricalDatasetStore(tmp_path)
     with pytest.raises(ValueError, match="simple identifier"):
         store.load("../escape", "0" * 64)
