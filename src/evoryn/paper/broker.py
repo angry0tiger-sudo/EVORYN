@@ -46,6 +46,7 @@ class PaperOrder:
     created_at: datetime
     updated_at: datetime
     reason: str | None = None
+    last_confirmed_status: PaperOrderStatus | None = None
 
     @property
     def remaining_quantity(self) -> Decimal:
@@ -220,6 +221,7 @@ class PaperBroker:
                             status=PaperOrderStatus.UNKNOWN,
                             updated_at=self._now(),
                             reason=f"injected_{injected.value}; recovery required",
+                            last_confirmed_status=order.status,
                         )
                 return tuple(self._orders.values())
             if injected is FailureMode.INVALID_DATA:
@@ -259,6 +261,62 @@ class PaperBroker:
         """Return an order by client identifier or deterministic paper order id."""
         with self._lock:
             return self._orders.get(self._resolve_key(order_reference))
+
+    def resolve_unknown_order(
+        self,
+        order_reference: str,
+        *,
+        confirmed_status: PaperOrderStatus,
+        operator_acknowledged: bool,
+    ) -> PaperOrder:
+        """Reconcile an unknown paper order only after explicit operator confirmation.
+
+        The confirmed state must agree with fills already recorded in the local ledger.
+        This method never invents fills; an outcome requiring additional fill records
+        remains unresolved and cannot be cleared through this shortcut.
+        """
+        with self._lock:
+            if not operator_acknowledged:
+                raise PermissionError("Resolving an unknown order requires operator acknowledgement.")
+            if confirmed_status is PaperOrderStatus.UNKNOWN:
+                raise ValueError("Reconciliation must resolve unknown to a known state.")
+            key = self._resolve_key(order_reference)
+            order = self._orders.get(key)
+            if order is None:
+                raise KeyError("Paper order was not found.")
+            if order.status is not PaperOrderStatus.UNKNOWN:
+                raise ValueError("Only an unknown paper order can be reconciled.")
+
+            filled = order.filled_quantity
+            quantity = order.request.quantity
+            if confirmed_status is PaperOrderStatus.OPEN and filled != 0:
+                raise ValueError("An open order cannot have already recorded fills.")
+            if confirmed_status is PaperOrderStatus.PARTIAL and not (
+                Decimal("0") < filled < quantity
+            ):
+                raise ValueError("A partial order requires a positive incomplete fill quantity.")
+            if confirmed_status is PaperOrderStatus.FILLED and filled != quantity:
+                raise ValueError("A filled order requires complete fill records in the ledger.")
+            if confirmed_status is PaperOrderStatus.REJECTED and filled != 0:
+                raise ValueError("A rejected order cannot have recorded fills.")
+            if confirmed_status not in (
+                PaperOrderStatus.OPEN,
+                PaperOrderStatus.PARTIAL,
+                PaperOrderStatus.FILLED,
+                PaperOrderStatus.CANCELED,
+                PaperOrderStatus.REJECTED,
+            ):
+                raise ValueError("Unsupported reconciled order status.")
+
+            resolved = replace(
+                order,
+                status=confirmed_status,
+                updated_at=self._now(),
+                reason=f"operator_reconciled_as_{confirmed_status.value}",
+                last_confirmed_status=None,
+            )
+            self._orders[key] = resolved
+            return resolved
 
     @property
     def cash(self) -> Decimal:
