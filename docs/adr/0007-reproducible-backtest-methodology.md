@@ -46,8 +46,10 @@ store or evaluate its content.
 9. Persist full run reports immutably by a deterministic run ID covering the dataset version,
    strategy ID/parameters, simulator assumptions, evaluation range, and warm-up range.
 10. No historical data is fetched in this phase. Dataset creation requires the caller to supply
-    explicit source/license provenance; synthetic unit fixtures are not reported as market
-    performance. No Freqtrade, CCXT, pandas, NumPy or other new runtime dependency is added.
+    explicit source/license provenance; a strict canonical-CSV import helper is the input boundary.
+    Every report includes dataset provenance and a checksum sidecar, while noting that a checksum
+    is not a digital signature. Synthetic unit fixtures are not reported as market performance.
+    No Freqtrade, CCXT, pandas, NumPy or other new runtime dependency is added.
 
 ## Definitions
 
