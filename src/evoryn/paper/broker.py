@@ -404,7 +404,7 @@ class PaperBroker:
         exposure = self._position_quantity * mid + reserved_buy
         unrealized = self._position_quantity * (mid - self._average_entry_price)
         return PortfolioSnapshot(
-            free_capital=self._cash,
+            free_capital=max(Decimal("0"), self._cash - reserved_buy),
             total_exposure=exposure,
             market_exposure=exposure,
             position_quantity=self._position_quantity,
