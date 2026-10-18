@@ -19,7 +19,8 @@ Relevant documented endpoints and semantics:
 
 - GET /margin/markets/list reports srcCurrency, dstCurrency, positionFeeRate,
   maxLeverage, buyEnabled, and sellEnabled. The maximum leverage depends on market depth
-  and account level; position renewal fees are tiered by delegated-asset value.
+  and account level; position renewal fees are tiered by delegated-asset value. The
+  official document describes Margin BUY as beta, and some markets report buyEnabled=false.
 - GET /margin/v2/delegation-limit reports remaining limits by side and leverage.
   A BUY limit is denominated in destination/quote currency (price × amount); a SELL
   limit is denominated in source/base currency (amount). A missing unique limit is not
