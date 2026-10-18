@@ -375,33 +375,111 @@ class BacktestResult:
 
 
 class BacktestResultStore:
-    """Immutable run-report store; repeated identical run IDs are idempotent."""
+    """Immutable run-report store with a checksum sidecar and identity verification."""
 
     def __init__(self, root: str | Path) -> None:
         self._root = Path(root).expanduser().resolve()
 
     def save(self, result: BacktestResult) -> Path:
         report_bytes = result.to_json_bytes()
+        report_hash = hashlib.sha256(report_bytes).hexdigest()
         destination = self._root / f"{result.run_id}.json"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.exists():
-            if destination.read_bytes() != report_bytes:
-                raise ValueError("Existing run ID has different report bytes; refusing overwrite.")
-            return destination
-        fd, staged_name = tempfile.mkstemp(prefix=".run-", suffix=".tmp", dir=destination.parent)
-        staged = Path(staged_name)
+        checksum_path = self._root / f"{result.run_id}.json.sha256"
+        self._root.mkdir(parents=True, exist_ok=True)
+
+        if destination.exists() or checksum_path.exists():
+            return self._verify_existing(destination, checksum_path, report_bytes, report_hash)
+
+        report_fd, report_tmp_name = tempfile.mkstemp(
+            prefix=".run-", suffix=".json.tmp", dir=self._root
+        )
+        checksum_fd, checksum_tmp_name = tempfile.mkstemp(
+            prefix=".run-", suffix=".sha256.tmp", dir=self._root
+        )
+        report_tmp = Path(report_tmp_name)
+        checksum_tmp = Path(checksum_tmp_name)
         try:
-            with os.fdopen(fd, "wb") as file_handle:
-                file_handle.write(report_bytes)
+            with os.fdopen(report_fd, "wb") as report_file:
+                report_file.write(report_bytes)
+            with os.fdopen(checksum_fd, "w", encoding="ascii", newline="") as checksum_file:
+                checksum_file.write(f"{report_hash}\n")
             try:
-                os.rename(staged, destination)
+                os.link(report_tmp, destination)
+            except FileExistsError:
+                return self._verify_existing(
+                    destination, checksum_path, report_bytes, report_hash
+                )
+            try:
+                os.link(checksum_tmp, checksum_path)
             except OSError:
-                if destination.exists() and destination.read_bytes() == report_bytes:
-                    return destination
+                # A report without its checksum is incomplete and will not be returned as saved.
+                if destination.exists() and not checksum_path.exists():
+                    destination.unlink()
                 raise
         finally:
-            if staged.exists():
-                staged.unlink()
+            if report_tmp.exists():
+                report_tmp.unlink()
+            if checksum_tmp.exists():
+                checksum_tmp.unlink()
+        self.load(result.run_id)
+        return destination
+
+    def load(self, run_id: str) -> dict[str, Any]:
+        """Read a canonical report only when its checksum and input-derived run ID verify."""
+        if not _is_sha256(run_id):
+            raise ValueError("run_id must be a lowercase SHA-256 digest.")
+        report_path = self._root / f"{run_id}.json"
+        checksum_path = self._root / f"{run_id}.json.sha256"
+        try:
+            report_bytes = report_path.read_bytes()
+            checksum_text = checksum_path.read_text(encoding="ascii")
+        except OSError as exc:
+            raise ValueError("Backtest report or checksum sidecar is missing.") from exc
+        actual_hash = hashlib.sha256(report_bytes).hexdigest()
+        if checksum_text != f"{actual_hash}\n":
+            raise ValueError("Backtest report checksum does not match stored bytes.")
+        try:
+            report = json.loads(report_bytes)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError("Backtest report is not valid JSON.") from exc
+        if not isinstance(report, dict) or report.get("run_id") != run_id:
+            raise ValueError("Backtest report identity does not match the requested run ID.")
+        if _canonical_json_bytes(report) != report_bytes:
+            raise ValueError("Backtest report is not in canonical JSON form.")
+        try:
+            strategy = report["strategy"]
+            run_material = {
+                "engine_version": report["engine_version"],
+                "dataset_version": report["dataset_version"],
+                "strategy_id": strategy["id"],
+                "strategy_version": strategy["version"],
+                "strategy_parameters": strategy["parameters"],
+                "config": report["config"],
+                "segment_name": report["segment_name"],
+                "evaluation_range": report["evaluation_range"],
+                "warmup_start_index": report["warmup_start_index"],
+            }
+        except (KeyError, TypeError) as exc:
+            raise ValueError("Backtest report omits run-identity fields.") from exc
+        expected_run_id = hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
+        if expected_run_id != run_id:
+            raise ValueError("Run ID does not match the report's input identity.")
+        return report
+
+    @staticmethod
+    def _verify_existing(
+        destination: Path,
+        checksum_path: Path,
+        report_bytes: bytes,
+        report_hash: str,
+    ) -> Path:
+        try:
+            existing_report = destination.read_bytes()
+            existing_checksum = checksum_path.read_text(encoding="ascii")
+        except OSError as exc:
+            raise ValueError("Existing report package is incomplete; refusing overwrite.") from exc
+        if existing_report != report_bytes or existing_checksum != f"{report_hash}\n":
+            raise ValueError("Existing run ID has conflicting report/checksum bytes.")
         return destination
 
 
@@ -999,6 +1077,10 @@ def _build_metrics(
         open_position_quantity=open_position_quantity,
     )
 
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 def _metrics_dict(metrics: BacktestMetrics) -> dict[str, Any]:
     return {
