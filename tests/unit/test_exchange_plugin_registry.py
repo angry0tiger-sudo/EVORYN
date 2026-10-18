@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from evoryn.adapters.exchanges.nobitex import NobitexExchangePlugin
-from evoryn.domain.models import ExchangeCapabilities
 from evoryn.infrastructure.exchange.registry import ExchangePluginRegistry
 from evoryn.ports.contracts import ExchangePort
 
