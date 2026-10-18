@@ -28,6 +28,8 @@ class FailureInjector:
         normalized = operation.strip()
         if not normalized:
             raise ValueError("Failure-injection operation must not be empty.")
+        if not isinstance(mode, FailureMode):
+            raise ValueError("Failure injection mode must be a supported FailureMode.")
         with self._lock:
             self._faults[normalized].append(mode)
 
