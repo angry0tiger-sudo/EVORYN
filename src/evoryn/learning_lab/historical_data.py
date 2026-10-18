@@ -96,7 +96,10 @@ class HistoricalDataset:
         object.__setattr__(
             self,
             "candles",
-            tuple(replace(candle, timestamp=candle.timestamp.astimezone(UTC)) for candle in self.candles),
+            tuple(
+                replace(candle, timestamp=candle.timestamp.astimezone(UTC))
+                for candle in self.candles
+            ),
         )
 
     @property
@@ -242,10 +245,15 @@ class HistoricalDatasetStore:
             manifest = json.loads(manifest_bytes)
         except (OSError, json.JSONDecodeError) as exc:
             raise DatasetIntegrityError("Dataset manifest or candle file cannot be read.") from exc
-        if not isinstance(manifest, dict) or manifest.get("schema_version") != DATASET_SCHEMA_VERSION:
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema_version") != DATASET_SCHEMA_VERSION
+        ):
             raise DatasetIntegrityError("Unsupported or invalid dataset manifest schema.")
         if manifest.get("dataset_version") != version:
-            raise DatasetIntegrityError("Dataset manifest version does not match requested version.")
+            raise DatasetIntegrityError(
+                "Dataset manifest version does not match requested version."
+            )
         if manifest.get("candles_sha256") != hashlib.sha256(candle_bytes).hexdigest():
             raise DatasetIntegrityError("Candle bytes do not match the recorded SHA-256 digest.")
         metadata = manifest.get("metadata")
@@ -278,7 +286,9 @@ class HistoricalDatasetStore:
             existing_candles = (destination / "candles.csv").read_bytes()
             existing_manifest = (destination / "manifest.json").read_bytes()
         except OSError as exc:
-            raise DatasetIntegrityError("Existing version is incomplete; refusing overwrite.") from exc
+            raise DatasetIntegrityError(
+                "Existing version is incomplete; refusing overwrite."
+            ) from exc
         if existing_candles != candle_bytes or existing_manifest != manifest_bytes:
             raise DatasetIntegrityError("Existing content-addressed version has conflicting bytes.")
         return self._reference(destination, dataset, candle_hash, manifest_bytes)
@@ -320,19 +330,26 @@ def _dataset_from_bytes(metadata: dict[str, Any], candle_bytes: bytes) -> Histor
             raise ValueError("Unexpected candle columns")
         candles: list[MarketCandle] = []
         for row in reader:
-            if None in row or any(value is None for value in row.values()):
+            if None in row:
                 raise ValueError("Malformed candle row")
+            timestamp = _required_string(row.get("timestamp"), "timestamp")
+            open_value = _required_string(row.get("open"), "open")
+            high_value = _required_string(row.get("high"), "high")
+            low_value = _required_string(row.get("low"), "low")
+            close_value = _required_string(row.get("close"), "close")
+            volume_value = _required_string(row.get("volume"), "volume")
+            source = _required_string(row.get("source"), "source")
             candles.append(
                 MarketCandle(
                     market=market,
-                    timestamp=_parse_datetime(row["timestamp"]),
+                    timestamp=_parse_datetime(timestamp),
                     interval=timedelta(microseconds=interval_us),
-                    open=_parse_decimal(row["open"]),
-                    high=_parse_decimal(row["high"]),
-                    low=_parse_decimal(row["low"]),
-                    close=_parse_decimal(row["close"]),
-                    volume=_parse_decimal(row["volume"]),
-                    source=_required_string(row, "source"),
+                    open=_parse_decimal(open_value),
+                    high=_parse_decimal(high_value),
+                    low=_parse_decimal(low_value),
+                    close=_parse_decimal(close_value),
+                    volume=_parse_decimal(volume_value),
+                    source=source,
                 )
             )
         dataset = HistoricalDataset(
