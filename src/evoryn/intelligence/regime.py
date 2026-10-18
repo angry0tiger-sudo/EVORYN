@@ -82,7 +82,12 @@ class RegimeFeatureVector:
 
     def as_float_tuple(self) -> tuple[float, float, float, float]:
         """Convert only at the numerical-model boundary; domain/accounting stays Decimal."""
-        return tuple(float(value) for value in self.as_decimal_tuple())  # type: ignore[return-value]
+        return (
+            float(self.mean_return),
+            float(self.trend_strength),
+            float(self.realized_volatility),
+            float(self.volume_ratio),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +217,9 @@ class RegimePrediction:
     model_id: str
     model_version: str
     feature_schema_version: str
+    model_fingerprint: str
+    min_confidence_threshold: Decimal
+    max_data_age_intervals: int
     abstained: bool
     reason_code: str
 
@@ -233,6 +241,16 @@ class RegimePrediction:
             raise ValueError("Model identity and version are required.")
         if not self.feature_schema_version.strip() or not self.reason_code.strip():
             raise ValueError("Feature schema version and reason code are required.")
+        if not self.model_fingerprint.strip():
+            raise ValueError("Model fingerprint or an explicit unfit sentinel is required.")
+        if (
+            not self.min_confidence_threshold.is_finite()
+            or self.min_confidence_threshold <= 0
+            or self.min_confidence_threshold > 1
+        ):
+            raise ValueError("Recorded min_confidence_threshold must be in (0, 1].")
+        if type(self.max_data_age_intervals) is not int or self.max_data_age_intervals <= 0:
+            raise ValueError("Recorded max_data_age_intervals must be positive.")
         if self.probabilities:
             labels = tuple(label for label, _ in self.probabilities)
             if set(labels) != {
@@ -259,6 +277,7 @@ class RegimeProbabilityModel(Protocol):
 
     model_id: str
     model_version: str
+    model_fingerprint: str
 
     @property
     def is_ready(self) -> bool:
@@ -277,6 +296,13 @@ class RuleBasedRegimeBaseline:
 
     model_id = "evoryn.rule-regime-baseline"
     model_version = "1.0.0"
+
+    @property
+    def model_fingerprint(self) -> str:
+        return _sha256_text(
+            f"{self.model_id}|{self.model_version}|{self._features.lookback}|"
+            f"{self._trend_threshold}|{self._high_volatility_threshold}"
+        )
 
     def __init__(
         self,
@@ -384,6 +410,9 @@ class AbstainingRegimeDetector:
                 model_id=self._model.model_id,
                 model_version=self._model.model_version,
                 feature_schema_version=self._features.feature_schema_version,
+                model_fingerprint=self._model.model_fingerprint,
+                min_confidence_threshold=self._thresholds.min_confidence,
+                max_data_age_intervals=self._thresholds.max_data_age_intervals,
                 abstained=True,
                 reason_code="LOW_CONFIDENCE",
             )
@@ -395,6 +424,9 @@ class AbstainingRegimeDetector:
             model_id=self._model.model_id,
             model_version=self._model.model_version,
             feature_schema_version=self._features.feature_schema_version,
+            model_fingerprint=self._model.model_fingerprint,
+            min_confidence_threshold=self._thresholds.min_confidence,
+            max_data_age_intervals=self._thresholds.max_data_age_intervals,
             abstained=False,
             reason_code="CLASSIFIED",
         )
@@ -408,6 +440,9 @@ class AbstainingRegimeDetector:
             model_id=self._model.model_id,
             model_version=self._model.model_version,
             feature_schema_version=self._features.feature_schema_version,
+            model_fingerprint=self._model.model_fingerprint,
+            min_confidence_threshold=self._thresholds.min_confidence,
+            max_data_age_intervals=self._thresholds.max_data_age_intervals,
             abstained=True,
             reason_code=reason,
         )
@@ -467,6 +502,12 @@ def _label_tie_break_order(label: RegimeLabel) -> int:
         RegimeLabel.HIGH_VOLATILITY: 3,
     }
     return -order[label]
+
+
+def _sha256_text(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _require_aware(value: datetime, name: str) -> None:
