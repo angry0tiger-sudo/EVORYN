@@ -5,24 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Protocol
-
 from evoryn.domain.models import MarketCandle
+from evoryn.strategies.contracts import CausalTargetStrategy
 
 
-class BaselineStrategy(Protocol):
-    """Pure policy contract: history ends at the last completed bar, never the fill bar."""
-
-    strategy_id: str
-    strategy_version: str
-
-    def parameters(self) -> dict[str, str]:
-        """Return the exact parameters that must be recorded with every experiment."""
-        ...
-
-    def target_exposure(self, history: Sequence[MarketCandle]) -> Decimal:
-        """Return target exposure in [0, 1] using only candles supplied by the caller."""
-        ...
+BaselineStrategy = CausalTargetStrategy
 
 
 @dataclass(frozen=True, slots=True)
