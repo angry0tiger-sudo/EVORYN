@@ -17,9 +17,11 @@
    `scikit-learn>=1.5,<2`. The trained model manifest records exact Python, hmmlearn, NumPy,
    SciPy and scikit-learn versions, dataset digest, feature version, train range, random seed,
    fitted state mapping, state counts and model-parameter fingerprint.
-4. HMM fitting accepts an explicit `split_name="train"`, dataset version and half-open train
-   index range. Validation/test are rejected by the fitting API. Features are scaled using only
-   train features, and the same stored mean/scale are used for inference.
+4. HMM fitting accepts a Phase 13 `TemporalPartitions` object and an exact
+   `HistoricalDataset` version. The fitted range must be a subrange of that partition's train
+   interval, and both the dataset digest and candle count must match. Validation/test slices are
+   rejected by the public fitting API. Features are scaled using only train features, and the
+   same stored mean/scale are used for inference.
 5. For inference, the caller supplies a chronological prefix that starts at the fitted training
    range's first candle and ends at the latest completed candle. The adapter passes only that
    prefix to `predict_proba`; no later bar is available to smooth the latest posterior.
