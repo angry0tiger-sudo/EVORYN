@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import entry_points
 from re import fullmatch
 from typing import cast
 
-from evoryn.domain.models import ExchangeCapabilities
 from evoryn.ports.contracts import ExchangePlugin, ExchangePort
 
 
@@ -36,10 +35,8 @@ class ExchangePluginRegistry:
         """
         discovered: list[str] = []
         for entry_point in entry_points(group="evoryn.exchanges"):
-            factory = cast(object, entry_point.load())
-            if not callable(factory):
-                raise TypeError(f"Exchange entry point '{entry_point.name}' is not callable.")
-            plugin = cast(ExchangePlugin, factory())
+            factory = cast(Callable[[], ExchangePlugin], entry_point.load())
+            plugin = factory()
             self.register(plugin)
             discovered.append(plugin.name.strip().lower())
         return tuple(discovered)
