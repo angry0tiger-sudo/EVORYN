@@ -1,4 +1,4 @@
-"\u0022\u0022\u0022Bounded HTTPS-only JSON transport for explicitly allowlisted provider API hosts.\u0022\u0022\u0022
+"""Bounded HTTPS-only JSON transport for explicitly allowlisted provider API hosts."""
 
 from __future__ import annotations
 
@@ -150,9 +150,9 @@ class HttpsJsonTransport:
         request_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, ""))
         request_headers = {"Accept": "application/json", "User-Agent": "EVORYN/0.1"}
         for name, value in headers.items():
-            if not name.strip() or "\\r" in name or "\\n" in name:
+            if not name.strip() or "\r" in name or "\n" in name:
                 raise JsonApiError("Invalid HTTP header name.", kind="policy")
-            if "\\r" in value or "\\n" in value:
+            if "\r" in value or "\n" in value:
                 raise JsonApiError("Invalid HTTP header value.", kind="policy")
             if name.casefold() in {
                 "host",
