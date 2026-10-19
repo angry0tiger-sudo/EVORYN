@@ -39,7 +39,7 @@ class NewsQualityPolicy:
 
     max_article_age: timedelta = timedelta(hours=24)
     max_future_skew: timedelta = timedelta(0)
-    minimum_source_trust: float = 0.6
+    minimum_source_trust: Decimal = Decimal("0.6")
     minimum_title_chars: int = 12
     maximum_title_chars: int = 500
     maximum_summary_chars: int = 10_000
@@ -51,8 +51,12 @@ class NewsQualityPolicy:
             raise ValueError("max_article_age must be positive.")
         if not isinstance(self.max_future_skew, timedelta) or self.max_future_skew < timedelta(0):
             raise ValueError("max_future_skew must be non-negative.")
-        if not 0 <= self.minimum_source_trust <= 1:
-            raise ValueError("minimum_source_trust must be in [0, 1].")
+        if (
+            not isinstance(self.minimum_source_trust, Decimal)
+            or not self.minimum_source_trust.is_finite()
+            or not Decimal("0") <= self.minimum_source_trust <= Decimal("1")
+        ):
+            raise ValueError("minimum_source_trust must be a finite Decimal in [0, 1].")
         for name in (
             "minimum_title_chars",
             "maximum_title_chars",
