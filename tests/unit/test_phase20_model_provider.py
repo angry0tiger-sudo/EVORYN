@@ -201,6 +201,12 @@ def test_core_returns_typed_advisory_and_only_sanitized_audit() -> None:
         ModelAuditEventType.RESPONSE_VALIDATED,
     ]
     assert all(not hasattr(event, "input_payload") for event in sink.events)
+    assert sink.events[-1].model_revision == provider.identity.revision
+    assert sink.events[-1].policy_id == "intelligence-core-policy"
+    assert sink.events[-1].policy_version == "1.0.0"
+    assert sink.events[-1].task is ModelTask.LLM_ADVISORY
+    assert sink.events[-1].input_schema_id == INPUT_SCHEMA.schema_id
+    assert sink.events[-1].output_schema_id == OUTPUT_SCHEMA.schema_id
     assert "Synthetic public research input." not in repr(sink.events)
 
 
@@ -833,6 +839,8 @@ def test_remote_llm_requires_explicit_policy_and_can_return_only_advisory_output
     assert audit.events[-1].event_type is ModelAuditEventType.RESPONSE_VALIDATED
     assert audit.events[-1].input_tokens == 15
     assert audit.events[-1].output_tokens == 9
+    assert audit.events[-1].estimated_cost_usd == Decimal("0.002")
+    assert audit.events[-1].model_revision == model_identity.revision
     assert "fake-secret-token" not in repr(audit.events)
 
 
