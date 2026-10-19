@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest

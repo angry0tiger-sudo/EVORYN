@@ -17,7 +17,6 @@ from evoryn.intelligence.trained_regime import (
 )
 from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
 
-
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 INTERVAL = timedelta(hours=1)
 START = datetime(2025, 1, 1, tzinfo=UTC)

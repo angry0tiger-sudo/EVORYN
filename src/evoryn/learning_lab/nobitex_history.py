@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, IO, cast
+from typing import IO, Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import (
