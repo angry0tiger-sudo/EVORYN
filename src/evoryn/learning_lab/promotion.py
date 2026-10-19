@@ -1123,7 +1123,10 @@ class ReleasePipelineGate:
             candidate = self._candidates[candidate_id]
         except KeyError as exc:
             raise KeyError("Unknown release candidate ID.") from exc
-        if current_risk_policy_sha256 != self._approved_risk_policy_sha256:
+        if (
+            current_risk_policy_sha256 != self._approved_risk_policy_sha256
+            or candidate.risk_policy_sha256 != self._approved_risk_policy_sha256
+        ):
             self._record_rejection(
                 candidate.experiment_id,
                 correlation_id=correlation_id,
@@ -1131,7 +1134,9 @@ class ReleasePipelineGate:
                 reason_code="RISK_POLICY_CHANGED_ON_APPROVAL",
                 payload={
                     "candidate_id": candidate_id,
+                    "candidate_risk_policy_sha256": candidate.risk_policy_sha256,
                     "current_risk_policy_sha256": current_risk_policy_sha256,
+                    "approved_risk_policy_sha256": self._approved_risk_policy_sha256,
                 },
             )
             raise PermissionError("Risk policy changed after release candidate creation.")
