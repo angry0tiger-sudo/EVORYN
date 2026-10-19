@@ -47,8 +47,9 @@
    selector only on the held-out test range and compares it with one fixed strategy over the exact
    same range, cost assumptions and data. The model/registry identity may not change mid-run.
 11. Report adaptive/fixed return, PnL, drawdown, expectancy where defined, selection events,
-    model manifest, registry fingerprint and the exact test range. Results are diagnostics, not a
-    license to retune on the test split or to claim future profitability.
+    model manifest, selector/registry/routing versions and the exact test range. Persist the combined
+    report immutably with a checksum and recomputed input-derived report ID. Results are diagnostics,
+    not a license to retune on the test split or to claim future profitability.
 
 ## Hysteresis state machine
 
