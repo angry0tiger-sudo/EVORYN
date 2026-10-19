@@ -14,7 +14,6 @@ from evoryn.execution.spot import ExecutionLedger
 from evoryn.intelligence.regime import RegimeLabel, RegimePrediction
 from evoryn.learning_lab.backtest import (
     BacktestConfig,
-    TemporalPartitions,
     chronological_split,
 )
 from evoryn.learning_lab.historical_data import HistoricalDataset
@@ -75,9 +74,12 @@ def prediction(
             RegimeLabel.RANGE_BOUND: Decimal("0.04"),
             RegimeLabel.HIGH_VOLATILITY: Decimal("0.90"),
         }
+    effective_confidence = (
+        "0" if abstained or label is RegimeLabel.UNKNOWN else confidence
+    )
     return RegimePrediction(
         label=label,
-        confidence=Decimal(confidence),
+        confidence=Decimal(effective_confidence),
         confidence_semantics=confidence_semantics,
         probabilities=tuple(probs.items()) if not abstained else (),
         as_of=timestamp,
