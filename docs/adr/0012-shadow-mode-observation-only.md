@@ -35,7 +35,7 @@ A Shadow observer is useful only if a bad feed, stale candle, model identity cha
 ### 3. Decision snapshot and comparison
 
 Every processed completed candle creates an immutable `ShadowDecisionSnapshot` containing:
-- `mode=SHADOW`, event/correlation IDs, UTC observation/receipt/record times, market, source, source version, and candle interval;
+- `mode=SHADOW`, run/event/correlation IDs, UTC observation/receipt/record times, market, source, source version, candle interval, immutable experiment evaluation fingerprint, separate projection-policy fingerprint and feed-manifest fingerprint;
 - registered candidate experiment and model identity, strategy identity/fingerprint, regime label/confidence/as-of and regime-model identity;
 - active Paper Champion experiment and model identity, strategy identity/fingerprint, baseline target exposure/quantity/delta;
 - candidate target exposure/quantity/delta and estimated notional delta;
