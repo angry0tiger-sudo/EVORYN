@@ -59,6 +59,19 @@ class PaperOrder:
         return max(Decimal("0"), self.request.quantity - self.filled_quantity)
 
 
+@dataclass(frozen=True, slots=True)
+class PaperBrokerState:
+    """Validated point-in-time broker state for deterministic offline restart recovery."""
+
+    market: Market
+    initial_capital: Decimal
+    cash: Decimal
+    position_quantity: Decimal
+    average_entry_price: Decimal
+    realized_pnl: Decimal
+    orders: tuple[PaperOrder, ...]
+
+
 class PaperBroker:
     """Risk-gated paper simulator for one configured Spot market.
 
@@ -86,6 +99,7 @@ class PaperBroker:
         self._market = market
         self._market_data = market_data
         self._risk_port = risk_port
+        self._initial_capital = initial_capital
         self._cash = initial_capital
         self._position_quantity = Decimal("0")
         self._average_entry_price = Decimal("0")
@@ -373,6 +387,93 @@ class PaperBroker:
         """Realized profit/loss from closed portions of simulated long positions."""
         with self._lock:
             return self._realized_pnl
+
+    @property
+    def average_entry_price(self) -> Decimal:
+        """Current weighted average entry price for the Paper long position."""
+        with self._lock:
+            return self._average_entry_price
+
+    def portfolio_snapshot(self, snapshot: MarketSnapshot) -> PortfolioSnapshot:
+        """Return a checked account/exposure view using current marks and order reservations."""
+        with self._lock:
+            fault = self._snapshot_fault(snapshot, self._now())
+            if fault is not None:
+                raise ValueError(f"Paper portfolio snapshot rejected: {fault}")
+            return self._portfolio_snapshot(snapshot)
+
+    def export_state(self) -> PaperBrokerState:
+        """Export immutable broker state for a durable Paper runtime checkpoint."""
+        with self._lock:
+            return PaperBrokerState(
+                market=self._market,
+                initial_capital=self._initial_capital,
+                cash=self._cash,
+                position_quantity=self._position_quantity,
+                average_entry_price=self._average_entry_price,
+                realized_pnl=self._realized_pnl,
+                orders=tuple(self._orders.values()),
+            )
+
+    def restore_state(self, state: PaperBrokerState) -> None:
+        """Restore only a fresh broker from a committed Paper ledger snapshot.
+
+        This is not an exchange reconciliation mechanism. The runtime rebuilds the
+        mock venue independently and reconciles both ledgers before processing.
+        """
+        if not isinstance(state, PaperBrokerState) or state.market != self._market:
+            raise ValueError("Paper restore state has an invalid market identity.")
+        if state.initial_capital != self._initial_capital:
+            raise ValueError("Paper restore initial capital differs from configuration.")
+        for name in ("cash", "position_quantity", "average_entry_price"):
+            value = getattr(state, name)
+            if not value.is_finite() or value < 0:
+                raise ValueError(f"Paper restore field {name} must be finite and non-negative.")
+        if not state.realized_pnl.is_finite():
+            raise ValueError("Paper restore realized PnL must be finite.")
+        seen_client_ids: set[str] = set()
+        for order in state.orders:
+            if order.request.market != self._market:
+                raise ValueError("Paper restore includes an order for another market.")
+            if order.request.client_order_id in seen_client_ids:
+                raise ValueError("Paper restore has duplicate client order identifiers.")
+            seen_client_ids.add(order.request.client_order_id)
+            if (
+                not order.requested_quantity.is_finite()
+                or order.requested_quantity <= 0
+                or order.request.quantity > order.requested_quantity
+                or not order.filled_quantity.is_finite()
+                or order.filled_quantity < 0
+                or order.filled_quantity > order.request.quantity
+            ):
+                raise ValueError("Paper restore order quantities violate the order contract.")
+            if sum((fill.quantity for fill in order.fills), Decimal("0")) != order.filled_quantity:
+                raise ValueError("Paper restore fill quantity does not match order state.")
+            if any(
+                not fill.quantity.is_finite()
+                or fill.quantity <= 0
+                or not fill.price.is_finite()
+                or fill.price <= 0
+                or fill.occurred_at.tzinfo is None
+                or fill.occurred_at.utcoffset() is None
+                for fill in order.fills
+            ):
+                raise ValueError("Paper restore contains an invalid fill.")
+        with self._lock:
+            if (
+                self._orders
+                or self._cash != self._initial_capital
+                or self._position_quantity != 0
+                or self._realized_pnl != 0
+            ):
+                raise RuntimeError("Paper restore is permitted only on a fresh broker.")
+            self._cash = state.cash
+            self._position_quantity = state.position_quantity
+            self._average_entry_price = state.average_entry_price
+            self._realized_pnl = state.realized_pnl
+            self._orders = {order.request.client_order_id: order for order in state.orders}
+            self._risk_decisions.clear()
+            self._liquidity_used.clear()
 
     def _match_order(self, key: str, snapshot: MarketSnapshot) -> PaperOrder:
         """Fill eligible quantity against the current visible top-of-book liquidity."""
