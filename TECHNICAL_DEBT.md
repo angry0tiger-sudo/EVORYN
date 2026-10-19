@@ -40,9 +40,13 @@ This ledger records unclosed verification and integration obligations. An item c
 - [ ] **Independent Phase 19 architecture/risk review**: inspect Paper Champion pointer drift, strategy/regime identity and parameter drift, data freshness/gap recovery, baseline comparison, no-order boundary, and event ledger failure behavior.
 - [ ] **No performance or fill claims** until a separately reviewed fill/cost model and actual governed observations exist. This phase does not calculate counterfactual fills or establish profitability.
 
-## Phase 20 — Scope discovery gate
+## Phase 20 — Intelligence Core provider interface
 
-- [ ] **Obtain and register the canonical Phase 20 scope before implementation.** Repository tree/code searches for `Phase 20`, `roadmap`, and `page 6` returned no matching roadmap/specification artifact. The current owner handover provides detailed acceptance requirements for Phases 18 and 19, but no Phase 20 objectives, interfaces, safety gates or acceptance criteria. Do not invent a trading, AI, connectivity or execution feature to fill that gap. Once the canonical scope is supplied or committed, record an ADR/acceptance plan and continue on a separate phase-specific branch.
+- [ ] **Review and accept ADR 0013 before implementation.** The provider-neutral Intelligence Core/model-provider contract is now proposed in `docs/adr/0013-intelligence-core-model-provider-interface.md`. This replaces the prior missing-scope discovery item but does not authorize provider activation.
+- [ ] **Keep OpenRouter and all other hosted LLM vendors disabled until separately evaluated and approved.** Record data classification/transfer permission, retention and training terms, region, schema/structured-output behavior, immutable model identity, cost limits, latency, failure/abstention tests and the explicit provider decision.
+- [ ] **Verify local open-source model and training-data rights independently.** Immutable model revisions, weight/tokenizer checksums, dataset/source licenses, allowed use and runtime dependencies must be recorded. Existing Financial PhraseBank training-data rights remain unverified by default.
+- [ ] **Implement and test the provider-neutral interfaces with offline fake adapters first.** Core imports must not require model frameworks or cloud SDKs; no real network call or credential is permitted in unit tests.
+- [ ] **Independently review advisory-only isolation before any Phase 20 integration.** No model/provider may write orders, alter hard risk limits, clear Auto-Halt, mutate live configuration or turn untrusted inputs into instructions. Phase 19 acceptance is a prerequisite for Shadow integration.
 
 ## Evidence classification
 
