@@ -752,13 +752,15 @@ def test_news_ablation_respects_available_at_and_uses_the_same_test_range(
     dataset = ablation_dataset()
     partitions = chronological_split(dataset)
     crash_time = dataset.candles[100].timestamp
+    # Publication, retrieval and analysis are all completed before the simulated bar opens.
+    news_available_at = crash_time - timedelta(minutes=30)
     registry, article = accepted_article(
-        published_at=crash_time,
+        published_at=news_available_at,
         article_id="negative-before-crash",
         title="Unexpected macro event causes Bitcoin market concern",
     )
     # Receipt and inference complete at the next-open decision time; no future feature is used.
-    news = sentiment_record(article, analyzed_at=crash_time)
+    news = sentiment_record(article, analyzed_at=news_available_at)
     report = evaluate_news_ablation(
         dataset,
         partitions=partitions,
