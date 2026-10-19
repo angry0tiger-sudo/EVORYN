@@ -109,7 +109,7 @@ Never put exchange credentials, URLs with secret query parameters, response bodi
 - Candidate/baseline identity drift or Paper Champion pointer change: latch the run; register a fresh experiment and construct a new runner after review.
 - Ledger append/read/verification failure: stop processing. Do not continue with in-memory-only evidence or create a second ledger silently.
 - Strategy confidence is unavailable from the existing `CausalTargetStrategy` protocol and is recorded as null. Do not substitute regime confidence for strategy confidence.
-- `risk_assessment_status=NOT_EVALUATED` appears only when an earlier gate blocked a target before assessment. For a computed target, the injected `ShadowRiskAssessmentPort` must return an explicit observational pass; otherwise the result is reject/abstain. The snapshot records the assessor's sanitized reason code separately from its short explanation. No production risk assessor was supplied or exercised here. Even `observational_pass` is not an exchange-order or Live RiskEngine authorization.
+- `risk_assessment_status=NOT_EVALUATED` appears only when an earlier gate blocked a target before assessment. For a computed target, the injected `ShadowRiskAssessmentPort` must return an explicit observational pass; otherwise the result is reject/abstain. The snapshot records the assessor's sanitized reason code separately from its short explanation. No production risk assessor was supplied or exercised here. Even `observational_accepted` is not an exchange-order or Live RiskEngine authorization.
 - No counterfactual fills are simulated. Estimated notional and target quantities are not observed orders, executions, or evidence of profitability.
 
 ## Verification and rollout gate
