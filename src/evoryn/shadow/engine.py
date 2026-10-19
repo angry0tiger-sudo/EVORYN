@@ -446,6 +446,8 @@ class ShadowRunner:
             raise ShadowSafetyError("Experiment spec mode must be SHADOW; PAPER/LIVE are forbidden.")
         if registry.get(experiment_spec.experiment_id) != experiment_spec:
             raise ShadowSafetyError("Shadow experiment is not identically registered in the ledger.")
+        if not registry.ledger.is_persistent:
+            raise ShadowSafetyError("Shadow requires a path-backed, fsync-persistent Learning Lab ledger.")
         if not registry.ledger.verify():
             raise ShadowSafetyError("Learning Lab ledger verification failed.")
         actual_fingerprint = strategy_fingerprint(strategy)
