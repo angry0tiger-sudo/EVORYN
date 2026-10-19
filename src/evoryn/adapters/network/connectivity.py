@@ -398,8 +398,8 @@ class ConnectivityManager:
         transport: JsonApiTransport,
         route_authorization: NetworkRouteAuthorization,
         audit_sink: ConnectionAuditSink,
-        retry_policy: RetryPolicy = RetryPolicy(),
-        circuit_policy: CircuitBreakerPolicy = CircuitBreakerPolicy(),
+        retry_policy: RetryPolicy | None = None,
+        circuit_policy: CircuitBreakerPolicy | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
         sleeper: Callable[[float], None] = time.sleep,
@@ -412,11 +412,14 @@ class ConnectivityManager:
         self._route_id = route_authorization.route_id
         self._transport = transport
         self._audit_sink = audit_sink
-        self._retry_policy = retry_policy
+        self._retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
         self._monotonic = monotonic
         self._sleep = sleeper
         self._random_value = random_value
-        self._breaker = CircuitBreaker(circuit_policy, monotonic=monotonic)
+        effective_circuit_policy = (
+            circuit_policy if circuit_policy is not None else CircuitBreakerPolicy()
+        )
+        self._breaker = CircuitBreaker(effective_circuit_policy, monotonic=monotonic)
         self._rate_limit_until = 0.0
         self._rate_limit_lock = threading.Lock()
 
