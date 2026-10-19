@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
