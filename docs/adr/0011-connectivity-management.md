@@ -47,9 +47,9 @@ No proxy/SOCKS/VPN implementation is enabled by this ADR. The availability and l
 
 ## Current verification record (2026-10-19)
 
-The ConnectivityManager implementation and its twelve explicit unit tests were included in candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0`. GitHub Actions [Run #873](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307401903) and [PR Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012) passed all six configured jobs on that exact SHA; the full pytest suite reported 346 passed, including all tests in `tests/unit/test_phase18_connectivity.py`.
+The latest connectivity code/test candidate, SHA `787bc5186628389f23c43809ba6eb00cd25e3091`, passed all six configured jobs in GitHub Actions [Run #879](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312972444) and [PR Run #880](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312976737). The full suite reported 347 passed, including all 13 tests in `tests/unit/test_phase18_connectivity.py`. The added direct transport test exercises a timeout through a fake opener and asserts one underlying attempt, the configured timeout value, and sanitized error output.
 
-These runs are mock/fixture-only. They do not prove provider interoperability, native Windows/Linux setup, approved egress, durable production audit storage, or use by all intended runtime connectors. No live Nobitex request was issued from GitHub Actions. Re-run the configured gates on the final PR head after any subsequent code or packaging change. ADR acceptance and production release remain blocked on independent review and runtime-wiring evidence.
+All evidence is mock/fixture-only. It does not prove provider interoperability, native Windows/Linux setup, approved egress, durable production audit storage, or use by all intended runtime connectors. No live Nobitex request was issued from GitHub Actions. These run IDs apply to the exact code/test SHA above; always recheck the final PR-head status after a later change. ADR acceptance and production release remain blocked on independent review and runtime-wiring evidence.
 
 ## Rollback
 

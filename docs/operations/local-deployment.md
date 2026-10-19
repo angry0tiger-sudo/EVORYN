@@ -87,7 +87,7 @@ The approved route authorization and durable audit-sink composition remain a pro
 
 ## Current CI evidence and local acceptance boundary
 
-On 2026-10-19, candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0` passed all six configured GitHub Actions gates in [Run #873](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307401903) and [PR Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012); pytest reported 346 passed. The CI workflow checks shell syntax for `setup.sh` but does not execute either setup script as a full installation, and cannot validate native Windows behavior or the owner's machine. Any later candidate change must pass all gates on its exact HEAD; local setup acceptance remains open until the host run is recorded.
+On 2026-10-19, code/test candidate SHA `787bc5186628389f23c43809ba6eb00cd25e3091` passed all six configured GitHub Actions gates in [Run #879](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312972444) and [PR Run #880](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312976737); pytest reported 347 passed. CI checks `setup.sh` syntax but does not execute either setup script as a full installation, and cannot validate native Windows behavior or the owner's machine. Any later PR-head change must pass all gates on its exact HEAD; local setup acceptance remains open until the host run is recorded.
 
 ## Evidence to capture on the local machine
 

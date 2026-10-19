@@ -49,9 +49,9 @@ Inspect and alert on event type, correlation ID, route ID, allowlisted target ho
 
 ## Test evidence status
 
-The 12 explicit tests in `tests/unit/test_phase18_connectivity.py` passed in GitHub Actions [Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012) on candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0`. The full suite reported 346 passed; Run #873 (push) and Run #874 (pull request) both passed all six configured CI jobs on that exact SHA: pytest, Ruff, strict mypy, Bandit, runner/dependency preflight and compileall, and pip-audit. This establishes mock-only code/test evidence for that candidate. It does not validate the exact historical Phase 18 merge SHA by itself.
+The 13 explicit tests in `tests/unit/test_phase18_connectivity.py` passed in GitHub Actions [Run #879](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312972444) and [PR Run #880](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312976737) on code/test SHA `787bc5186628389f23c43809ba6eb00cd25e3091`. The full suite reported 347 passed; both runs passed all six configured jobs: pytest, Ruff, strict mypy, Bandit, runner/dependency preflight including `bash -n scripts/setup.sh`, and pip-audit. The added timeout regression test uses an injected fake opener and sends no network traffic.
 
-No live Nobitex request or order was sent from GitHub Actions. Every further source or packaging change must pass CI on the new exact PR head. These CI runs do not execute `setup.bat` on Windows and do not prove installation or network-route authorization on the owner's host.
+This is mock-only code/test evidence. It does not validate the exact historical Phase 18 merge SHA by itself. No live Nobitex request or order was sent from GitHub Actions. The workflow does not execute `setup.bat` on Windows and does not prove installation or route authorization on the owner's host.
 
 ## Remaining gate items
 

@@ -34,7 +34,7 @@ NOVARYN is reference material for Nobitex Ed25519 signing and for separating aut
 
 ## Candidate verification record (2026-10-19)
 
-PR [#27](https://github.com/angry0tiger-sudo/EVORYN/pull/27) is open and unmerged. Candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0` passed [push CI Run #873](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307401903) and [PR CI Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012), with all six configured jobs successful and 346 pytest tests passed. This is exact-SHA, mock-only evidence. Any later commit requires its own successful exact-head checks before merge. No live Nobitex call or order was made from GitHub Actions. Independent review, native local validation, production runtime integration and live-trading authorization remain open.
+PR [#27](https://github.com/angry0tiger-sudo/EVORYN/pull/27) is open and unmerged. Latest code/test SHA `787bc5186628389f23c43809ba6eb00cd25e3091` passed [push CI Run #879](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312972444) and [PR CI Run #880](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312976737), with all six configured jobs successful and 347 pytest tests passed. This exact-SHA evidence is mock-only and includes direct transport timeout coverage; later PR-head changes require their own checks. No live Nobitex call or order was made from GitHub Actions. Independent review, native local validation, production runtime integration and live-trading authorization remain open.
 
 ## Required acceptance evidence
 
