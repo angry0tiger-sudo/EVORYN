@@ -81,7 +81,6 @@ class StrategySelectionLedgerEntry:
             or type(self.required_evidence_count) is not int
             or self.evidence_count < 0
             or self.required_evidence_count <= 0
-            or self.evidence_count > self.required_evidence_count
         ):
             raise ValueError("Strategy-selection evidence counters are invalid.")
         if (
