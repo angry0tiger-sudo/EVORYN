@@ -29,6 +29,7 @@ The latest artifact contains the JSON training report, model manifest, fitted es
 | Candle CSV SHA-256 | `0d976abd6772fc8dce0578b55d69c9686aabe7ffa0a9329cc46c600349297d84` |
 | Dataset manifest SHA-256 | `6054e2276864a69497a57f7953ab66b43b9f04bb192a3466303d9fa9d5905651` |
 | Model artifact SHA-256 | `38799b767b2aa6c2910c07383c3e213db090d5b8d5c1a1e401ee963173c17f2c` |
+| Model manifest SHA-256 | `8a95d43eabff57cbf25ebbd8ab92d01db511c2a9359c66efa4ed3462f69bfa00` |
 | Weak-label horizon | 6 candles |
 | Partitions | Chronological 60% train / 20% validation-calibration / 20% final holdout |
 | Final holdout samples | 858 |
@@ -59,8 +60,8 @@ All three strategies ran over the same chronological test interval using the rep
 | Strategy | Net return | Maximum drawdown | Closed trades | Final equity |
 |---|---:|---:|---:|---:|
 | Trained regime long/flat | −0.2411% | 0.2411% | 1 | 9,975.89 USDT |
-| SMA crossover long/flat | −1.3513% | 3.9004% | 12 | 9,864.38 USDT |
-| Buy-and-hold reference | +1.4810% | 2.2628% | 0 | 10,148.10 USDT |
+| SMA crossover long/flat | −1.3562% | 3.9004% | 12 | 9,864.38 USDT |
+| Buy-and-hold reference | +1.4810% | 2.2600% | 0 | 10,148.10 USDT |
 
 The trained regime strategy had only one closed trade and spent approximately 0.12% of the holdout in market. Its lower drawdown should not be interpreted as evidence of a useful predictive edge: its return was negative, exposure was extremely low, and it underperformed buy-and-hold. Buy-and-hold finished with an open position, hence zero closed trades.
 
