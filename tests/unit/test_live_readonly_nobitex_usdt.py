@@ -8,6 +8,11 @@ from decimal import Decimal
 
 import pytest
 
+from scripts.live_readonly_nobitex_usdt import (
+    WalletOnlyNobitexTransport,
+    format_snapshot,
+)
+
 from evoryn.adapters.exchanges.nobitex_account import (
     NobitexReadOnlyAccountReader,
     NobitexUSDTAccountSnapshot,
@@ -17,10 +22,6 @@ from evoryn.adapters.exchanges.nobitex_account import (
 )
 from evoryn.infrastructure.exchange.rate_limit import SlidingWindowRateLimiter
 from evoryn.ports.exchange_errors import AuthenticationError, InvalidExchangeRequest
-from scripts.live_readonly_nobitex_usdt import (
-    WalletOnlyNobitexTransport,
-    format_snapshot,
-)
 
 NOW = datetime(2026, 10, 19, 14, 0, tzinfo=UTC)
 TOKEN = "dummy-not-a-real-token"

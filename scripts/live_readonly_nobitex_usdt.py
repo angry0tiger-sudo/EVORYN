@@ -12,7 +12,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TextIO
 
 from evoryn.adapters.exchanges.nobitex_account import (
     NobitexAccountTransport,
