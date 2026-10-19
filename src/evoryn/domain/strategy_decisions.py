@@ -63,12 +63,14 @@ class StrategySelectionLedgerEntry:
         if self.last_switch_at is not None:
             _require_aware(self.last_switch_at, "Last-switch timestamp")
         if (
-            not self.regime_confidence.is_finite()
+            not isinstance(self.regime_confidence, Decimal)
+            or not self.regime_confidence.is_finite()
             or not Decimal("0") <= self.regime_confidence <= Decimal("1")
         ):
             raise ValueError("Regime confidence must be finite and in [0, 1].")
         if (
-            not self.confidence_threshold.is_finite()
+            not isinstance(self.confidence_threshold, Decimal)
+            or not self.confidence_threshold.is_finite()
             or not Decimal("0") < self.confidence_threshold <= Decimal("1")
         ):
             raise ValueError("Confidence threshold must be finite and in (0, 1].")
