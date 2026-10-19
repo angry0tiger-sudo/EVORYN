@@ -78,7 +78,9 @@ was tested, where it was tested, which evidence supported a change, and what hap
 ### 4. Automatic Paper rollback
 
 - Rollback triggers are maximum drawdown above 20%, net return below -5%, failed data quality,
-  any risk-gate denial (default maximum zero), or an experiment/model/data identity mismatch.
+  any risk-gate denial (default maximum zero), an experiment/model/data identity mismatch, or
+  missing/rejected trusted telemetry attestation. Metric evidence is never trusted for health checks
+  unless the configured verifier accepts it; verification errors fail closed.
 - A healthy or insufficient window is also recorded in the Learning Lab Ledger. Fewer than 20
   observations defaults to `INSUFFICIENT_EVIDENCE` unless a hard data-quality, risk-denial or identity
   failure requires an immediate safe action.
