@@ -19,7 +19,13 @@ from evoryn.domain.models import (
     Side,
 )
 from evoryn.execution.spot import SpotIntent
-from evoryn.intelligence.regime import RegimeLabel, RegimePrediction
+from evoryn.intelligence.regime import (
+    AbstainingRegimeDetector,
+    RegimeFeatureExtractor,
+    RegimeLabel,
+    RegimePrediction,
+    RegimeThresholds,
+)
 from evoryn.paper.broker import PaperOrderStatus
 from evoryn.risk.models import RiskLimits
 from evoryn.runtime.paper import (
@@ -27,6 +33,7 @@ from evoryn.runtime.paper import (
     PaperRuntimeSupervisor,
     PaperStrategyRuntime,
     ProtectiveExitPolicy,
+    RegimeClassifier,
     RuntimeLedgerIntegrityError,
     RuntimeStatus,
     SQLitePaperRuntimeLedger,
@@ -138,6 +145,40 @@ class DeterministicRegimeBrain:
         )
 
 
+class MarketAwareFixtureModel:
+    """Offline probability model double that derives its label from the supplied price history."""
+
+    model_id = "fixture-market-aware-regime"
+    model_version = "test-v1"
+    confidence_semantics = "calibrated_probability"
+
+    @property
+    def model_fingerprint(self) -> str:
+        return "b" * 64
+
+    @property
+    def is_ready(self) -> bool:
+        return True
+
+    def predict_probabilities(
+        self, completed_history: Sequence[MarketCandle]
+    ) -> dict[RegimeLabel, Decimal]:
+        label = (
+            RegimeLabel.BULL_TREND
+            if completed_history[-1].close > completed_history[0].close
+            else RegimeLabel.RANGE_BOUND
+        )
+        return {
+            item: Decimal("0.91") if item is label else Decimal("0.03")
+            for item in (
+                RegimeLabel.BULL_TREND,
+                RegimeLabel.BEAR_TREND,
+                RegimeLabel.RANGE_BOUND,
+                RegimeLabel.HIGH_VOLATILITY,
+            )
+        }
+
+
 class LongStrategy:
     strategy_id = "fixture-long"
     strategy_version = "test-v1"
@@ -222,7 +263,7 @@ def registry() -> StrategyPluginRegistry:
 def build_runtime(
     tmp_path: Path,
     feed: MockRuntimeFeed,
-    brain: DeterministicRegimeBrain,
+    brain: RegimeClassifier,
     clock: MutableClock,
     *,
     journal_path: Path | None = None,
@@ -333,6 +374,37 @@ def test_brain_to_strategy_intent_fill_account_and_reconciliation(tmp_path: Path
     assert runtime.mock_venue.get_balances().base_available == Decimal("25")
     assert runtime.broker.cash == runtime.mock_venue.get_balances().quote_available
     assert runtime.journal.verify()
+
+
+def test_real_abstaining_detector_connects_mock_candles_to_paper_fill(
+    tmp_path: Path,
+) -> None:
+    candles = tuple(
+        candle(BASE_TIME - INTERVAL * offset)
+        for offset in range(5, 0, -1)
+    )
+    now = candles[-1].timestamp + INTERVAL
+    clock = MutableClock(now)
+    feed = MockRuntimeFeed(candles, snapshot(now))
+    brain = AbstainingRegimeDetector(
+        MarketAwareFixtureModel(),
+        feature_extractor=RegimeFeatureExtractor(lookback=3),
+        thresholds=RegimeThresholds(min_confidence=Decimal("0.65")),
+    )
+    runtime = build_runtime(tmp_path, feed, brain, clock)
+
+    assert runtime.bootstrap(now=now).status is RuntimeStatus.BOOTSTRAPPED
+    first = advance(runtime, feed, clock)
+    assert first.status is RuntimeStatus.ABSTAINED
+
+    second = advance(runtime, feed, clock)
+    assert second.status is RuntimeStatus.PROCESSED
+    assert second.regime_label == RegimeLabel.RANGE_BOUND.value
+    assert second.selected_strategy_id == "fixture-long"
+    assert second.order_status == PaperOrderStatus.FILLED.value
+    assert second.reconciliation_matched is True
+    assert second.account is not None
+    assert second.account.base_quantity > Decimal("0")
 
 
 def test_portfolio_exposes_open_order_reservation_and_blocks_new_intents(

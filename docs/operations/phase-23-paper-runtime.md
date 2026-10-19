@@ -45,10 +45,10 @@ an exception. It is not an OS service manager, and it does not automatically cle
 ## Integration coverage
 
 `tests/integration/test_paper_strategy_runtime.py` uses synthetic in-memory feed and brain doubles
-to test brain → selector → target intent → Risk Engine → Paper fill → separate ledger reconciliation,
-portfolio reservations, protective exit, clean restart without duplicate orders, fail-closed
-interrupted-intent recovery, supervisor restart into a persisted halt, enforcement of the mock-only
-feed marker, and corruption detection.
+to test the actual abstaining detector with a deterministic market-aware fixture model → selector
+→ target intent → Risk Engine → Paper fill → separate ledger reconciliation, portfolio reservations,
+protective exit, clean restart without duplicate orders, fail-closed interrupted-intent recovery,
+supervisor restart into a persisted halt, enforcement of the mock-only feed marker, and corruption detection.
 
 All this phase's tests are offline and simulated. Green CI does not prove production exchange
 compatibility, profitability, Windows-host acceptance, or authorization for Live.
