@@ -206,9 +206,11 @@ class RiskEngine:
         now: datetime,
     ) -> tuple[str, str] | None:
         """Validate all data needed by both the risk calculation and fill simulator."""
-        if _runtime_is_instance(now, datetime) is False
+        if (
+            _runtime_is_instance(now, datetime) is False
             or now.tzinfo is None
-            or now.utcoffset() is None:
+            or now.utcoffset() is None
+        ):
             return ("invalid_evaluation_time", "Evaluation time must include a timezone.")
         if _runtime_is_instance(market_data.observed_at, datetime) is False or (
             market_data.observed_at.tzinfo is None
