@@ -574,7 +574,7 @@ class RegimeStrategySelector:
             status=SelectionStatus.CANDIDATE_PENDING,
             reason_code="HYSTERESIS_PENDING",
             reason="Strategy switch withheld: " + "; ".join(reasons) + ".",
-            candidate_id=desired,
+            candidate_id=desired_id,
             alternatives=alternative_ids,
             allow_new_signals=incumbent_compatible,
         )
