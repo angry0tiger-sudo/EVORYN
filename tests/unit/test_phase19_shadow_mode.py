@@ -435,6 +435,56 @@ def test_paper_baseline_failure_abstains_the_whole_comparison(tmp_path: Path) ->
     assert "baseline-private-error" not in fixture.ledger.events[-1].payload_json
 
 
+def test_paper_baseline_identity_drift_latches_fail_closed(tmp_path: Path) -> None:
+    fixture = Fixture(tmp_path)
+    fixture.baseline_strategy.exposure = Decimal("0.5")
+
+    first = fixture.runner.process_candle(fixture.candle(), received_at=fixture.now)
+    assert first.outcome is ShadowOutcome.ABSTAIN
+    assert first.reason_code == "PAPER_BASELINE_IDENTITY_CHANGED"
+    assert fixture.runner.history == ()
+
+    fixture.now += fixture.interval
+    second = fixture.runner.process_candle(
+        fixture.candle(minutes_before_now=1), received_at=fixture.now
+    )
+    assert second.reason_code == "MODEL_IDENTITY_REVIEW_REQUIRED"
+    assert fixture.runner.history == ()
+
+
+def test_baseline_must_share_registered_training_data_identity(tmp_path: Path) -> None:
+    fixture = Fixture(tmp_path)
+    mismatched = ExperimentSpec(
+        code_revision=fixture.baseline_spec.code_revision,
+        dataset_version="9" * 64,
+        feature_schema_version=fixture.baseline_spec.feature_schema_version,
+        evaluation_config_fingerprint=fixture.baseline_spec.evaluation_config_fingerprint,
+        model_id=fixture.baseline_spec.model_id,
+        model_version=fixture.baseline_spec.model_version,
+        model_fingerprint=fixture.baseline_spec.model_fingerprint,
+        parameters=fixture.baseline_spec.parameters,
+        random_seed=fixture.baseline_spec.random_seed,
+        train_range=fixture.baseline_spec.train_range,
+        validation_range=fixture.baseline_spec.validation_range,
+        test_range=fixture.baseline_spec.test_range,
+        mode=ExperimentMode.PAPER,
+        created_at=fixture.now + timedelta(seconds=1),
+    )
+    fixture.registry.register(mismatched, correlation_id="test:register-mismatched-paper")
+    with pytest.raises(ShadowSafetyError, match="data/split identity"):
+        ShadowRunner(
+            config=fixture.config,
+            experiment_spec=fixture.spec,
+            baseline_experiment_spec=mismatched,
+            registry=fixture.registry,
+            strategy=fixture.strategy,
+            baseline_strategy=fixture.baseline_strategy,
+            regime_classifier=fixture.regime,
+            auto_halt_status=lambda: False,
+            utcnow=lambda: fixture.now,
+        )
+
+
 def test_wrong_market_and_interval_are_rejected(tmp_path: Path) -> None:
     fixture = Fixture(tmp_path)
     candle = fixture.candle()
