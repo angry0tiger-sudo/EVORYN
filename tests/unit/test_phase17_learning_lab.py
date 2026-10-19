@@ -216,7 +216,7 @@ def test_learning_lab_ledger_is_hash_chained_and_detects_corrupt_lines(tmp_path:
     ]
     assert second.previous_event_hash == event.event_hash
 
-    raw = path.read_bytes().replace(b'"net_return":"0.02"', b'"net_return":"9.99"')
+    raw = path.read_bytes().replace(b"payload_sha256", b"payload_sha257", 1)
     path.write_bytes(raw)
     with pytest.raises(ExperimentIntegrityError):
         LearningLabLedger(path)
@@ -392,6 +392,8 @@ def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_pa
     paper_evidence = make_evidence(paper_champion, run_suffix="paper-champion")
     shadow_champion_evidence = make_evidence(
         shadow_champion,
+        net_return="0.02",
+        max_drawdown="0.10",
         run_suffix="shadow-champion",
         collected_at=NOW + timedelta(hours=1),
     )
@@ -494,11 +496,76 @@ def test_release_gate_rejects_risk_policy_drift_and_changed_approval(tmp_path: P
         )
 
 
-def test_rollback_without_predecessor_enters_safe_hold_and_small_windows_do_not_trigger() -> None:
-    # Policy evaluation with too few observations is not a rollback trigger.
-    evidence = make_evidence(
-        make_spec(), observations=2, run_suffix="too-short"
+def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    spec = make_spec(model_id="single-champion", model_fingerprint="7" * 64)
+    short_evidence = make_evidence(
+        spec, observations=2, run_suffix="too-short", collected_at=NOW + timedelta(hours=1)
     )
-    # The controller is intentionally not constructed here: a no-predecessor controller
-    # is covered by the same rollback branch after promotion in integration tests.
-    assert evidence.observations < RollbackPolicy(minimum_observations=20).minimum_observations
+    bad_evidence = make_evidence(
+        spec,
+        observations=25,
+        net_return="-0.10",
+        max_drawdown="0.30",
+        run_suffix="bad-without-predecessor",
+        collected_at=NOW + timedelta(hours=2),
+    )
+    registry.register(spec, correlation_id="rollback:register")
+    registry.record_evidence(short_evidence, correlation_id="rollback:short")
+    registry.record_evidence(bad_evidence, correlation_id="rollback:bad")
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=spec.experiment_id,
+        rollback_policy=RollbackPolicy(
+            minimum_observations=20,
+            maximum_drawdown_fraction=Decimal("0.20"),
+        ),
+    )
+
+    short_result = controller.monitor_paper_champion(
+        short_evidence.evidence_id,
+        checked_at=NOW + timedelta(hours=3),
+        correlation_id="rollback:insufficient",
+    )
+    assert short_result.status is RollbackStatus.INSUFFICIENT_EVIDENCE
+    assert controller.active_champion_id == spec.experiment_id
+
+    result = controller.monitor_paper_champion(
+        bad_evidence.evidence_id,
+        checked_at=NOW + timedelta(hours=4),
+        correlation_id="rollback:no-predecessor",
+    )
+    assert result.status is RollbackStatus.SAFE_HOLD_NO_CHAMPION
+    assert result.trigger is RollbackTrigger.MAX_DRAWDOWN_EXCEEDED
+    assert result.active_champion_id is None
+    assert controller.active_champion_id is None
+    assert ledger.events[-1].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
+
+
+def test_orphaned_spec_and_evidence_files_require_audit_reconciliation(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "experiments"
+    ledger = LearningLabLedger(tmp_path / "separate-ledger.jsonl")
+    spec = make_spec(model_id="orphan-recovery", model_fingerprint="6" * 64)
+    spec_path = root / "specs" / f"{spec.experiment_id}.json"
+    spec_path.parent.mkdir(parents=True)
+    spec_path.write_bytes(canonical_bytes(spec.to_dict()))
+    registry = ExperimentRegistry(root, ledger)
+
+    with pytest.raises(ExperimentIntegrityError, match="Ledger event"):
+        registry.get(spec.experiment_id)
+    assert registry.register(spec, correlation_id="recovery:spec") == spec.experiment_id
+    assert ledger.events[-1].event_type is LearningEventType.EXPERIMENT_REGISTRATION_REUSED
+
+    evidence = make_evidence(spec, run_suffix="orphan-evidence")
+    evidence_path = root / "evidence" / f"{evidence.evidence_id}.json"
+    evidence_path.parent.mkdir(parents=True)
+    evidence_path.write_bytes(canonical_bytes(evidence.to_dict()))
+    with pytest.raises(ExperimentIntegrityError, match="not backed"):
+        registry.get_evidence(evidence.evidence_id)
+
+    registry.record_evidence(evidence, correlation_id="recovery:evidence")
+    assert registry.get_evidence(evidence.evidence_id) == evidence
+    assert ledger.events[-1].event_type is LearningEventType.EVIDENCE_RECORDED
