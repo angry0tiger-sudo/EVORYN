@@ -285,7 +285,11 @@ class NobitexSpotTradingTransport:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
         self._clock = clock
-        self._opener = opener if opener is not None else build_opener(ProxyHandler({}), _NoRedirectHandler())
+        self._opener = (
+            opener
+            if opener is not None
+            else build_opener(ProxyHandler({}), _NoRedirectHandler())
+        )
         self._market_policy = market_policy or MarketPolicy()
 
     def submit_order(self, request: OrderRequest, *, price_guard: Decimal) -> Order:
