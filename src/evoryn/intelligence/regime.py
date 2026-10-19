@@ -55,10 +55,6 @@ class RegimeFeatureVector:
     volume_ratio: Decimal
 
     def __post_init__(self) -> None:
-        if not isinstance(self.label, RegimeLabel):
-            raise ValueError("Prediction label must be a canonical RegimeLabel.")
-        if type(self.abstained) is not bool:
-            raise ValueError("abstained must be an explicit boolean.")
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("Feature as_of must be timezone-aware.")
         if self.sample_count <= 0:
@@ -231,6 +227,10 @@ class RegimePrediction:
     reason_code: str
 
     def __post_init__(self) -> None:
+        if not isinstance(self.label, RegimeLabel):
+            raise ValueError("Prediction label must be a canonical RegimeLabel.")
+        if type(self.abstained) is not bool:
+            raise ValueError("abstained must be an explicit boolean.")
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("Prediction timestamp must be timezone-aware.")
         if (
