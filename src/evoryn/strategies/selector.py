@@ -453,7 +453,8 @@ class RegimeStrategySelector:
             self._candidate_strategy_id = plugin_id
             self._candidate_since = as_of
             self._candidate_evidence_count = 1
-        elif self._last_prediction_as_of is not None and as_of > self._last_prediction_as_of:
+        else:
+            # The public select() method rejects duplicate/non-increasing as_of timestamps first.
             self._candidate_evidence_count += 1
 
     def _clear_candidate(self) -> None:
@@ -503,7 +504,7 @@ class RegimeStrategySelector:
             registry_fingerprint=self._registry_fingerprint,
             previous_strategy_id=(
                 previous_strategy_id
-                if previous_strategy_id is not None
+                if status is SelectionStatus.SWITCHED
                 else self._current_strategy_id
             ),
             candidate_strategy_id=candidate_id,
