@@ -196,11 +196,16 @@ class ShadowRiskAssessment:
             or len(self.explanation) > 256
             or any(ord(char) < 32 for char in self.explanation)
         ):
-            raise ValueError("Risk assessment explanation must be sanitized text of at most 256 chars.")
+            raise ValueError(
+                "Risk assessment explanation must be sanitized text of at most 256 chars."
+            )
 
 
 class ShadowRiskAssessmentPort(Protocol):
-    """Pure assessment of a hypothetical target; MUST NOT submit orders or mutate live risk state."""
+    """Assess a hypothetical target without placing orders or mutating live risk state.
+
+    Implementations must be pure/read-only and must not call the exchange execution API.
+    """
 
     def assess(
         self,
@@ -576,7 +581,10 @@ class ShadowRunner:
             )
         if baseline_experiment_spec.mode is not ExperimentMode.PAPER:
             raise ShadowSafetyError("The baseline experiment must be mode=PAPER.")
-        if champion_controller.registry is not registry or champion_controller.ledger is not registry.ledger:
+        if (
+            champion_controller.registry is not registry
+            or champion_controller.ledger is not registry.ledger
+        ):
             raise ShadowSafetyError(
                 "Paper Champion controller must use this exact registry and persistent ledger."
             )
@@ -1532,7 +1540,7 @@ def _reason_explanation(reason_code: str) -> str:
             "Paper baseline identity changed; the comparison is no longer trusted."
         ),
         "PAPER_CHAMPION_CHANGED": (
-            "The active Paper Champion pointer changed; a new registered Shadow comparison is required."
+            "Active Paper Champion changed; a new registered Shadow comparison is required."
         ),
         "STRATEGY_IDENTITY_UNVERIFIABLE": (
             "Strategy identity could not be revalidated; the comparison abstains."
