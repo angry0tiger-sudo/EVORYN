@@ -331,6 +331,7 @@ class NewsQualityGate:
             integrity_evidence="RECEIVED_JSON_SHA256_AND_NORMALIZED_TEXT_SHA256",
             related_asset_ids=candidate.related_asset_ids,
             source_trust_score=authorization.trust_score,
+            language_evidence=candidate.language_evidence,
         )
         self._dedup.commit(candidate, canonical_url=canonical_url)
         return NewsIngestionResult(
