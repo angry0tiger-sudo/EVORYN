@@ -590,6 +590,7 @@ class ChampionChallengerController:
                 "challenger_experiment_id": decision.challenger_experiment_id,
                 "net_return_delta": str(decision.net_return_delta),
                 "max_drawdown_delta": str(decision.max_drawdown_delta),
+                "prior_comparison_count": prior_comparison_count,
                 "dataset_version": decision.dataset_version,
                 "test_range_start": decision.test_range_start,
                 "test_range_end": decision.test_range_end,
