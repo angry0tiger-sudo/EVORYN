@@ -10,18 +10,12 @@ from typing import Any
 
 import pytest
 
-from evoryn.intelligence.huggingface_provider import (
-    HuggingFaceSequenceClassificationProvider,
-    SequenceClassificationRuntime,
-)
+from evoryn.intelligence.huggingface_provider import HuggingFaceSequenceClassificationProvider
 from evoryn.intelligence.model_provider import (
-    AdvisoryResult,
     ConfidenceSemantics,
-    CredentialHeaderProvider,
     DataClassification,
     InMemoryModelAuditSink,
     IntelligenceCore,
-    JsonPostTransport,
     ModelAuditEvent,
     ModelAuditEventType,
     ModelIdentity,
