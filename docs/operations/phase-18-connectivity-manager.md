@@ -49,15 +49,17 @@ Inspect and alert on event type, correlation ID, route ID, allowlisted target ho
 
 ## Test evidence status
 
-`tests/unit/test_phase18_connectivity.py` contains mock-only scenarios. A test being present is not a passing run. Record lint, type-check, security scan, pytest and CI results from an identifiable runner. If reliable CI job logs remain unavailable, Phase 18 acceptance is blocked rather than inferred from a PR merge or synthetic fixtures.
+The 12 explicit tests in `tests/unit/test_phase18_connectivity.py` passed in GitHub Actions [Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012) on candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0`. The full suite reported 346 passed; Run #873 (push) and Run #874 (pull request) both passed all six configured CI jobs on that exact SHA: pytest, Ruff, strict mypy, Bandit, runner/dependency preflight and compileall, and pip-audit. This establishes mock-only code/test evidence for that candidate. It does not validate the exact historical Phase 18 merge SHA by itself.
+
+No live Nobitex request or order was sent from GitHub Actions. Every further source or packaging change must pass CI on the new exact PR head. These CI runs do not execute `setup.bat` on Windows and do not prove installation or network-route authorization on the owner's host.
 
 ## Remaining gate items
 
-1. Independent review of the new state/retry/freshness contracts and use by actual allowed connectors.
-2. Verified runner output for unit tests, lint, strict type checking and security checks.
-3. Evidence that route authorization and the audit sink are configured in the intended runtime.
-4. Separate authorization/evidence for any proxy, SOCKS5 or VPN/tunnel transport; no such transport is implicitly enabled by this PR.
-5. Failure-drill evidence for source timeout/outage, rate limit, feed gap, audit persistence loss and recovery.
+1. Independent review of retry/circuit/freshness semantics, redirects, host allowlisting, 429 cooldown, and audit fail-closed behavior.
+2. Evidence that approved runtime connectors actually use `ConnectivityManager` and a durable, access-controlled `ConnectionAuditSink` with current route authorization and secret-provider configuration.
+3. Failure-drill evidence on the target runtime for source timeout/outage, rate limit, feed gap, audit persistence loss and recovery.
+4. Separate authorization and implementation evidence for any proxy, SOCKS5 or VPN/tunnel transport; no such transport is enabled.
+5. Historical verification of the exact conditional-merge commit remains open in `TECHNICAL_DEBT.md`; current superset CI does not retroactively test that SHA.
 
 
 ## Verified code boundaries and current runtime integration status

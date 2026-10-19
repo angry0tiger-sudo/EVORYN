@@ -18,20 +18,25 @@ if [ -z "$PYTHON_BIN" ]; then
     exit 2
 fi
 
-if [ ! -x ".venv/bin/python" ]; then
+if [ -x ".venv/bin/python" ]; then
+    if ! .venv/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)' >/dev/null 2>&1; then
+        echo "ERROR: Existing .venv does not use Python 3.12.x; it was preserved." >&2
+        exit 2
+    fi
+else
     "$PYTHON_BIN" -m venv .venv
 fi
 
 if [ ! -f ".env" ]; then
     cp .env.example .env
-    chmod 600 .env 2>/dev/null || true
+    chmod 600 .env
     echo "Created .env from .env.example; no credentials were added."
 else
-    echo "Existing .env preserved; it was not overwritten."
+    echo "Existing .env preserved; its contents and permissions were not changed."
 fi
 
 mkdir -p data
-chmod 700 data 2>/dev/null || true
+chmod 700 data
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e ".[dev]"
 .venv/bin/python -m compileall -q src tests scripts

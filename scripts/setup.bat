@@ -8,7 +8,10 @@ if errorlevel 1 (
   exit /b 2
 )
 
-if not exist ".venv\Scripts\python.exe" (
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
+  if errorlevel 1 goto :venv_error
+) else (
   py -3.12 -m venv .venv
   if errorlevel 1 goto :error
 )
@@ -23,14 +26,13 @@ if not exist ".env" (
 
 if not exist "data" mkdir "data"
 if errorlevel 1 goto :error
-call ".venv\Scripts\activate.bat"
-python -m pip install --upgrade pip
+".venv\Scripts\python.exe" -m pip install --upgrade pip
 if errorlevel 1 goto :error
-python -m pip install -e ".[dev]"
+".venv\Scripts\python.exe" -m pip install -e ".[dev]"
 if errorlevel 1 goto :error
-python -m compileall -q src tests scripts
+".venv\Scripts\python.exe" -m compileall -q src tests scripts
 if errorlevel 1 goto :error
-python -m pytest -q
+".venv\Scripts\python.exe" -m pytest -q
 if errorlevel 1 goto :error
 
 echo.
@@ -43,3 +45,8 @@ exit /b 0
 echo.
 echo ERROR: setup or offline verification failed. Review the messages above.
 exit /b 1
+
+:venv_error
+echo ERROR: Existing .venv does not use Python 3.12.x; it was preserved.
+echo Rename or remove that environment manually, then run setup again.
+exit /b 2

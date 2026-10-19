@@ -16,9 +16,9 @@ The current repository has no integrated production strategy loop, account/portf
    scripts\setup.bat
    ```
 
-4. The script creates `.venv\`, preserves an existing `.env`, copies `.env.example` only when no `.env` exists, creates `data\`, installs `.[dev]`, compiles source/test modules and runs the offline test suite.
+4. The script creates `.venv\` when absent and verifies that an existing environment already uses Python 3.12.x rather than replacing it. It preserves an existing `.env`, copies `.env.example` only when no `.env` exists, creates `data\`, installs `.[dev]` using the project-local interpreter, compiles source/test modules and runs the offline test suite.
 
-The script exits non-zero if dependency installation, compilation or tests fail.
+The script exits non-zero if environment validation, dependency installation, compilation or tests fail. GitHub CI does not execute this batch script; native Windows setup remains unverified until tested on a Windows host.
 
 ## Linux setup
 
@@ -30,7 +30,7 @@ The script exits non-zero if dependency installation, compilation or tests fail.
    bash scripts/setup.sh
    ```
 
-4. The script creates `.venv/`, preserves existing `.env`, creates `data/`, installs `.[dev]`, compiles source/test modules and runs the offline test suite. On Linux, it best-effort restricts `.env` and `data/` permissions to the current user.
+4. The script creates `.venv/` when absent and verifies that an existing environment already uses Python 3.12.x rather than replacing it. It preserves an existing `.env` without changing its contents or permissions; a newly copied `.env` is set to mode 600. The script creates `data/` with mode 700, installs `.[dev]` using the project-local interpreter, compiles source/test modules and runs the offline test suite. Permission-setting failures are fatal rather than silently ignored.
 
 ## Environment file
 
@@ -84,6 +84,10 @@ This script loads `.env` locally and only permits the USDT Spot/Margin wallet re
 Phase 18 supplies a reusable route-authorized `ConnectivityManager` for idempotent JSON GET calls with bounded retry/backoff/jitter, parsed Retry-After delays, a shared 429 cooldown, circuit-breaker recovery probes and sanitized audit events. The read-only JSON transport uses a fixed HTTPS host allowlist, a timeout and response-size bounds. No proxy route is enabled. Signed Spot order submit/cancel are one-shot calls: if the result is ambiguous, EVORYN must reconcile instead of retrying.
 
 The approved route authorization and durable audit-sink composition remain a production runtime integration requirement. A generic helper or a green CI run must not be treated as evidence that a production connector is wired or that the local network route is authorized.
+
+## Current CI evidence and local acceptance boundary
+
+On 2026-10-19, candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0` passed all six configured GitHub Actions gates in [Run #873](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307401903) and [PR Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012); pytest reported 346 passed. The CI workflow checks shell syntax for `setup.sh` but does not execute either setup script as a full installation, and cannot validate native Windows behavior or the owner's machine. Any later candidate change must pass all gates on its exact HEAD; local setup acceptance remains open until the host run is recorded.
 
 ## Evidence to capture on the local machine
 

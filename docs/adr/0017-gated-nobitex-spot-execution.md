@@ -32,6 +32,10 @@ NOVARYN is reference material for Nobitex Ed25519 signing and for separating aut
 - Reconciliation, account reconciliation, protective-order strategy, process-restart recovery, and operator runbooks need more evidence before production readiness.
 - Successful mocked CI proves only local logic and static controls, not exchange interoperability, remote permission scope, actual market precision, profitability, or production readiness.
 
+## Candidate verification record (2026-10-19)
+
+PR [#27](https://github.com/angry0tiger-sudo/EVORYN/pull/27) is open and unmerged. Candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0` passed [push CI Run #873](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307401903) and [PR CI Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012), with all six configured jobs successful and 346 pytest tests passed. This is exact-SHA, mock-only evidence. Any later commit requires its own successful exact-head checks before merge. No live Nobitex call or order was made from GitHub Actions. Independent review, native local validation, production runtime integration and live-trading authorization remain open.
+
 ## Required acceptance evidence
 
 - Exact-head unit/contract/failure tests with socket-free fakes.

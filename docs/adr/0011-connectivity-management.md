@@ -1,6 +1,6 @@
 # ADR 0011: Connectivity Management, Bounded Recovery, and Feed Freshness
 
-- Status: Proposed; code-level implementation exists, runtime integration remains gated
+- Status: Proposed; implementation and mock-only CI evidence exist on a candidate branch; independent review and runtime integration remain gated
 - Date: 2026-10-19
 - Scope: Roadmap Phase 18
 - Depends on: Phases 5-7 market-data quality gates, the existing read-only JSON transport, audit/correlation contracts, and approved provider licensing.
@@ -44,6 +44,12 @@ A successful TCP/HTTPS request does not prove that the returned market observati
 Mock tests cover destination allowlisting, secret-free telemetry, bounded retry, rate-limit handling, authentication failure, circuit recovery, audit failure, retry-after parsing and freshness rejection/reset. Test definitions are not evidence of execution; runner results must be captured separately.
 
 No proxy/SOCKS/VPN implementation is enabled by this ADR. The availability and legality of any such route remain provider-, environment-, and jurisdiction-specific and require a separate evidence-backed review before use.
+
+## Current verification record (2026-10-19)
+
+The ConnectivityManager implementation and its twelve explicit unit tests were included in candidate SHA `1d435a4b0df40f2d38e8e43515aded1aa1d3a3b0`. GitHub Actions [Run #873](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307401903) and [PR Run #874](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39307664012) passed all six configured jobs on that exact SHA; the full pytest suite reported 346 passed, including all tests in `tests/unit/test_phase18_connectivity.py`.
+
+These runs are mock/fixture-only. They do not prove provider interoperability, native Windows/Linux setup, approved egress, durable production audit storage, or use by all intended runtime connectors. No live Nobitex request was issued from GitHub Actions. Re-run the configured gates on the final PR head after any subsequent code or packaging change. ADR acceptance and production release remain blocked on independent review and runtime-wiring evidence.
 
 ## Rollback
 
