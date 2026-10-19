@@ -169,6 +169,7 @@ class Fixture:
             max_history_candles=100,
         )
         self.strategy = FixedExposureStrategy(exposure)
+        self.baseline_strategy = FixedExposureStrategy(Decimal("0"))
         self.regime = FakeRegimeClassifier(
             unknown=unknown_regime,
             identity_drift_at=identity_drift_at,
@@ -176,7 +177,6 @@ class Fixture:
         self.halted = halted
         self.ledger = LearningLabLedger(tmp_path / "learning-ledger.jsonl")
         self.registry = ExperimentRegistry(tmp_path / "registry", self.ledger)
-        parameters = tuple(sorted(self.strategy.parameters().items()))
         self.spec = ExperimentSpec(
             code_revision="a" * 40,
             dataset_version="b" * 64,
@@ -185,7 +185,7 @@ class Fixture:
             model_id=self.strategy.strategy_id,
             model_version=self.strategy.strategy_version,
             model_fingerprint="c" * 64,
-            parameters=parameters,
+            parameters=tuple(sorted(self.strategy.parameters().items())),
             random_seed=0,
             train_range=_index_range(0, 1),
             validation_range=_index_range(1, 2),
@@ -193,12 +193,33 @@ class Fixture:
             mode=ExperimentMode.SHADOW,
             created_at=self.now,
         )
+        self.baseline_spec = ExperimentSpec(
+            code_revision="d" * 40,
+            dataset_version="b" * 64,
+            feature_schema_version="shadow-market-candle/v1",
+            evaluation_config_fingerprint=self.config.evaluation_config_fingerprint,
+            model_id=self.baseline_strategy.strategy_id,
+            model_version=self.baseline_strategy.strategy_version,
+            model_fingerprint="e" * 64,
+            parameters=tuple(sorted(self.baseline_strategy.parameters().items())),
+            random_seed=0,
+            train_range=_index_range(0, 1),
+            validation_range=_index_range(1, 2),
+            test_range=_index_range(2, 3),
+            mode=ExperimentMode.PAPER,
+            created_at=self.now,
+        )
+        self.registry.register(
+            self.baseline_spec, correlation_id="test:register-paper-baseline"
+        )
         self.registry.register(self.spec, correlation_id="test:register-shadow")
         self.runner = ShadowRunner(
             config=self.config,
             experiment_spec=self.spec,
+            baseline_experiment_spec=self.baseline_spec,
             registry=self.registry,
             strategy=self.strategy,
+            baseline_strategy=self.baseline_strategy,
             regime_classifier=self.regime,
             auto_halt_status=lambda: self.halted,
             utcnow=lambda: self.now,
@@ -432,8 +453,10 @@ def test_runner_rejects_non_shadow_experiment(tmp_path: Path) -> None:
         ShadowRunner(
             config=fixture.config,
             experiment_spec=paper_spec,
+            baseline_experiment_spec=fixture.baseline_spec,
             registry=fixture.registry,
             strategy=fixture.strategy,
+            baseline_strategy=fixture.baseline_strategy,
             regime_classifier=fixture.regime,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
@@ -502,8 +525,11 @@ def test_unregistered_experiment_is_rejected(tmp_path: Path) -> None:
         ShadowRunner(
             config=fixture.config,
             experiment_spec=fixture.spec,
+            baseline_experiment_spec=fixture.baseline_spec,
+            baseline_experiment_spec=fixture.baseline_spec,
             registry=other_registry,
             strategy=fixture.strategy,
+            baseline_strategy=fixture.baseline_strategy,
             regime_classifier=fixture.regime,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
@@ -519,8 +545,11 @@ def test_non_persistent_learning_ledger_is_rejected(tmp_path: Path) -> None:
         ShadowRunner(
             config=fixture.config,
             experiment_spec=fixture.spec,
+            baseline_experiment_spec=fixture.baseline_spec,
+            baseline_experiment_spec=fixture.baseline_spec,
             registry=memory_registry,
             strategy=fixture.strategy,
+            baseline_strategy=fixture.baseline_strategy,
             regime_classifier=fixture.regime,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
