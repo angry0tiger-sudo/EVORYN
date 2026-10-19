@@ -10,7 +10,7 @@ EVORYN is an independently governed trading-intelligence platform. The currently
 - The generic `ExchangePort` and read-only Nobitex transport remain write-disabled.
 - A separate local Spot execution candidate contains an Ed25519-signed, fixed-route gateway, official instrument-rule reader, deterministic Risk Engine preconditions, a durable SQLite idempotency journal and an explicit default-off owner gate. It is **not a production trading runtime**.
 - Phase 23 adds a bounded end-to-end Mock/Paper runtime connecting regime classification, strategy selection, intents, deterministic risk, Paper fills/reconciliation, portfolio state, protective exits and SQLite recovery.
-- Phase 24 adds an explicitly bounded public-historical-data research workflow, a versioned regime-model training/holdout backtest pipeline, and a cooperative process-local Paper scheduler. These are research and simulation components, not an autonomous production service. Provider-backed production account state, live venue reconciliation, OS-level service installation, data-use rights review, independent risk/security review and host acceptance remain open. There is no supported command to start an autonomous live-trading bot. Do not enable Spot writes or interpret passing CI as trading authorization.
+- Phase 24 adds an explicitly bounded public-historical-data research workflow, a versioned regime-model training/holdout backtest pipeline, and a cooperative process-local Paper scheduler. The real-history workflow completed successfully on the review branch with 4,319 gap-free hourly BTC-USDT candles and recorded a model/backtest report. Its holdout accuracy (34.50%) underperformed the majority-class baseline (58.39%); the candidate is **not promoted** and remains research-only. See [the research report](docs/research/2026-10-20-nobitex-regime-holdout.md). Provider-backed production account state, live venue reconciliation, OS-level service installation, data-use rights review, independent risk/security review and host acceptance remain open. There is no supported command to start an autonomous live-trading bot. Do not enable Spot writes or interpret passing CI as trading authorization.
 
 ## Engineering principles
 
@@ -143,4 +143,5 @@ This is a safety-oriented implementation candidate, not a launchable automated t
 - [Read-only Nobitex USDT smoke-test runbook](docs/operations/live-readonly-nobitex-usdt-smoke-test.md)
 - [Phase 23: End-to-End Mock/Paper Runtime](docs/operations/phase-23-paper-runtime.md)
 - [Phase 24: Historical Regime Research and Process-Local Scheduler](docs/operations/phase-24-regime-training-supervisor.md)
+- [Nobitex Regime Model Holdout Research (real public OHLCV, research-only)](docs/research/2026-10-20-nobitex-regime-holdout.md)
 - [Technical debt and release gates](TECHNICAL_DEBT.md)

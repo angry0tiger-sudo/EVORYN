@@ -45,6 +45,12 @@ construct a market-data provider or launch an exchange-backed runtime. A product
 OS-level service installation, log/health monitoring, startup policy, independent review and recovery
 drills remain separate release gates.
 
+## Observed real-history run
+
+A successful workflow run on review-branch SHA `ba4bab8e46414fd8506b167f6ef8430d2d23abbb` completed the 180-day BTC-USDT hourly pipeline. It loaded 4,319 contiguous public OHLCV bars, trained the Random Forest, created a versioned model manifest and ran the final holdout backtest against the trained-regime, SMA crossover and buy-and-hold references. Both six-gate CI and the research workflow passed; all output files and checksums are retained in [Research Run #3](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277) and its [artifact](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277/artifacts/12222590242).
+
+This was a successful *pipeline execution*, not model acceptance. On 858 final-holdout weak labels, accuracy was 34.50%, balanced accuracy 25.40% and macro-F1 24.80%. A constant majority-class baseline achieved 58.39% accuracy. The trained-regime backtest returned -0.2411% after modeled costs, versus +1.4833% for buy-and-hold. The candidate is therefore retained for research and is not promoted into the active runtime. Full metrics, hashes, split details and limitations are in [the research record](../research/2026-10-20-nobitex-regime-holdout.md).
+
 ## Research limits and release status
 
 - Nobitex market-data use/commercial rights have not been independently reviewed. The report
