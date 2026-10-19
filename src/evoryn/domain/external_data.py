@@ -371,6 +371,8 @@ class NewsSentimentRecord:
             raise ValueError("Sentiment probabilities must sum to one.")
         if self.analyzed_at < self.article.retrieved_at:
             raise ValueError("Sentiment analysis cannot precede data retrieval.")
+        if self.analyzed_at < self.article.ingested_at:
+            raise ValueError("Sentiment analysis cannot precede article ingestion.")
         if self.label is SentimentLabel.UNKNOWN:
             raise ValueError(
                 "UNKNOWN sentiment must be represented by abstention, not probabilities."
