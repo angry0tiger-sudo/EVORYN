@@ -29,7 +29,7 @@ Before calling `poll_once`, provision each of the following using real, immutabl
 3. A registered `ExperimentSpec` in `SHADOW` mode for the candidate and a registered `ExperimentSpec` in `PAPER` mode for the current Paper Champion.
 4. A `ChampionChallengerController` restored from the same registry/ledger. Its active champion pointer must equal the supplied PAPER baseline ID.
 5. Candidate and baseline strategy implementations whose strategy IDs, versions and parameter maps match their respective registered specs. Candidate/baseline must share data version, feature schema, evaluation-config fingerprint, seed and train/validation/test splits.
-6. A reviewed regime classifier using the existing abstention contract, and a read-only Auto-Halt state provider. Lack of halt state is not interpreted as "not halted".
+6. A reviewed regime classifier using the existing abstention contract, a read-only Auto-Halt state provider, and a read-only `ShadowRiskAssessmentPort`. A risk-assessment exception/invalid result/reject/halt/abstain never advances virtual state. Lack of halt or risk state is not interpreted as pass.
 7. An explicitly approved Spot market, interval and data source. `NobitexRestCandleFeed` rejects unexpected market/interval/source and current, incomplete candles.
 
 The registered experiment's `dataset_version` is the underlying immutable training/research data identity shared by candidate and baseline. The current streaming feed contract is tracked separately as `feed_manifest_fingerprint`; do not label a stream as an immutable historical dataset without an actual dataset artifact.
@@ -77,11 +77,12 @@ feed = NobitexRestCandleFeed(
 #     strategy=registered_shadow_strategy,
 #     baseline_strategy=registered_paper_strategy,
 #     champion_controller=paper_champion_controller,
-#     regime_classifier=reviewed_abstaining_regime_classifier,
+# #     regime_classifier=reviewed_abstaining_regime_classifier,
+#     risk_assessor=reviewed_read_only_shadow_risk_assessor,
 #     auto_halt_status=read_only_auto_halt_status,
 # )
-service = ShadowPollingService(feed=feed, runner=shadow_runner)
-result = service.poll_once()
+# service = ShadowPollingService(feed=feed, runner=shadow_runner)
+# result = service.poll_once()
 ```
 
 Never put exchange credentials, URLs with secret query parameters, response bodies or headers in a Shadow snapshot or log. Public candle reads should not be given account/write credentials by default.
@@ -93,7 +94,7 @@ Never put exchange credentials, URLs with secret query parameters, response bodi
 3. Fetch one bounded history window. The service filters the forming candle. Warm-up candles are recorded as a startup reconciliation event and are not emitted as live decision signals; only the latest completed candle is processed for the initial decision.
 4. Each later polling call processes only candles newer than the last accepted candle. Duplicate or out-of-order candles are rejected; a gap latches a continuity block.
 5. Both candidate and active Paper baseline receive the same completed history. Their target exposure and virtual quantities are computed under the same virtual capital, allocation and quantity-step settings. Any candidate/baseline output failure rejects the whole comparison.
-6. A successful ledger append must happen before local virtual positions or history advance.
+6. A successful read-only risk assessment and successful ledger append must happen before local virtual positions or history advance.
 7. The scheduler should invoke `poll_once` at a cadence appropriate to the selected candle interval. The caller must provide cancellation/health supervision and avoid overlapping poll invocations; a scheduler is not bundled with this library.
 8. Archive operational metadata and the exact code/spec/registry fingerprints. Never promote Shadow data to Paper evidence automatically.
 
@@ -107,7 +108,7 @@ Never put exchange credentials, URLs with secret query parameters, response bodi
 - Candidate/baseline identity drift or Paper Champion pointer change: latch the run; register a fresh experiment and construct a new runner after review.
 - Ledger append/read/verification failure: stop processing. Do not continue with in-memory-only evidence or create a second ledger silently.
 - Strategy confidence is unavailable from the existing `CausalTargetStrategy` protocol and is recorded as null. Do not substitute regime confidence for strategy confidence.
-- `risk_assessment_status=NOT_EVALUATED` is deliberately explicit because this observer lacks a validated account/portfolio and order-book risk context. It must not be read as ALLOW.
+- `risk_assessment_status=NOT_EVALUATED` appears only when an earlier gate blocked a target before assessment. For a computed target, the injected `ShadowRiskAssessmentPort` must return an explicit observational pass; otherwise the result is reject/abstain. No production risk assessor was supplied or exercised here. Even `observational_pass` is not an exchange-order or Live RiskEngine authorization.
 - No counterfactual fills are simulated. Estimated notional and target quantities are not observed orders, executions, or evidence of profitability.
 
 ## Verification and rollout gate
