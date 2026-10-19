@@ -1136,7 +1136,7 @@ class PaperRuntimeSupervisor:
         try:
             return self.runtime.step(now=now)
         except Exception as exc:
-            result = self.runtime.halt(f"supervisor_exception:{type(exc).__name__}", now=now)
+            result = self.runtime.halt(f"supervisor_exception:{type(exc).__name__}")
             self.runtime = self._factory()
             return result
 

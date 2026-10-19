@@ -24,6 +24,7 @@ from evoryn.paper.broker import PaperOrderStatus
 from evoryn.risk.models import RiskLimits
 from evoryn.runtime.paper import (
     PaperRuntimeResult,
+    PaperRuntimeSupervisor,
     PaperStrategyRuntime,
     ProtectiveExitPolicy,
     RuntimeLedgerIntegrityError,
@@ -442,6 +443,28 @@ def test_runtime_refuses_feed_without_explicit_mock_boundary(tmp_path: Path) -> 
     feed.simulation_only = False
     with pytest.raises(ValueError, match="simulation_only"):
         build_runtime(tmp_path, feed, brain, clock, journal_path=journal_path)
+
+
+def test_supervisor_restarts_into_durable_halt_after_invalid_cycle_time(
+    tmp_path: Path,
+) -> None:
+    runtime, feed, brain, clock, journal_path = bootstrapped(tmp_path)
+    advance(runtime, feed, clock)
+    original_orders = runtime.broker.list_orders()
+
+    supervisor = PaperRuntimeSupervisor(
+        lambda: build_runtime(
+            tmp_path, feed, brain, clock, journal_path=journal_path
+        )
+    )
+    invalid_time = datetime(2026, 10, 19, 11, 0)
+    result = supervisor.step(now=invalid_time)
+
+    assert result.status is RuntimeStatus.HALTED
+    assert "supervisor_exception" in result.reason_code
+    assert supervisor.runtime.halted is True
+    assert supervisor.runtime.broker.list_orders() == original_orders
+    assert supervisor.runtime.journal.verify()
 
 
 def test_runtime_ledger_detects_tampered_persisted_event(tmp_path: Path) -> None:

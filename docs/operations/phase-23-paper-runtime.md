@@ -5,7 +5,7 @@
 Phase 23 provides a bounded composition root joining completed mock candles, the regime-classifier
 port, the existing hysteretic strategy selector and plugin registry, the deterministic Risk Engine,
 Paper Broker, independent Mock Spot ledger, portfolio builder, protective exit policy and SQLite
-runtime journal. The runtime rejects feeds unless they explicitly declare \`simulation_only=True\`.
+runtime journal. The runtime rejects feeds unless they explicitly declare `simulation_only=True`.
 It contains no live exchange transport, signed gateway or production scheduler.
 
 ## One-cycle processing
@@ -39,15 +39,16 @@ remains latched. Recovery intentionally does not guess whether an interrupted op
 The hash chain detects corruption, but is not a signature against a privileged attacker who can
 rewrite the database and its contents.
 
-\`PaperRuntimeSupervisor\` wraps one bounded cycle and can reconstruct from the same journal after
+`PaperRuntimeSupervisor` wraps one bounded cycle and can reconstruct from the same journal after
 an exception. It is not an OS service manager, and it does not automatically clear a halt.
 
 ## Integration coverage
 
-\`tests/integration/test_paper_strategy_runtime.py\` uses synthetic in-memory feed and brain doubles
+`tests/integration/test_paper_strategy_runtime.py` uses synthetic in-memory feed and brain doubles
 to test brain → selector → target intent → Risk Engine → Paper fill → separate ledger reconciliation,
 portfolio reservations, protective exit, clean restart without duplicate orders, fail-closed
-interrupted-intent recovery, enforcement of the mock-only feed marker, and corruption detection.
+interrupted-intent recovery, supervisor restart into a persisted halt, enforcement of the mock-only
+feed marker, and corruption detection.
 
 All this phase's tests are offline and simulated. Green CI does not prove production exchange
 compatibility, profitability, Windows-host acceptance, or authorization for Live.
