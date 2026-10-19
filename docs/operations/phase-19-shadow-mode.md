@@ -32,7 +32,7 @@ Before calling `poll_once`, provision each of the following using real, immutabl
 6. A reviewed regime classifier using the existing abstention contract, a read-only Auto-Halt state provider, and a read-only `ShadowRiskAssessmentPort`. A risk-assessment exception/invalid result/reject/halt/abstain never advances virtual state. Lack of halt or risk state is not interpreted as pass.
 7. An explicitly approved Spot market, interval and data source. `NobitexRestCandleFeed` rejects unexpected market/interval/source and current, incomplete candles.
 
-The registered experiment's `dataset_version` is the underlying immutable training/research data identity shared by candidate and baseline. The current streaming feed contract is tracked separately as `feed_manifest_fingerprint`; do not label a stream as an immutable historical dataset without an actual dataset artifact.
+The registered experiment's `dataset_version` and `evaluation_config_fingerprint` identify the static training/research evaluation settings shared by candidate and baseline. The Shadow runtime's virtual budget/allocation/quantity-step policy is recorded separately as `projection_config_fingerprint`, and the current streaming feed contract as `feed_manifest_fingerprint`. Do not silently replace a Paper Champion's historical evaluation fingerprint with a new Shadow projection-policy fingerprint or label a stream as an immutable historical dataset.
 
 ## API integration shape
 
