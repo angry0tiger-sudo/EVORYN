@@ -7,7 +7,7 @@
 
 ## Source snapshot
 
-Current branch snapshot after the latest verification-ledger update: HEAD `c9a4d9023efc2a7a9c3cbea905b341ece14079f0`, tree SHA `0658aea51804e65b1de5979ca14490f2fea7a1a9`. The Phase 19 Python source/test blobs below are unchanged from the previous structural check; the latest commits update evidence and technical-debt documentation only.
+The current Phase 19 code snapshot under review is HEAD `2ac41e6b10942a3f78f2f1a84610dabf8a0b3669`, tree SHA `6390c966fc8eee19ebd2f35db45787e5fbd656bb`. Subsequent commits update only verification/technical-debt documentation; the Phase 19 Python source/test blobs below remain unchanged.
 
 The Git tree recorded these exact source blobs:
 - `src/evoryn/shadow/engine.py`: `d1e1c968268b853e0e763aaed2a516003a9368c4`
@@ -17,7 +17,7 @@ The Git tree recorded these exact source blobs:
 - `src/evoryn/shadow/__init__.py`: `8b2fc7c18ba3680a1cccb35ede5e55618884a17e`
 - `docs/adr/0012-shadow-mode-observation-only.md`: `bb3b18edcabc1641ad930d4f5bdeb96b20e2aba5`
 - `docs/operations/phase-19-shadow-mode.md`: `b777b4242965e6fb93aecf7cb206c102b2b230aa`
-- `TECHNICAL_DEBT.md`: `c791c58a1ebba750257f9f6a31b07897bfc66cc9`
+- `TECHNICAL_DEBT.md`: `c00f7c7d16a6d82124d5c89420a15e3fe7fdeeeb`
 
 These are Git blob identifiers from the repository tree, not claims that Python executed them.
 
@@ -32,13 +32,14 @@ These are static source/structure checks. **They are not a Python compile, pytes
 
 ## CI execution evidence
 
-Latest CI evidence before the evidence-only documentation commits:
-- Run #675 / ID `39218669025` (push) on candidate head `4bc4da16e39c2c80165bedfe021ffca88f0acacc`.
-- Run #676 / ID `39218674816` (pull request) on the same candidate head.
+Latest CI evidence for the unchanged Phase 19 code snapshot:
+- Run #679 / ID `39219231822` (push), head `2ac41e6b10942a3f78f2f1a84610dabf8a0b3669`.
+- Run #680 / ID `39219239566` (pull request), same head.
+- Earlier runs #677 / ID `39219166878` (push) and #678 / ID `39219173234` (pull request) also failed on an evidence-documentation-only snapshot.
 
-In both runs, all six jobs (preflight, pytest, Ruff, mypy, Bandit, pip-audit) concluded `failure` within approximately three seconds. Every job reported `runner_id=0`, empty `runner_name` and `steps=[]`. Fetching preflight logs returned `BlobNotFound`; no diagnostic artifact was available. This confirms that no runner executed the commands. A later evidence-only commit updates this report and the technical-debt ledger; its CI result must be checked separately.
+In runs #679 and #680, all six jobs (preflight, pytest, Ruff, mypy, Bandit, pip-audit) concluded `failure` in approximately three seconds. Every job reported `runner_id=0`, empty `runner_name` and `steps=[]`. Fetching preflight job logs returned `BlobNotFound`; no diagnostic artifact was available. The latest jobs therefore did not execute the configured commands. Further documentation-only commits do not change the referenced Python blobs.
 
-The reason the hosted runner was not allocated is still unconfirmed. Quota exhaustion remains a diagnostic hypothesis, not a fact established by the API.
+The reason GitHub did not allocate a hosted runner remains unconfirmed. Quota exhaustion is still a diagnostic hypothesis, not a fact established by the API.
 
 ## Local execution status
 
