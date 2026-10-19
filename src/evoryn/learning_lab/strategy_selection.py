@@ -28,7 +28,11 @@ from evoryn.learning_lab.backtest import (
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.strategies.contracts import CausalTargetStrategy
 from evoryn.strategies.plugins import StrategyPluginRegistry
-from evoryn.strategies.selector import RegimeStrategySelector, StrategySelectionPolicy
+from evoryn.strategies.selector import (
+    STRATEGY_SELECTOR_VERSION,
+    RegimeStrategySelector,
+    StrategySelectionPolicy,
+)
 
 
 class TrainingManifestPort(Protocol):
@@ -81,6 +85,7 @@ class AdaptiveRegimeStrategy:
         values = {
             "dataset_id": self.dataset_id,
             "dataset_version": self.dataset_version,
+            "selector_engine_version": STRATEGY_SELECTOR_VERSION,
             "registry_fingerprint": self.registry.fingerprint,
             "routing_fingerprint": self.selector.routing_fingerprint,
             "selection_policy": json.dumps(
@@ -193,6 +198,7 @@ class StrategySelectionOOSReport:
                 {
                     "event_id": entry.event_id,
                     "correlation_id": entry.correlation_id,
+                    "selector_version": entry.selector_version,
                     "recorded_at": _iso_utc(entry.recorded_at),
                     "regime_as_of": _iso_utc(entry.regime_as_of),
                     "market_symbol": entry.market_symbol,
@@ -350,10 +356,12 @@ def evaluate_strategy_selector_out_of_sample(
         },
         "adaptive_run_id": adaptive_result.run_id,
         "fixed_baseline_run_id": fixed_result.run_id,
+        "selector_engine_version": STRATEGY_SELECTOR_VERSION,
         "registry_fingerprint": registry.fingerprint,
         "routing_fingerprint": selector.routing_fingerprint,
         "model_metadata": dict(metadata),
         "selection_policy": selection_policy.as_dict(),
+        "selector_engine_version": STRATEGY_SELECTOR_VERSION,
         "model_training_manifest": json.loads(manifest_json),
     }
     report_id = hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
