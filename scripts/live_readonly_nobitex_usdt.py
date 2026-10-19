@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import sys
-
-from dotenv import load_dotenv
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+
+from dotenv import load_dotenv
 
 from evoryn.adapters.exchanges.nobitex_account import (
     NobitexAccountTransport,
