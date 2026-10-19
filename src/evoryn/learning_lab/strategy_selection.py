@@ -256,10 +256,14 @@ def evaluate_strategy_selector_out_of_sample(
     manifest = detector.training_manifest
     if manifest is None:
         raise ValueError("OOS selector evaluation requires a fitted model training manifest.")
+    initial_registry_fingerprint = registry.fingerprint
+    initial_model_metadata = dict(detector.model_metadata)
     if manifest.training_dataset_version != dataset.version:
         raise ValueError("Regime model was trained on a different dataset version.")
     if manifest.training_split != "train":
         raise ValueError("OOS selector evaluation requires a model fitted only on train.")
+    if detector.model_metadata.get("model_fingerprint") != manifest.model_fingerprint:
+        raise ValueError("Model metadata fingerprint does not match its training manifest.")
     if (
         manifest.train_start_index < partitions.train.start
         or manifest.train_end_index_exclusive > partitions.train.end
@@ -276,6 +280,7 @@ def evaluate_strategy_selector_out_of_sample(
         raise ValueError("Fixed comparison strategy requires strategy_version.")
 
     ledger = decision_ledger or ExecutionLedger()
+    initial_ledger_length = len(ledger.strategy_selections)
     selector = RegimeStrategySelector(
         registry,
         policy=selection_policy,
@@ -306,6 +311,11 @@ def evaluate_strategy_selector_out_of_sample(
         warmup_start_index=0,
         segment_name="fixed-strategy-out-of-sample-test",
     )
+    if registry.fingerprint != initial_registry_fingerprint:
+        raise ValueError("Strategy registry changed during OOS evaluation; report is invalid.")
+    if dict(detector.model_metadata) != initial_model_metadata:
+        raise ValueError("Regime-model identity changed during OOS evaluation; report is invalid.")
+
     adaptive_expectancy = adaptive_result.metrics.expectancy_per_closed_trade
     fixed_expectancy = fixed_result.metrics.expectancy_per_closed_trade
     expectancy_delta = (
@@ -315,7 +325,7 @@ def evaluate_strategy_selector_out_of_sample(
     )
     metadata = tuple(sorted((str(key), str(value)) for key, value in detector.model_metadata.items()))
     manifest_json = _canonical_json_bytes(manifest.to_dict()).decode("utf-8")
-    decision_entries = ledger.strategy_selections
+    decision_entries = ledger.strategy_selections[initial_ledger_length:]
     run_material = {
         "dataset_id": dataset.dataset_id,
         "dataset_version": dataset.version,
