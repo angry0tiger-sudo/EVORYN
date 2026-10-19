@@ -334,14 +334,31 @@ class NewsSentimentRecord:
     model_revision: str
     model_license_id: str
     model_card_uri: str
+    model_training_dataset_id: str
+    model_training_dataset_revision: str
+    model_training_dataset_license_id: str
+    model_training_data_rights_verified: bool
+    commercial_use_approved: bool
     feature_schema_version: str = "news-sentiment/v1"
 
     def __post_init__(self) -> None:
         require_aware_utc(self.analyzed_at, "analyzed_at")
-        for name in ("model_id", "model_revision", "model_license_id", "feature_schema_version"):
+        for name in (
+            "model_id",
+            "model_revision",
+            "model_license_id",
+            "model_training_dataset_id",
+            "model_training_dataset_revision",
+            "model_training_dataset_license_id",
+            "feature_schema_version",
+        ):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty.")
         valid_https_url(self.model_card_uri, "model_card_uri")
+        if type(self.model_training_data_rights_verified) is not bool:
+            raise ValueError("model_training_data_rights_verified must be explicit.")
+        if type(self.commercial_use_approved) is not bool:
+            raise ValueError("commercial_use_approved must be explicit.")
         values = (
             self.positive_probability,
             self.neutral_probability,
