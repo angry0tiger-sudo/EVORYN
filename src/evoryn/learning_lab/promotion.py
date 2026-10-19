@@ -56,6 +56,7 @@ class RollbackTrigger(StrEnum):
     DATA_QUALITY_FAILED = "data_quality_failed"
     RISK_GATE_DENIAL = "risk_gate_denial"
     MODEL_OR_DATA_IDENTITY_MISMATCH = "model_or_data_identity_mismatch"
+    TELEMETRY_ATTESTATION_FAILED = "telemetry_attestation_failed"
 
 
 class ReleaseTarget(StrEnum):
@@ -709,6 +710,8 @@ class ChampionChallengerController:
             trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
         elif evidence.mode is not ExperimentMode.PAPER:
             trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
+        elif not self._has_trusted_telemetry(evidence):
+            trigger = RollbackTrigger.TELEMETRY_ATTESTATION_FAILED
         elif not evidence.data_quality_pass:
             trigger = RollbackTrigger.DATA_QUALITY_FAILED
         elif (
@@ -793,6 +796,18 @@ class ChampionChallengerController:
         return self._record_health_assessment(
             decision, experiment_id=evidence.experiment_id, correlation_id=correlation_id
         )
+
+    def _has_trusted_telemetry(self, evidence: ExperimentRunEvidence) -> bool:
+        """Fail closed if Paper health evidence lacks an accepted external attestation."""
+        verifier = self._evidence_trust_verifier
+        if verifier is None:
+            return False
+        try:
+            spec = self._registry.get(evidence.experiment_id)
+            return bool(verifier.verify(evidence, spec))
+        except Exception:
+            # Verification infrastructure errors are not health evidence; fail closed.
+            return False
 
     def _record_health_assessment(
         self,
