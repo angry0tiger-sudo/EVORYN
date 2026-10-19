@@ -23,10 +23,10 @@ from evoryn.intelligence.regime import RegimeLabel, RegimePrediction
 from evoryn.paper.broker import PaperOrderStatus
 from evoryn.risk.models import RiskLimits
 from evoryn.runtime.paper import (
+    PaperRuntimeResult,
     PaperStrategyRuntime,
     ProtectiveExitPolicy,
     RuntimeLedgerIntegrityError,
-    PaperRuntimeResult,
     RuntimeStatus,
     SQLitePaperRuntimeLedger,
 )
