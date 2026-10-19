@@ -172,7 +172,7 @@ def strategy_fingerprint(strategy: CausalTargetStrategy) -> str:
 class ShadowRiskAssessmentStatus(StrEnum):
     """Observational risk check outcomes; none authorizes real or Paper execution."""
 
-    OBSERVATIONAL_PASS = "observational_pass"
+    OBSERVATIONAL_ACCEPTED = "observational_accepted"
     REJECT = "reject"
     HALT = "halt"
     ABSTAIN = "abstain"
@@ -945,7 +945,7 @@ class ShadowRunner:
                     risk_status = risk_result.status.value
                     risk_reason_code = risk_result.reason_code
                     risk_reason = risk_result.explanation
-                    if risk_result.status is ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS:
+                    if risk_result.status is ShadowRiskAssessmentStatus.OBSERVATIONAL_ACCEPTED:
                         outcome = _outcome_for(self._target_quantity, shadow_target_quantity)
                         reason_code = "SHADOW_TARGET_COMPUTED"
                         explanation = (
@@ -1154,7 +1154,7 @@ class ShadowRunner:
             ) from exc
         if (
             not isinstance(risk_result, ShadowRiskAssessment)
-            or risk_result.status is not ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS
+            or risk_result.status is not ShadowRiskAssessmentStatus.OBSERVATIONAL_ACCEPTED
         ):
             raise ShadowSafetyError(
                 "Risk assessment did not pass for reconciled Shadow target; state was not reset."
