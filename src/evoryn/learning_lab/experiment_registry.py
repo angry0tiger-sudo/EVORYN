@@ -49,6 +49,11 @@ class LearningEventType(StrEnum):
     RELEASE_APPROVED = "release_approved"
     RELEASE_REJECTED = "release_rejected"
     LIVE_RELEASE_BLOCKED = "live_release_blocked"
+    SHADOW_RUN_STARTED = "shadow_run_started"
+    SHADOW_DECISION_RECORDED = "shadow_decision_recorded"
+    SHADOW_INPUT_REJECTED = "shadow_input_rejected"
+    SHADOW_FEED_FAILURE = "shadow_feed_failure"
+    SHADOW_RECONCILIATION = "shadow_reconciliation"
 
 
 class ExperimentIntegrityError(ValueError):
