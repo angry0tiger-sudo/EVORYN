@@ -262,16 +262,21 @@ def test_hysteresis_requires_distinct_evidence_stability_and_minimum_hold() -> N
     at_four = select_at(selector, RegimeLabel.BEAR_TREND, 4)
     at_five = select_at(selector, RegimeLabel.BEAR_TREND, 5)
     at_six = select_at(selector, RegimeLabel.BEAR_TREND, 6)
+    at_seven = select_at(selector, RegimeLabel.BEAR_TREND, 7)
+    at_eight = select_at(selector, RegimeLabel.BEAR_TREND, 8)
+    switched_flat = select_at(selector, RegimeLabel.BEAR_TREND, 9)
+
     assert at_four.status is SelectionStatus.CANDIDATE_PENDING
     assert at_five.evidence_count == 2
     assert at_six.status is SelectionStatus.CANDIDATE_PENDING
     assert at_six.selected_strategy_id == "sma-crossover-long-flat"
-
-    switched_flat = select_at(selector, RegimeLabel.BEAR_TREND, 9)
+    assert at_seven.status is SelectionStatus.CANDIDATE_PENDING
+    assert at_eight.status is SelectionStatus.CANDIDATE_PENDING
     assert switched_flat.status is SelectionStatus.SWITCHED
     assert switched_flat.previous_strategy_id == "sma-crossover-long-flat"
     assert switched_flat.selected_strategy_id == "flat-no-position"
-    assert len(ledger.strategy_selections) == 7
+    assert switched_flat.evidence_count == 6
+    assert len(ledger.strategy_selections) == 9
     assert all(
         entry.market_symbol == MARKET.symbol
         for entry in ledger.strategy_selections
