@@ -9,11 +9,11 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from threading import RLock
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from evoryn.intelligence.model_provider import (
     ConfidenceSemantics,
@@ -142,7 +142,7 @@ class HuggingFaceSequenceClassificationProvider:
         cache_dir: Path | None = None,
         max_input_chars: int = 8_000,
         max_token_count: int = 512,
-        clock: Any | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         if identity.provider_id != "huggingface-local":
             raise ValueError("Local Hugging Face identities must use provider_id='huggingface-local'.")
@@ -152,8 +152,6 @@ class HuggingFaceSequenceClassificationProvider:
             raise ValueError("max_input_chars must be a positive integer.")
         if type(max_token_count) is not int or max_token_count <= 0:
             raise ValueError("max_token_count must be a positive integer.")
-        if clock is not None and not callable(clock):
-            raise ValueError("clock must be callable.")
         self._identity = identity
         self._runtime = runtime or TransformersSequenceClassificationRuntime(cache_dir=cache_dir)
         self._max_input_chars = max_input_chars
@@ -232,6 +230,6 @@ class HuggingFaceSequenceClassificationProvider:
 
     def _now(self) -> datetime:
         value = self._clock() if self._clock is not None else datetime.now(UTC)
-        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != timedelta(0):
             raise ModelProviderError("Local model clock must return an aware UTC timestamp.")
         return value
