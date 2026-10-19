@@ -36,8 +36,14 @@ class _SameHostHttpsRedirects(HTTPRedirectHandler):
     """Allow redirects only to the same HTTPS origin."""
 
     def redirect_request(
-        self, request, fp, code, message, headers, new_url
-    ):
+        self,
+        request: Any,
+        fp: Any,
+        code: int,
+        message: str,
+        headers: Any,
+        new_url: str,
+    ) -> Any:
         original = urlsplit(request.full_url)
         target = urlsplit(new_url)
         if (
@@ -116,7 +122,9 @@ class HttpsJsonTransport:
                 if declared_length:
                     try:
                         if int(declared_length) > self._max_response_bytes:
-                            raise JsonApiError("Provider response exceeded the configured size cap.")
+                            raise JsonApiError(
+                                "Provider response exceeded the configured size cap."
+                            )
                     except ValueError as exc:
                         raise JsonApiError("Provider supplied an invalid Content-Length.") from exc
                 raw = response.read(self._max_response_bytes + 1)
