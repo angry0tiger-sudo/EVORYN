@@ -501,7 +501,9 @@ class StrategySelectionOOSReportStore:
             existing_report = destination.read_bytes()
             existing_checksum = checksum_path.read_text(encoding="ascii")
         except (OSError, UnicodeDecodeError) as exc:
-            raise ValueError("Existing OOS report package is incomplete; refusing overwrite.") from exc
+            raise ValueError(
+                "Existing OOS report package is incomplete; refusing overwrite."
+            ) from exc
         if existing_report != report_bytes or existing_checksum != f"{report_hash}\n":
             raise ValueError("Existing OOS report ID has conflicting report/checksum bytes.")
         return destination
