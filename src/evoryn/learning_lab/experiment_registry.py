@@ -85,11 +85,21 @@ class ExperimentSpec:
         _require_aware_utc(self.created_at, "created_at")
         if not self.parameters:
             raise ValueError("Experiment parameters must be recorded explicitly.")
+        if not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in self.parameters
+        ):
+            raise ValueError("Experiment parameters must be string key/value pairs.")
         if tuple(sorted(self.parameters)) != self.parameters:
             raise ValueError("Experiment parameters must be sorted by key.")
         if len({key for key, _ in self.parameters}) != len(self.parameters):
             raise ValueError("Experiment parameter keys must be unique.")
-        if any(not key.strip() or not isinstance(value, str) for key, value in self.parameters):
+        if any(
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            for key, value in self.parameters
+        ):
             raise ValueError("Experiment parameters must use non-empty keys and string values.")
         if not (
             self.train_range.end <= self.validation_range.start
@@ -301,6 +311,8 @@ class ExperimentRunEvidence:
         collected_at: datetime,
     ) -> ExperimentRunEvidence:
         """Capture a backtest result under a spec; it remains BACKTEST-only evidence."""
+        if spec.mode is not ExperimentMode.BACKTEST:
+            raise ValueError("Backtest replay evidence requires an experiment registered in BACKTEST mode.")
         if result.dataset_version != spec.dataset_version:
             raise ValueError("Backtest result dataset differs from experiment specification.")
         if result.evaluation_range != spec.test_range:
