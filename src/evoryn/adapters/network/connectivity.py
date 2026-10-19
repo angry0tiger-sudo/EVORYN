@@ -124,7 +124,10 @@ class RetryPolicy:
             or self.jitter_fraction > 1
         ):
             raise ValueError("jitter_fraction must be finite and in [0, 1].")
-        if any(type(code) is not int or not 400 <= code <= 599 for code in self.retryable_status_codes):
+        if any(
+            type(code) is not int or not 400 <= code <= 599
+            for code in self.retryable_status_codes
+        ):
             raise ValueError("retryable_status_codes must contain HTTP error status integers.")
 
 
@@ -275,9 +278,18 @@ class FeedFreshnessGuard:
                 delta = (observed_at - self._last_observed_at).total_seconds()
                 if delta < 0 or (delta == 0 and self._policy.reject_equal_timestamps):
                     reason = "duplicate_or_out_of_order_timestamp"
-                elif self._policy.max_gap_seconds is not None and delta > self._policy.max_gap_seconds:
+                elif (
+                    self._policy.max_gap_seconds is not None
+                    and delta > self._policy.max_gap_seconds
+                ):
                     reason = "observation_gap"
             if reason is None:
+                # Do not advance sequence state unless the acceptance event is durably recorded.
+                self._emit(
+                    cid,
+                    ConnectionEventType.FEED_FRESHNESS_ACCEPTED,
+                    freshness_age_seconds=max(0.0, age),
+                )
                 self._last_observed_at = observed_at
         if reason is not None:
             self._emit(
@@ -287,23 +299,18 @@ class FeedFreshnessGuard:
                 freshness_age_seconds=age,
             )
             raise FeedFreshnessError(f"Feed observation rejected by freshness gate: {reason}.")
-        self._emit(
-            cid,
-            ConnectionEventType.FEED_FRESHNESS_ACCEPTED,
-            freshness_age_seconds=max(0.0, age),
-        )
         return max(0.0, age)
 
     def reset_after_reconciliation(self, *, evidence_ref: str) -> None:
         """Reset continuity only after an upstream caller supplies reconciliation evidence."""
         ref = _validate_identifier(evidence_ref, "evidence_ref")
-        self._emit(
-            _correlation_id(None),
-            ConnectionEventType.FEED_FRESHNESS_RESET,
-            reason="explicit_reconciliation",
-            evidence_ref=ref,
-        )
         with self._lock:
+            self._emit(
+                _correlation_id(None),
+                ConnectionEventType.FEED_FRESHNESS_RESET,
+                reason="explicit_reconciliation",
+                evidence_ref=ref,
+            )
             self._last_observed_at = None
 
     def _emit(
@@ -352,7 +359,9 @@ class ConnectivityManager:
         if type(route_authorized) is not bool:
             raise ValueError("route_authorized must be an explicit boolean.")
         if not route_authorized:
-            raise PermissionError("The configured network route has not been explicitly authorized.")
+            raise PermissionError(
+                "The configured network route has not been explicitly authorized."
+            )
         if not allowed_hosts:
             raise ValueError("A non-empty destination host allowlist is required.")
         self._allowed_hosts = frozenset(_normalize_host(host) for host in allowed_hosts)
@@ -390,7 +399,9 @@ class ConnectivityManager:
                 target_id="<invalid-or-unapproved>",
                 reason="https_host_allowlist",
             )
-            raise JsonApiError("Request destination failed connectivity policy validation.", kind="policy")
+            raise JsonApiError(
+                "Request destination failed connectivity policy validation.", kind="policy"
+            )
 
         self._wait_for_rate_limit(cid, host)
         if not self._breaker.admit():
@@ -401,7 +412,9 @@ class ConnectivityManager:
                 circuit_state=self._breaker.state,
                 reason="circuit_open",
             )
-            raise CircuitOpenError("Connection circuit is open; request denied before transport access.")
+            raise CircuitOpenError(
+                "Connection circuit is open; request denied before transport access."
+            )
 
         last_error: JsonApiError | None = None
         last_cause: OSError | None = None
@@ -583,7 +596,9 @@ def _record_event(sink: ConnectionAuditSink, event: ConnectionEvent) -> None:
     try:
         sink.record(event)
     except Exception as exc:
-        raise ConnectivityAuditError("Connection audit failed; network/data flow is blocked.") from exc
+        raise ConnectivityAuditError(
+            "Connection audit failed; network/data flow is blocked."
+        ) from exc
 
 
 def _correlation_id(value: str | None) -> str:
@@ -594,7 +609,9 @@ def _correlation_id(value: str | None) -> str:
 
 def _validate_identifier(value: str, name: str) -> str:
     if not isinstance(value, str) or not _SAFE_ID.fullmatch(value):
-        raise ValueError(f"{name} must contain 1-128 ASCII letters, digits, dot, underscore, colon or hyphen.")
+        raise ValueError(
+            f"{name} must contain 1-128 ASCII letters, digits, dot, underscore, colon or hyphen."
+        )
     return value
 
 
