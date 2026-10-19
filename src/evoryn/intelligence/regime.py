@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 from evoryn.domain.models import MarketCandle
 
@@ -56,6 +56,10 @@ class RegimeFeatureVector:
     volume_ratio: Decimal
 
     def __post_init__(self) -> None:
+        if not isinstance(self.label, RegimeLabel):
+            raise ValueError("Prediction label must be a canonical RegimeLabel.")
+        if type(self.abstained) is not bool:
+            raise ValueError("abstained must be an explicit boolean.")
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("Feature as_of must be timezone-aware.")
         if self.sample_count <= 0:
@@ -241,6 +245,14 @@ class RegimePrediction:
             raise ValueError("UNKNOWN must represent an explicit abstention.")
         if self.label is not RegimeLabel.UNKNOWN and self.abstained:
             raise ValueError("A classified regime must not be marked as abstained.")
+        if self.label is not RegimeLabel.UNKNOWN and not self.probabilities:
+            raise ValueError("A classified regime must include its full probability distribution.")
+        if (
+            self.label is RegimeLabel.UNKNOWN
+            and not self.probabilities
+            and self.confidence != Decimal("0")
+        ):
+            raise ValueError("UNKNOWN without probabilities must have zero confidence.")
         if not self.model_id.strip() or not self.model_version.strip():
             raise ValueError("Model identity and version are required.")
         if not self.feature_schema_version.strip() or not self.reason_code.strip():
@@ -266,6 +278,8 @@ class RegimePrediction:
             raise ValueError("Recorded max_data_age_intervals must be positive.")
         if self.probabilities:
             labels = tuple(label for label, _ in self.probabilities)
+            if any(not isinstance(label, RegimeLabel) for label in labels):
+                raise ValueError("Every probability key must be a canonical RegimeLabel.")
             if set(labels) != {
                 RegimeLabel.BULL_TREND,
                 RegimeLabel.BEAR_TREND,
@@ -274,7 +288,10 @@ class RegimePrediction:
             } or len(labels) != 4:
                 raise ValueError("Probability output must include each known regime exactly once.")
             if any(
-                not probability.is_finite() or probability < 0 or probability > 1
+                not isinstance(probability, Decimal)
+                or not probability.is_finite()
+                or probability < 0
+                or probability > 1
                 for _, probability in self.probabilities
             ):
                 raise ValueError("Each regime probability must be finite and in [0, 1].")
@@ -283,6 +300,18 @@ class RegimePrediction:
                 - Decimal("1")
             ) > Decimal("0.000001"):
                 raise ValueError("Regime probabilities must sum to one.")
+            if self.label is not RegimeLabel.UNKNOWN:
+                probability_by_label = dict(self.probabilities)
+                if probability_by_label[self.label] != self.confidence:
+                    raise ValueError(
+                        "Classified confidence must equal the selected label's probability."
+                    )
+                if any(
+                    probability > self.confidence
+                    for label, probability in self.probabilities
+                    if label is not self.label
+                ):
+                    raise ValueError("Selected regime must have the maximum reported probability.")
 
 
 class RegimeProbabilityModel(Protocol):
@@ -373,6 +402,22 @@ class AbstainingRegimeDetector:
         self._model = model
         self._features = feature_extractor or RegimeFeatureExtractor()
         self._thresholds = thresholds or RegimeThresholds()
+
+    @property
+    def training_manifest(self) -> Any | None:
+        """Expose optional, versioned training evidence for out-of-sample evaluation gates."""
+        return getattr(self._model, "training_manifest", None)
+
+    @property
+    def model_metadata(self) -> dict[str, str]:
+        """Expose versioned model identity needed to fingerprint selector experiments."""
+        return {
+            "model_id": self._model.model_id,
+            "model_version": self._model.model_version,
+            "model_fingerprint": self._model.model_fingerprint,
+            "confidence_semantics": self._model.confidence_semantics,
+            "feature_schema_version": self._features.feature_schema_version,
+        }
 
     def classify(
         self, completed_history: Sequence[MarketCandle], *, now: datetime

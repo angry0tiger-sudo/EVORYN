@@ -72,6 +72,21 @@ class SmaTrendBaseline:
         return Decimal("1") if history[-1].close > mean else Decimal("0")
 
 
+@dataclass(frozen=True, slots=True)
+class FlatBaseline:
+    """Always-flat, no-position comparator for adverse/uncertain market regimes."""
+
+    strategy_id: str = "flat-no-position"
+    strategy_version: str = "1.0.0"
+
+    def parameters(self) -> dict[str, str]:
+        return {"position_policy": "always_flat", "signal_price": "none"}
+
+    def target_exposure(self, history: Sequence[MarketCandle]) -> Decimal:
+        """Propose zero exposure regardless of regime or market history."""
+        return Decimal("0")
+
+
 def _mean(values: tuple[Decimal, ...]) -> Decimal:
     if not values:
         raise ValueError("Cannot calculate a moving average from an empty sequence.")

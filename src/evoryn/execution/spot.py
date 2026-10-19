@@ -14,6 +14,7 @@ from threading import RLock
 from typing import Callable
 
 from evoryn.domain.models import Fill, Market, MarketSnapshot, OrderRequest, Side
+from evoryn.domain.strategy_decisions import StrategySelectionLedgerEntry
 from evoryn.paper.broker import PaperBroker, PaperOrder, PaperOrderStatus
 from evoryn.risk.models import RiskAction, RiskResult
 
@@ -194,6 +195,7 @@ class ExecutionLedger:
         self._balances: list[BalanceLedgerEntry] = []
         self._errors: list[ExecutionErrorEntry] = []
         self._reconciliations: list[ReconciliationReport] = []
+        self._strategy_selections: list[StrategySelectionLedgerEntry] = []
 
     @property
     def intents(self) -> tuple[IntentLedgerEntry, ...]:
@@ -225,6 +227,12 @@ class ExecutionLedger:
         with self._lock:
             return tuple(self._reconciliations)
 
+    @property
+    def strategy_selections(self) -> tuple[StrategySelectionLedgerEntry, ...]:
+        """Return the append-only strategy-selection ledger in recorded order."""
+        with self._lock:
+            return tuple(self._strategy_selections)
+
     def record_error(self, entry: ExecutionErrorEntry) -> None:
         with self._lock:
             self._errors.append(entry)
@@ -250,6 +258,13 @@ class ExecutionLedger:
     def record_reconciliation(self, report: ReconciliationReport) -> None:
         with self._lock:
             self._reconciliations.append(report)
+
+    def record_strategy_selection(self, entry: StrategySelectionLedgerEntry) -> None:
+        """Append a selection/abstention outcome without granting execution authority."""
+        with self._lock:
+            if any(old.event_id == entry.event_id for old in self._strategy_selections):
+                raise ValueError("A strategy-selection event ID must be unique.")
+            self._strategy_selections.append(entry)
 
 
 class MockSpotExchangeAdapter:
