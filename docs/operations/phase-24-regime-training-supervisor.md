@@ -61,7 +61,10 @@ This was a successful *pipeline execution*, not model acceptance. On 858 final-h
 - No performance metric on a single historical holdout establishes future profitability. Data-derived
   labels can be noisy, and a holdout may contain a different regime mix from future markets.
 - Model artifacts use joblib/pickle-compatible serialization. Only load artifacts fetched from a
-  trusted, verified workflow artifact; an adjacent manifest hash alone is not an authenticity
-  signature against an attacker who can replace both files.
+  trusted, verified workflow artifact. The loader requires independently pinned SHA-256 digests for
+  both model and manifest before deserialization, then checks the embedded digest, model version,
+  feature schema, estimator class order and feature dimension. The pins must come from a trusted
+  review/release record rather than the adjacent manifest; hashes in two replaceable files are not
+  an authenticity signature against an attacker who can replace both files.
 - The workflow makes no authenticated account request and sends no real orders. Model output remains
   advisory and the live order-write gate remains disabled.

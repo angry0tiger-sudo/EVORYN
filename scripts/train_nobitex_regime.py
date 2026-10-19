@@ -7,6 +7,7 @@ submission exists in this script. All outputs are ephemeral research artifacts u
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -102,6 +103,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     output = args.output.expanduser().resolve()
     store = HistoricalDatasetStore(output / "datasets")
     dataset_reference = store.save(dataset)
+    dataset = store.load(dataset_reference.dataset_id, dataset_reference.version)
+    stored_candle_sha256 = hashlib.sha256(dataset.candles_csv_bytes()).hexdigest()
+    stored_manifest_sha256 = hashlib.sha256(
+        (Path(dataset_reference.path) / "manifest.json").read_bytes()
+    ).hexdigest()
+    if (
+        dataset.dataset_id != dataset_reference.dataset_id
+        or dataset.version != dataset_reference.version
+        or len(dataset.candles) != dataset_reference.candle_count
+        or stored_candle_sha256 != dataset_reference.candles_sha256
+        or stored_manifest_sha256 != dataset_reference.manifest_sha256
+    ):
+        raise RuntimeError("Persisted historical dataset failed post-write verification.")
     report = train_regime_model(
         dataset,
         artifact_dir=output,

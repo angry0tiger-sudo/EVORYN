@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -12,6 +14,7 @@ from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.regime import RegimeLabel
 from evoryn.intelligence.regime_training import RegimeTrainingConfig, train_regime_model
 from evoryn.intelligence.trained_regime import (
+    TrainedRegimeArtifactError,
     load_trained_regime_detector,
     load_trained_regime_model,
 )
@@ -117,9 +120,29 @@ def test_trainer_writes_versioned_model_and_three_reproducible_holdout_backtests
         assert Decimal(result["metrics"]["max_drawdown_fraction"]) >= 0
         assert (output / result["report_path"]).is_file()
 
+    artifact_path = output / "regime-model.joblib"
+    manifest_path = output / "model-manifest.json"
+    artifact_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    with pytest.raises(TrainedRegimeArtifactError, match="pinned artifact"):
+        load_trained_regime_model(
+            artifact_path,
+            manifest_path,
+            expected_artifact_sha256="0" * 64,
+            expected_manifest_sha256=manifest_sha256,
+        )
+    with pytest.raises(TrainedRegimeArtifactError, match="pinned manifest"):
+        load_trained_regime_model(
+            artifact_path,
+            manifest_path,
+            expected_artifact_sha256=artifact_sha256,
+            expected_manifest_sha256="0" * 64,
+        )
     model = load_trained_regime_model(
-        output / "regime-model.joblib",
-        output / "model-manifest.json",
+        artifact_path,
+        manifest_path,
+        expected_artifact_sha256=artifact_sha256,
+        expected_manifest_sha256=manifest_sha256,
     )
     prediction = model.predict_probabilities(
         dataset.candles[-model.feature_extractor.minimum_candles :]
@@ -132,9 +155,43 @@ def test_trainer_writes_versioned_model_and_three_reproducible_holdout_backtests
     }
     assert abs(sum(prediction.values(), Decimal("0")) - Decimal("1")) < Decimal("0.000001")
 
+    joblib = pytest.importorskip("joblib")
+    tampered_payload = joblib.load(artifact_path)
+    tampered_payload["class_order"] = list(reversed(tampered_payload["class_order"]))
+    tampered_artifact = output / "mismatched-class-order.joblib"
+    joblib.dump(tampered_payload, tampered_artifact, compress=3)
+    tampered_artifact_sha = hashlib.sha256(tampered_artifact.read_bytes()).hexdigest()
+    tampered_manifest_value = json.loads(manifest_path.read_text(encoding="utf-8"))
+    tampered_manifest_value["artifact_sha256"] = tampered_artifact_sha
+    tampered_manifest_value["model_version"] = tampered_artifact_sha[:16]
+    tampered_manifest_value["artifact_name"] = tampered_artifact.name
+    tampered_manifest = output / "mismatched-class-order-manifest.json"
+    tampered_manifest.write_text(
+        json.dumps(
+            tampered_manifest_value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(TrainedRegimeArtifactError, match="class order"):
+        load_trained_regime_model(
+            tampered_artifact,
+            tampered_manifest,
+            expected_artifact_sha256=tampered_artifact_sha,
+            expected_manifest_sha256=hashlib.sha256(
+                tampered_manifest.read_bytes()
+            ).hexdigest(),
+        )
+
     detector = load_trained_regime_detector(
-        output / "regime-model.joblib",
-        output / "model-manifest.json",
+        artifact_path,
+        manifest_path,
+        expected_artifact_sha256=artifact_sha256,
+        expected_manifest_sha256=manifest_sha256,
         min_confidence=Decimal("0.65"),
     )
     classified = detector.classify(

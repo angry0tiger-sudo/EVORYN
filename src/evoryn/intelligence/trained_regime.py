@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import io
 import json
 import math
 from collections.abc import Mapping, Sequence
@@ -20,6 +21,7 @@ from evoryn.domain.models import MarketCandle
 from evoryn.intelligence.regime import (
     AbstainingRegimeDetector,
     RegimeFeatureExtractor,
+    REGIME_FEATURE_SCHEMA_VERSION,
     RegimeLabel,
     RegimeProbabilityModel,
     RegimeThresholds,
@@ -96,19 +98,34 @@ class TrainedRegimeProbabilityModel(RegimeProbabilityModel):
         self,
         completed_history: Sequence[MarketCandle],
     ) -> Mapping[RegimeLabel, Decimal]:
-        """Predict from the trailing completed history; no future candle is accepted or required."""
+        """Predict from completed history and reject malformed estimator output."""
         features = self._features.extract(completed_history)
         numpy = importlib.import_module("numpy")
         matrix = numpy.asarray([features.as_float_tuple()], dtype="float64")
-        raw = self._estimator.predict_proba(matrix)[0]
-        if len(raw) != len(self._class_order):
+        try:
+            raw_output = self._estimator.predict_proba(matrix)
+            raw_values = tuple(float(value) for value in raw_output[0])
+        except Exception as exc:
             raise TrainedRegimeArtifactError(
-                "Loaded estimator class count does not match manifest."
+                f"Loaded estimator prediction failed: {type(exc).__name__}."
+            ) from None
+        if len(raw_values) != len(self._class_order):
+            raise TrainedRegimeArtifactError(
+                "Loaded estimator class count does not match its verified class order."
             )
-        logged = [
-            math.log(max(float(value), 1e-15)) / self._temperature
-            for value in raw
-        ]
+        if any(
+            not math.isfinite(value) or value < 0.0 or value > 1.0
+            for value in raw_values
+        ):
+            raise TrainedRegimeArtifactError(
+                "Model returned a non-finite or out-of-range class probability."
+            )
+        raw_total = sum(raw_values)
+        if not math.isclose(raw_total, 1.0, rel_tol=1e-6, abs_tol=1e-8):
+            raise TrainedRegimeArtifactError(
+                "Model returned class probabilities that do not sum to one."
+            )
+        logged = [math.log(max(value, 1e-15)) / self._temperature for value in raw_values]
         peak = max(logged)
         exp_values = [math.exp(value - peak) for value in logged]
         denominator = sum(exp_values)
@@ -118,7 +135,6 @@ class TrainedRegimeProbabilityModel(RegimeProbabilityModel):
             label: Decimal(str(value / denominator))
             for label, value in zip(self._class_order, exp_values, strict=True)
         }
-        # Keep all labels present and normalize against Decimal arithmetic at the public boundary.
         total = sum(probabilities.values(), Decimal("0"))
         if not total.is_finite() or total <= 0:
             raise TrainedRegimeArtifactError("Model returned an invalid probability distribution.")
@@ -128,29 +144,86 @@ class TrainedRegimeProbabilityModel(RegimeProbabilityModel):
         }
 
 
+
+def _is_sha256(value: object) -> bool:
+    """Return whether value is a canonical lowercase SHA-256 hex digest."""
+    return isinstance(value, str) and len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
+
+
 def load_trained_regime_model(
     artifact_path: str | Path,
     manifest_path: str | Path,
+    *,
+    expected_artifact_sha256: str,
+    expected_manifest_sha256: str,
 ) -> TrainedRegimeProbabilityModel:
-    """Verify artifact digest/manifest before loading an explicitly trusted local joblib payload."""
+    """Load only when both files match independently trusted SHA-256 pins.
+
+    The expected digests must come from a trusted review/release record, not be copied from
+    the adjacent manifest being checked. Hash verification occurs before joblib deserialization.
+    """
+    if not _is_sha256(expected_artifact_sha256):
+        raise TrainedRegimeArtifactError(
+            "An independently pinned artifact SHA-256 is required."
+        )
+    if not _is_sha256(expected_manifest_sha256):
+        raise TrainedRegimeArtifactError(
+            "An independently pinned manifest SHA-256 is required."
+        )
     artifact = Path(artifact_path).expanduser().resolve()
     manifest_file = Path(manifest_path).expanduser().resolve()
     try:
-        manifest_bytes = manifest_file.read_bytes()
-        manifest_value = json.loads(manifest_bytes)
         artifact_bytes = artifact.read_bytes()
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        manifest_bytes = manifest_file.read_bytes()
+    except OSError as exc:
         raise TrainedRegimeArtifactError("Model artifact or manifest cannot be read.") from exc
+    actual_sha = hashlib.sha256(artifact_bytes).hexdigest()
+    if actual_sha != expected_artifact_sha256:
+        raise TrainedRegimeArtifactError(
+            "Model artifact SHA-256 does not match the independently pinned digest."
+        )
+    actual_manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
+    if actual_manifest_sha != expected_manifest_sha256:
+        raise TrainedRegimeArtifactError(
+            "Model manifest SHA-256 does not match the independently pinned digest."
+        )
+    try:
+        manifest_value = json.loads(manifest_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TrainedRegimeArtifactError("Model manifest is not valid UTF-8 JSON.") from exc
     if not isinstance(manifest_value, dict) or manifest_value.get("schema_version") != 1:
         raise TrainedRegimeArtifactError("Unsupported model artifact manifest schema.")
-    actual_sha = hashlib.sha256(artifact_bytes).hexdigest()
     if manifest_value.get("artifact_sha256") != actual_sha:
         raise TrainedRegimeArtifactError("Model artifact SHA-256 does not match its manifest.")
     if manifest_value.get("model_id") != "evoryn.trained-regime-random-forest":
         raise TrainedRegimeArtifactError("Model artifact identifier is not recognized.")
+    if manifest_value.get("model_version") != actual_sha[:16]:
+        raise TrainedRegimeArtifactError("Model version does not match the pinned artifact.")
+    training_manifest = manifest_value.get("training")
+    if not isinstance(training_manifest, dict):
+        raise TrainedRegimeArtifactError("Model training manifest is missing.")
+    if training_manifest.get("feature_schema_version") != REGIME_FEATURE_SCHEMA_VERSION:
+        raise TrainedRegimeArtifactError("Model feature schema is unsupported.")
+    manifest_lookback = training_manifest.get("feature_lookback")
+    if type(manifest_lookback) is not int or manifest_lookback < 2:
+        raise TrainedRegimeArtifactError("Manifest feature lookback is invalid.")
+    classifier = training_manifest.get("classifier")
+    if not isinstance(classifier, dict):
+        raise TrainedRegimeArtifactError("Manifest classifier metadata is missing.")
+    manifest_temperature = classifier.get("calibration_temperature")
+    if (
+        isinstance(manifest_temperature, bool)
+        or not isinstance(manifest_temperature, (int, float))
+        or not math.isfinite(float(manifest_temperature))
+        or float(manifest_temperature) <= 0
+    ):
+        raise TrainedRegimeArtifactError("Manifest calibration temperature is invalid.")
     try:
         joblib = importlib.import_module("joblib")
-        payload = joblib.load(artifact)
+        # Deserialize the exact byte sequence whose digest was checked, avoiding path TOCTOU.
+        payload = joblib.load(io.BytesIO(artifact_bytes))
     except Exception as exc:
         raise TrainedRegimeArtifactError(
             f"Trusted model artifact deserialization failed: {type(exc).__name__}."
@@ -166,15 +239,31 @@ def load_trained_regime_model(
         temperature = payload.get("temperature")
         if type(lookback) is not int or lookback < 2:
             raise ValueError("feature lookback")
+        if lookback != manifest_lookback:
+            raise ValueError("feature lookback mismatch")
         if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
             raise ValueError("temperature")
         if not math.isfinite(float(temperature)) or float(temperature) <= 0:
             raise ValueError("temperature")
-        training_manifest = manifest_value.get("training")
-        if not isinstance(training_manifest, dict):
-            raise ValueError("training manifest")
+        if not math.isclose(
+            float(temperature), float(manifest_temperature), rel_tol=0.0, abs_tol=1e-12
+        ):
+            raise ValueError("temperature mismatch")
+        if len(class_order) != 4 or len(set(class_order)) != 4:
+            raise ValueError("unique class order")
+        estimator = payload.get("estimator")
+        estimator_classes = getattr(estimator, "classes_", None)
+        estimator_feature_count = getattr(estimator, "n_features_in_", None)
+        if not callable(getattr(estimator, "predict_proba", None)):
+            raise ValueError("estimator probability interface")
+        if estimator_classes is None or estimator_feature_count is None:
+            raise ValueError("estimator fitted-state metadata")
+        if tuple(str(value) for value in estimator_classes) != tuple(labels_raw):
+            raise ValueError("estimator class order mismatch")
+        if isinstance(estimator_feature_count, bool) or int(estimator_feature_count) != 4:
+            raise ValueError("estimator feature dimension mismatch")
         return TrainedRegimeProbabilityModel(
-            estimator=payload.get("estimator"),
+            estimator=estimator,
             class_order=class_order,
             temperature=float(temperature),
             model_fingerprint=actual_sha,
@@ -182,14 +271,18 @@ def load_trained_regime_model(
             feature_extractor=RegimeFeatureExtractor(lookback=lookback),
             training_manifest=training_manifest,
         )
-    except (ValueError, TypeError) as exc:
-        raise TrainedRegimeArtifactError("Model payload fields are invalid.") from exc
+    except (ValueError, TypeError, AttributeError, OverflowError) as exc:
+        raise TrainedRegimeArtifactError(
+            f"Model payload fields or estimator schema are invalid: {exc}."
+        ) from exc
 
 
 def load_trained_regime_detector(
     artifact_path: str | Path,
     manifest_path: str | Path,
     *,
+    expected_artifact_sha256: str,
+    expected_manifest_sha256: str,
     min_confidence: Decimal = Decimal("0.65"),
     max_data_age_intervals: int = 2,
 ) -> AbstainingRegimeDetector:
@@ -198,7 +291,12 @@ def load_trained_regime_detector(
     Confidence/freshness gates remain explicit and fail closed. The returned detector has no
     execution authority; pass it into a PaperStrategyRuntime only with an approved feed/registry.
     """
-    model = load_trained_regime_model(artifact_path, manifest_path)
+    model = load_trained_regime_model(
+        artifact_path,
+        manifest_path,
+        expected_artifact_sha256=expected_artifact_sha256,
+        expected_manifest_sha256=expected_manifest_sha256,
+    )
     return AbstainingRegimeDetector(
         model,
         feature_extractor=model.feature_extractor,
