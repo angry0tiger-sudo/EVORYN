@@ -13,6 +13,7 @@ class StrategySelectionLedgerEntry:
 
     event_id: str
     correlation_id: str
+    selector_version: str
     recorded_at: datetime
     regime_as_of: datetime
     market_symbol: str
@@ -49,6 +50,7 @@ class StrategySelectionLedgerEntry:
         for name in (
             "event_id",
             "correlation_id",
+            "selector_version",
             "market_symbol",
             "regime_label",
             "confidence_semantics",
@@ -90,6 +92,7 @@ class StrategySelectionLedgerEntry:
         if (
             type(self.required_stability_seconds) is not int
             or type(self.minimum_hold_seconds) is not int
+            or type(self.maximum_prediction_age_seconds) is not int
             or self.required_stability_seconds <= 0
             or self.minimum_hold_seconds <= 0
             or self.maximum_prediction_age_seconds <= 0
