@@ -414,15 +414,18 @@ class NobitexRestCandleFeed:
         )
         completed: list[MarketCandle] = []
         for candle in rows:
-            if (
-                candle.market == self.market
-                and candle.interval == self.interval
-                and candle.timestamp.tzinfo is not None
-                and candle.timestamp.utcoffset() == timedelta(0)
-                and candle.timestamp + candle.interval <= now_utc
-            ):
+            if candle.market != self.market or candle.interval != self.interval:
+                raise ValueError("Nobitex returned a candle with unexpected market identity/interval.")
+            if candle.timestamp.tzinfo is None or candle.timestamp.utcoffset() != timedelta(0):
+                raise ValueError("Nobitex returned a candle with a non-canonical timestamp.")
+            if candle.source != self.source_id:
+                raise ValueError("Nobitex returned a candle with unexpected source identity.")
+            if candle.timestamp + candle.interval <= now_utc:
                 completed.append(candle)
-        return tuple(sorted(completed, key=lambda item: item.timestamp))
+        ordered = tuple(sorted(completed, key=lambda item: item.timestamp))
+        if len(ordered) > self.lookback_candles:
+            raise ValueError("Nobitex returned more candles than the configured lookback bound.")
+        return ordered
 
 
 class ShadowRunner:
@@ -508,8 +511,71 @@ class ShadowRunner:
         return tuple(self._history)
 
     @property
+    def config(self) -> ShadowConfig:
+        return self._config
+
+    @property
     def continuity_blocked(self) -> bool:
         return self._continuity_blocked
+
+    def bootstrap_history(
+        self,
+        candles: Sequence[MarketCandle],
+        *,
+        received_at: datetime,
+    ) -> None:
+        """Warm up indicators from one complete feed window before recording live decisions."""
+        received = _require_utc(received_at, "received_at")
+        rows = tuple(candles)
+        if self._history or self._last_candle_at is not None:
+            raise ShadowSafetyError("Initial history bootstrap is allowed only once per fresh run.")
+        if self._continuity_blocked or self._identity_blocked:
+            raise ShadowSafetyError("A blocked Shadow run requires explicit recovery/replacement.")
+        if not 2 <= len(rows) <= self._config.max_history_candles:
+            raise ShadowSafetyError("Initial feed window must contain 2..max_history_candles candles.")
+        previous: MarketCandle | None = None
+        for candle in rows:
+            # Older warm-up candles are expected to be old; validate shape at their own close time.
+            historical_close = candle.timestamp + candle.interval
+            invalid = self._validate_candle(
+                candle, historical_close, compare_sequence=False
+            )
+            if invalid is not None:
+                raise ShadowSafetyError(f"Initial feed window rejected: {invalid}.")
+            if previous is not None and candle.timestamp - previous.timestamp != self._config.interval:
+                raise ShadowSafetyError("Initial feed window contains a gap or duplicate.")
+            previous = candle
+        last = rows[-1]
+        final_age = (received - (last.timestamp + last.interval)).total_seconds()
+        if final_age < -self._config.max_future_skew_seconds:
+            raise ShadowSafetyError("Initial feed window ends in the future.")
+        if final_age > self._config.max_candle_age_seconds:
+            raise ShadowSafetyError("Initial feed window ends with a stale candle.")
+        warmup = rows[:-1]
+        event_time = received
+        self._append_event(
+            LearningEventType.SHADOW_RECONCILIATION,
+            correlation_id=f"shadow-bootstrap:{self._run_id}",
+            occurred_at=event_time,
+            payload={
+                "schema": "shadow-initial-bootstrap/v1",
+                "run_id": self._run_id,
+                "experiment_id": self._spec.experiment_id,
+                "mode": ExperimentMode.SHADOW.value,
+                "source_id": self._config.source_id,
+                "source_version": self._config.source_version,
+                "market_symbol": self._config.market.symbol,
+                "interval_seconds": int(self._config.interval.total_seconds()),
+                "warmup_candle_count": len(warmup),
+                "first_candle_at": _iso(warmup[0].timestamp),
+                "last_warmup_candle_at": _iso(warmup[-1].timestamp),
+                "next_decision_candle_at": _iso(last.timestamp),
+                "bootstrap_kind": "initial_complete_read_only_feed_window",
+                "execution_authorized": False,
+            },
+        )
+        self._history.extend(warmup[-self._config.max_history_candles :])
+        self._last_candle_at = warmup[-1].timestamp
 
     def process_candle(
         self,
@@ -674,12 +740,20 @@ class ShadowRunner:
             raise ValueError("Reconciliation history length is outside configured bounds.")
         previous: MarketCandle | None = None
         for candle in rows:
-            reason = self._validate_candle(candle, received, compare_sequence=False)
+            # Historic candles are tested at their own close time; only the newest must be fresh now.
+            reason = self._validate_candle(
+                candle, candle.timestamp + candle.interval, compare_sequence=False
+            )
             if reason is not None:
                 raise ShadowSafetyError(f"Reconciliation data rejected: {reason}.")
             if previous is not None and candle.timestamp - previous.timestamp != self._config.interval:
                 raise ShadowSafetyError("Reconciliation history has a gap or duplicate timestamp.")
             previous = candle
+        latest_age = (received - (rows[-1].timestamp + rows[-1].interval)).total_seconds()
+        if latest_age < -self._config.max_future_skew_seconds:
+            raise ShadowSafetyError("Reconciliation window ends in the future.")
+        if latest_age > self._config.max_candle_age_seconds:
+            raise ShadowSafetyError("Reconciliation window ends with a stale candle.")
         if self._identity_blocked:
             raise ShadowSafetyError(
                 "Regime model identity changed; create/register a new experiment and runner."
@@ -913,7 +987,16 @@ class ShadowPollingService:
         """Fetch one bounded REST window; errors are ledgered and do not trigger retry loops."""
         observed_now = _require_utc(now or self._utcnow(), "now")
         try:
-            candles = self._feed.fetch_completed(now=observed_now)
+            candles = tuple(self._feed.fetch_completed(now=observed_now))
+            if self._runner.last_candle_at is None and not self._runner.history and len(candles) > 1:
+                self._runner.bootstrap_history(candles, received_at=observed_now)
+                candles_to_process = (candles[-1],)
+            else:
+                last_seen = self._runner.last_candle_at
+                candles_to_process = tuple(
+                    candle for candle in candles
+                    if last_seen is None or candle.timestamp > last_seen
+                )
         except Exception as exc:
             self._runner.record_feed_failure(
                 occurred_at=observed_now,
@@ -922,11 +1005,11 @@ class ShadowPollingService:
             return ShadowPollResult(
                 status=ShadowPollStatus.FEED_FAILURE,
                 snapshots=(),
-                reason_code="FEED_REQUEST_FAILED",
+                reason_code="FEED_REQUEST_FAILED_OR_WINDOW_REJECTED",
             )
         snapshots = tuple(
             self._runner.process_candle(candle, received_at=observed_now)
-            for candle in candles
+            for candle in candles_to_process
         )
         if not snapshots:
             return ShadowPollResult(
