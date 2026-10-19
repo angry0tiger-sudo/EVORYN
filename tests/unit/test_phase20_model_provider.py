@@ -37,6 +37,7 @@ INPUT_SCHEMA = StructuredJsonSchema(
     allowed_fields=("text",),
     field_types=(("text", "string"),),
     forbidden_keys=frozenset(),
+    max_bytes=32_768,
 )
 OUTPUT_SCHEMA = StructuredJsonSchema(
     schema_id="test.advisory.v1",
@@ -214,7 +215,7 @@ def test_provider_can_be_switched_without_changing_core_contract() -> None:
         allowed_identities=(left_identity, right_identity),
     )
     core, _ = make_core(left, policy)
-    # A provider registry can be replaced through construction without changing ModelRequest/response.
+    # A provider registry can be replaced without changing the request/response contract.
     switched = IntelligenceCore(
         providers=(left, right),
         policy=policy,
@@ -523,7 +524,7 @@ def test_openai_compatible_adapter_uses_injected_transport_and_never_exposes_cre
     adapter = OpenAICompatibleChatAdapter(
         identity=model_identity,
         base_url="https://gateway.example.test/v1",
-        transport=transport,  # type: ignore[arg-type]
+        transport=transport,
         credentials=FakeCredentials(),
         schemas=(OUTPUT_SCHEMA,),
         clock=lambda: next(clock_values),
@@ -551,7 +552,7 @@ def test_openai_compatible_adapter_abstains_on_identity_drift_and_invalid_json()
     adapter = OpenAICompatibleChatAdapter(
         identity=model_identity,
         base_url="https://gateway.example.test/v1",
-        transport=FakeJsonTransport(changed_model),  # type: ignore[arg-type]
+        transport=FakeJsonTransport(changed_model),
         credentials=FakeCredentials(),
         schemas=(OUTPUT_SCHEMA,),
         clock=lambda: NOW,
@@ -566,7 +567,7 @@ def test_openai_compatible_adapter_abstains_on_identity_drift_and_invalid_json()
     bad_adapter = OpenAICompatibleChatAdapter(
         identity=model_identity,
         base_url="https://gateway.example.test/v1",
-        transport=FakeJsonTransport(invalid_json),  # type: ignore[arg-type]
+        transport=FakeJsonTransport(invalid_json),
         credentials=FakeCredentials(),
         schemas=(OUTPUT_SCHEMA,),
         clock=lambda: NOW,
@@ -580,7 +581,7 @@ def test_openai_compatible_adapter_rejects_non_https_endpoint() -> None:
         OpenAICompatibleChatAdapter(
             identity=identity("llm-compatible"),
             base_url="http://gateway.example.test/v1",
-            transport=FakeJsonTransport({}),  # type: ignore[arg-type]
+            transport=FakeJsonTransport({}),
             credentials=FakeCredentials(),
             schemas=(OUTPUT_SCHEMA,),
         )
@@ -752,7 +753,10 @@ def test_remote_llm_requires_explicit_policy_and_can_return_only_advisory_output
             {
                 "message": {
                     "content": json.dumps(
-                        {"summary": "bounded advisory", "suggestion": "wait for deterministic gates"}
+                        {
+                            "summary": "bounded advisory",
+                            "suggestion": "wait for deterministic gates",
+                        },
                     )
                 },
                 "finish_reason": "stop",
@@ -769,7 +773,7 @@ def test_remote_llm_requires_explicit_policy_and_can_return_only_advisory_output
     adapter = OpenAICompatibleChatAdapter(
         identity=model_identity,
         base_url="https://gateway.example.test/v1",
-        transport=transport,  # type: ignore[arg-type]
+        transport=transport,
         credentials=FakeCredentials(),
         schemas=(OUTPUT_SCHEMA,),
         clock=lambda: next(clock_values),
