@@ -76,9 +76,11 @@ class RiskEngine:
     ) -> RiskResult:
         """Return exactly ALLOW, REDUCE, REJECT, or HALT for this order request."""
         with self._lock:
-            if not _runtime_is_instance(request, OrderRequest)
-            or not _runtime_is_instance(portfolio, PortfolioSnapshot)
-            or not _runtime_is_instance(market_data, MarketSnapshot):
+            if (
+                not _runtime_is_instance(request, OrderRequest)
+                or not _runtime_is_instance(portfolio, PortfolioSnapshot)
+                or not _runtime_is_instance(market_data, MarketSnapshot)
+            ):
                 self.emergency_halt("invalid_risk_input")
                 return self._result(
                     RiskAction.HALT,
