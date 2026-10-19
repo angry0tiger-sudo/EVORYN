@@ -11,13 +11,22 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
+from typing import Protocol
 
-from evoryn.execution.spot import ExecutionLedger, StrategySelectionLedgerEntry
+from evoryn.domain.strategy_decisions import StrategySelectionLedgerEntry
 from evoryn.intelligence.regime import RegimeLabel, RegimePrediction
 from evoryn.strategies.plugins import (
     StrategyPluginRegistration,
     StrategyPluginRegistry,
 )
+
+
+class StrategySelectionLedgerSink(Protocol):
+    """Minimal append-only decision sink; selection has no dependency on execution services."""
+
+    def record_strategy_selection(self, entry: StrategySelectionLedgerEntry) -> None:
+        """Append an auditable strategy-selection event."""
+        ...
 
 
 class SelectionStatus(StrEnum):
@@ -190,7 +199,7 @@ class RegimeStrategySelector:
         *,
         policy: StrategySelectionPolicy | None = None,
         preferred_strategy_by_regime: dict[RegimeLabel, tuple[str, ...]] | None = None,
-        decision_ledger: ExecutionLedger | None = None,
+        decision_ledger: StrategySelectionLedgerSink | None = None,
     ) -> None:
         self._registry = registry
         self._policy = policy or StrategySelectionPolicy()
