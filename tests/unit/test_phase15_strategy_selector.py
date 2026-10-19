@@ -296,9 +296,11 @@ def test_hysteresis_requires_distinct_evidence_stability_and_minimum_hold() -> N
     switched_flat = select_at(selector, RegimeLabel.BEAR_TREND, 9)
 
     assert at_four.status is SelectionStatus.CANDIDATE_PENDING
+    assert not at_four.allow_new_signals
     assert at_five.evidence_count == 2
     assert at_six.status is SelectionStatus.CANDIDATE_PENDING
     assert at_six.selected_strategy_id == "sma-crossover-long-flat"
+    assert not at_six.allow_new_signals
     assert at_seven.status is SelectionStatus.CANDIDATE_PENDING
     assert at_eight.status is SelectionStatus.CANDIDATE_PENDING
     assert switched_flat.status is SelectionStatus.SWITCHED
