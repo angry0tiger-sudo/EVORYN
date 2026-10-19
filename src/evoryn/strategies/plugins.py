@@ -166,7 +166,9 @@ def build_baseline_registry() -> StrategyPluginRegistry:
                 plugin_version=trend.strategy_version,
                 description="Close-versus-SMA trend baseline; range-regime comparator.",
                 strategy=trend,
-                supported_regimes=frozenset({RegimeLabel.RANGE_BOUND}),
+                supported_regimes=frozenset(
+                    {RegimeLabel.BULL_TREND, RegimeLabel.RANGE_BOUND}
+                ),
             ),
             StrategyPluginRegistration(
                 plugin_id=flat.strategy_id,
