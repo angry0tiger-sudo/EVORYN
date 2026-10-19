@@ -191,6 +191,7 @@ class NewsEventCorpus:
                     "ingested_at": item.ingested_at.isoformat(),
                     "language": item.language,
                     "language_evidence": item.language_evidence,
+                    "provider_id_evidence": item.provider_id_evidence,
                     "source_license_id": item.source_license_id,
                     "source_terms_revision": item.source_terms_revision,
                     "content_sha256": item.content_sha256,
