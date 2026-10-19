@@ -860,6 +860,42 @@ def test_release_gate_rejects_risk_policy_drift_at_creation_and_approval(
     assert ledger.events[-1].event_type is LearningEventType.RELEASE_REJECTED
 
 
+def test_paper_health_without_trusted_attestation_fails_closed_to_safe_hold(
+    tmp_path: Path,
+) -> None:
+    registry, ledger = make_registry(tmp_path)
+    spec = make_spec(model_id="unattested-health")
+    apparently_healthy = make_evidence(
+        spec,
+        observations=50,
+        net_return="0.03",
+        max_drawdown="0.08",
+        run_suffix="unattested-paper-health",
+    )
+    register_spec_and_evidence(registry, spec, apparently_healthy)
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=spec.experiment_id,
+        evidence_trust_verifier=None,
+    )
+
+    result = controller.monitor_paper_champion(
+        apparently_healthy.evidence_id,
+        checked_at=NOW + timedelta(hours=2),
+        correlation_id="paper-health:missing-attestation",
+    )
+
+    assert result.status is RollbackStatus.SAFE_HOLD_NO_CHAMPION
+    assert result.trigger is RollbackTrigger.TELEMETRY_ATTESTATION_FAILED
+    assert result.active_champion_id is None
+    assert controller.active_champion_id is None
+    assert ledger.events[-2].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
+    assert json.loads(ledger.events[-2].payload_json)["trigger"] == (
+        RollbackTrigger.TELEMETRY_ATTESTATION_FAILED.value
+    )
+
+
 def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Path) -> None:
     registry, ledger = make_registry(tmp_path)
     spec = make_spec(model_id="single-champion", model_fingerprint="7" * 64)
@@ -881,6 +917,7 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
         registry=registry,
         ledger=ledger,
         champion_experiment_id=spec.experiment_id,
+        evidence_trust_verifier=SyntheticEvidenceTrustVerifier(),
         rollback_policy=RollbackPolicy(
             minimum_observations=20,
             maximum_drawdown_fraction=Decimal("0.20"),
