@@ -1,6 +1,6 @@
 # ADR 0011: Connectivity Management, Bounded Recovery, and Feed Freshness
 
-- Status: Proposed for review
+- Status: Proposed; code-level implementation exists, runtime integration remains gated
 - Date: 2026-10-19
 - Scope: Roadmap Phase 18
 - Depends on: Phases 5-7 market-data quality gates, the existing read-only JSON transport, audit/correlation contracts, and approved provider licensing.
@@ -11,7 +11,7 @@ A successful TCP/HTTPS request does not prove that the returned market observati
 
 ## Decision
 
-1. Keep `HttpsJsonTransport` as one bounded HTTPS JSON GET implementation. It performs one request and never retries on its own. HTTP errors expose only sanitized status metadata and parsed `Retry-After` delay; response bodies and headers are not copied into exception messages or telemetry.
+1. Keep `HttpsJsonTransport` as one bounded HTTPS JSON GET implementation. It performs one request and never retries on its own. HTTP errors expose only sanitized status metadata and parsed `Retry-After` delay, including HTTP dates; response bodies and headers are not copied into exception messages or telemetry. Fixed official-host transports explicitly ignore ambient proxy settings.
 2. Wrap an injected read-only `JsonApiTransport` with `ConnectivityManager`. The manager validates exact HTTPS host allowlists, applies bounded attempts with exponential backoff and jitter, records correlation/latency/status evidence, honors `Retry-After`, and maintains a shared cooldown for HTTP 429 backpressure.
 3. Retry only the transport's idempotent GET contract and selected transient statuses. Authentication/authorization failures, policy failures, malformed JSON and arbitrary protocol errors are not retried. The API contains no POST/order method, no exchange-write path and no reconciliation-bypassing order retry.
 4. Use a thread-safe circuit breaker with CLOSED, OPEN and single-probe HALF_OPEN states. Repeated transient failures open the circuit; calls are refused while open; successful recovery closes it. HTTP 429 is handled as rate limiting, not as proof of endpoint outage.

@@ -19,14 +19,14 @@ from email.utils import parsedate_to_datetime
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from evoryn.config import (
-    MarketPolicy,
     OFFICIAL_NOBITEX_BASE_URL,
+    MarketPolicy,
 )
 from evoryn.domain.models import Market, Order, OrderRequest, OrderStatus, OrderType, Side
 from evoryn.ports.exchange_errors import (
@@ -285,7 +285,7 @@ class NobitexSpotTradingTransport:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
         self._clock = clock
-        self._opener = opener if opener is not None else build_opener(_NoRedirectHandler())
+        self._opener = opener if opener is not None else build_opener(ProxyHandler({}), _NoRedirectHandler())
         self._market_policy = market_policy or MarketPolicy()
 
     def submit_order(self, request: OrderRequest, *, price_guard: Decimal) -> Order:
@@ -448,6 +448,10 @@ class NobitexSpotTradingTransport:
             if is_write and (exc.code in {408, 425} or exc.code >= 500 or 300 <= exc.code < 400):
                 raise OrderOutcomeUnknown(
                     "Nobitex order-write response is uncertain; reconcile before any further write."
+                ) from exc
+            if exc.code == 429 and is_write:
+                raise OrderOutcomeUnknown(
+                    "Nobitex rate-limited a write request; reconcile before any further write."
                 ) from exc
             if exc.code == 429:
                 retry_after = _retry_after(exc.headers.get("Retry-After"))

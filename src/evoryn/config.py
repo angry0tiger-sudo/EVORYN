@@ -144,7 +144,7 @@ class NobitexReadOnlyConfig:
                 "The legacy NOBITEX_API_TOKEN name is blocked; configure "
                 "NOBITEX_READONLY_API_TOKEN instead."
             )
-        timeout_text = values.get("NOBITEX_TIMEOUT_SECONDS", "10")
+        timeout_text = (values.get("NOBITEX_TIMEOUT_SECONDS") or "").strip() or "10"
         try:
             timeout_seconds = float(timeout_text)
         except (TypeError, ValueError) as exc:
@@ -152,7 +152,10 @@ class NobitexReadOnlyConfig:
         return cls(
             market_policy=MarketPolicy.from_mapping(values),
             read_only_api_token=values.get("NOBITEX_READONLY_API_TOKEN") or None,
-            base_url=values.get("NOBITEX_BASE_URL", OFFICIAL_NOBITEX_BASE_URL),
+            base_url=(
+                (values.get("NOBITEX_BASE_URL") or "").strip()
+                or OFFICIAL_NOBITEX_BASE_URL
+            ),
             timeout_seconds=timeout_seconds,
         )
 

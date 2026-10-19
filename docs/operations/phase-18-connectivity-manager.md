@@ -58,3 +58,12 @@ Inspect and alert on event type, correlation ID, route ID, allowlisted target ho
 3. Evidence that route authorization and the audit sink are configured in the intended runtime.
 4. Separate authorization/evidence for any proxy, SOCKS5 or VPN/tunnel transport; no such transport is implicitly enabled by this PR.
 5. Failure-drill evidence for source timeout/outage, rate limit, feed gap, audit persistence loss and recovery.
+
+
+## Verified code boundaries and current runtime integration status
+
+The reusable connection manager implements bounded retries (maximum five total attempts), exponential backoff with jitter, transport timeout, Retry-After delta/date parsing, a shared HTTP 429 cooldown, a CLOSED/OPEN single-probe HALF_OPEN circuit, and feed freshness/gap validation. The "reconnect" behavior means attempting a fresh logical read after bounded delay or after the single half-open recovery probe; the code does not keep a persistent socket alive or blindly replay order writes.
+
+The Nobitex fixed-host transports explicitly disable ambient environment proxy discovery and use direct HTTPS. `EVORYN_PROXY_URL` in `.env.example` is a reserved placeholder and is ignored. No proxy/SOCKS/VPN adapter is delivered. Alternative egress requires an independent implementation and route authorization record, not merely setting a variable.
+
+The manager's GET retry policy and audit protocol are available and covered by mock-only tests. A complete production trading runtime and its connector composition root are not yet present, so this document does not claim every runtime connector is already wired through a manager and durable audit sink. Before a live runtime is authorized, the approved route record and durable sink must be supplied by the local composition root and failure drills must be performed locally. Signed Spot order submit/cancel and order-status POSTs remain single-attempt operations and must never be automatically retried.

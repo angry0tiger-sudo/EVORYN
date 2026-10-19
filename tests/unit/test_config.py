@@ -57,3 +57,18 @@ def test_readonly_token_is_excluded_from_configuration_repr() -> None:
         {"NOBITEX_READONLY_API_TOKEN": "dummy-test-token"}
     )
     assert "dummy-test-token" not in repr(config)
+
+
+
+def test_blank_optional_transport_settings_use_safe_official_defaults() -> None:
+    config = NobitexReadOnlyConfig.from_mapping(
+        {
+            "NOBITEX_BASE_URL": "",
+            "NOBITEX_TIMEOUT_SECONDS": "",
+            "NOBITEX_READONLY_API_TOKEN": "",
+        }
+    )
+
+    assert config.base_url == "https://apiv2.nobitex.ir"
+    assert config.timeout_seconds == 10.0
+    assert config.read_only_api_token is None

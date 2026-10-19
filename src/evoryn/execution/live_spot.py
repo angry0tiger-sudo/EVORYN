@@ -12,7 +12,7 @@ import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -21,8 +21,8 @@ from evoryn.adapters.exchanges.nobitex_instrument_rules import (
     NobitexSpotInstrumentRulesProvider,
     SpotInstrumentRules,
 )
-from evoryn.adapters.exchanges.nobitex_transport import NobitexHTTPTransport
 from evoryn.adapters.exchanges.nobitex_spot_trading import NobitexSpotTradingTransport
+from evoryn.adapters.exchanges.nobitex_transport import NobitexHTTPTransport
 from evoryn.config import (
     MarketPolicy,
     NobitexReadOnlyConfig,
@@ -749,7 +749,7 @@ class LiveSpotExecutionService:
 
     def cancel_order(self, client_order_id: str) -> LiveSpotExecutionResult:
         """Cancel only one journaled, acknowledged, nonterminal order through the same gate."""
-        self._require_enabled()
+        transport = self._require_enabled()
         record = self.journal.get(client_order_id)
         if record is None or record.state not in {
             OrderStatus.PENDING.value,

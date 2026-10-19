@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import sys
+
+from dotenv import load_dotenv
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -123,6 +125,7 @@ def format_snapshot(snapshot: NobitexUSDTAccountSnapshot) -> str:
 
 def main() -> int:
     """Execute one read-only check and never print exception text or credentials."""
+    load_dotenv()
     try:
         config = NobitexReadOnlyConfig.from_environment()
         if not config.read_only_api_token:

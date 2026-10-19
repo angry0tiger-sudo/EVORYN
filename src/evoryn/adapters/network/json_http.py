@@ -10,7 +10,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit, urlunsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 def parse_retry_after_seconds(value: str | None, *, now: datetime | None = None) -> float | None:
@@ -116,7 +116,7 @@ class HttpsJsonTransport:
         self._allowed_hosts = frozenset(host.lower().rstrip(".") for host in allowed_hosts)
         self._timeout = timeout_seconds
         self._max_response_bytes = max_response_bytes
-        self._opener = build_opener(_SameHostHttpsRedirects())
+        self._opener = build_opener(ProxyHandler({}), _SameHostHttpsRedirects())
 
     def get_json(
         self,

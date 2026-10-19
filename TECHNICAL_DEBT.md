@@ -68,6 +68,13 @@ This ledger records open verification and runtime-integration obligations. Close
 - [ ] **Live API smoke test remains unrun.** PR #26 prepares `scripts/live_readonly_nobitex_usdt.py`, whose dedicated transport permits only the exact USDT wallet GET requests. No read-only token is available in this session. Do not claim live connectivity until a supervised test uses a provider-confirmed restricted token; never ask for that token in chat or source-control it.
 - [ ] **No trade/write route is enabled.** Live order submission/cancel, withdrawal, transfer and collateral mutation remain unavailable.
 
+## Local deployment bundle
+
+- [x] **Windows/Linux bootstrap scripts prepared on the current candidate branch.** `scripts/setup.bat` and `scripts/setup.sh` preserve an existing `.env`, create the venv/data directory, install `.[dev]`, compile files and run mock-only/offline tests. They do not call Nobitex or start a trading process.
+- [x] **Secret template expanded.** `.env.example` contains names only and keeps both read-only and future Spot-write credentials blank; `.env` remains ignored by Git.
+- [ ] **Autonomous live runtime remains unavailable.** The repository still lacks a production main/strategy loop, account/portfolio reconciliation builder, fill/open-order synchronization, protective-exit policy and process supervision. The bootstrap is for setup and offline verification; it is not a claim that a full trading robot can be launched today.
+- [ ] **Local-only acceptance remains pending.** Run the setup scripts on the owner's target Windows/Linux host and review output, then perform any explicitly authorized read-only API verification there. No live API test is part of GitHub CI.
+
 ## Gated Nobitex Spot Execution — local validation required
 
 - [ ] **Code candidate is not an operational release.** The separate signed Spot gateway and application service are on a feature branch and are not merged until exact-head CI and review succeed. The first scope is Limit-only; Market orders remain rejected until request and price-protection semantics are verified.
