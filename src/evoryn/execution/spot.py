@@ -259,7 +259,6 @@ class ExecutionLedger:
         with self._lock:
             self._reconciliations.append(report)
 
-
     def record_strategy_selection(self, entry: StrategySelectionLedgerEntry) -> None:
         """Append a selection/abstention outcome without granting execution authority."""
         with self._lock:
