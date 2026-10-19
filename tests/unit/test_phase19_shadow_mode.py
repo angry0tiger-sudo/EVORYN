@@ -412,7 +412,7 @@ def test_risk_rejection_is_recorded_without_advancing_virtual_state(tmp_path: Pa
     assert snapshot.target_quantity == Decimal("5.000")
     assert fixture.runner.history == ()
     assert fixture.runner.last_candle_at is None
-    assert fixture.ledger.events[-1].event_type is LearningEventType.SHADOW_INPUT_REJECTED
+    assert fixture.ledger.events[-1].event_type is LearningEventType.SHADOW_RISK_REJECTED
 
 
 def test_risk_assessor_failure_abstains_without_logging_exception_text(tmp_path: Path) -> None:
