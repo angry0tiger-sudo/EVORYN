@@ -985,9 +985,10 @@ def _require_sha(*, code: str, name: str, length: int) -> None:
 
 
 def _require_aware_utc(value: datetime, name: str) -> None:
-    if value.tzinfo is None or value.utcoffset() is None:
+    offset = value.utcoffset()
+    if value.tzinfo is None or offset is None:
         raise ValueError(f"{name} must be timezone-aware.")
-    if value.utcoffset().total_seconds() != 0:
+    if offset.total_seconds() != 0:
         raise ValueError(f"{name} must be expressed in UTC.")
 
 
