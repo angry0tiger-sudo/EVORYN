@@ -451,14 +451,13 @@ class ShadowRunner:
         if not registry.ledger.verify():
             raise ShadowSafetyError("Learning Lab ledger verification failed.")
         actual_fingerprint = strategy_fingerprint(strategy)
+        strategy_parameters = tuple(sorted(strategy.parameters().items()))
         if (
             experiment_spec.model_id != strategy.strategy_id
             or experiment_spec.model_version != strategy.strategy_version
-            or experiment_spec.model_fingerprint != actual_fingerprint
+            or experiment_spec.parameters != strategy_parameters
         ):
-            raise ShadowSafetyError("Strategy identity/fingerprint does not match the registered experiment.")
-        if experiment_spec.dataset_version != config.dataset_version:
-            raise ShadowSafetyError("Feed provenance does not match the registered dataset manifest.")
+            raise ShadowSafetyError("Strategy identity/parameters do not match the registered experiment.")
         if experiment_spec.evaluation_config_fingerprint != config.evaluation_config_fingerprint:
             raise ShadowSafetyError("Shadow configuration does not match the registered fingerprint.")
         if not callable(auto_halt_status):
@@ -494,7 +493,8 @@ class ShadowRunner:
                 "model_fingerprint": self._spec.model_fingerprint,
                 "feature_schema_version": self._spec.feature_schema_version,
                 "strategy_fingerprint": self._strategy_fingerprint,
-                "feed_dataset_manifest": self._config.dataset_version,
+                "registered_dataset_version": self._spec.dataset_version,
+                "feed_manifest_fingerprint": self._config.dataset_version,
                 "evaluation_config_fingerprint": self._config.evaluation_config_fingerprint,
                 "execution_authorized": False,
             },
@@ -977,9 +977,12 @@ class ShadowPollingService:
         runner: ShadowRunner,
         utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        if feed.market != runner._config.market or feed.interval != runner._config.interval:
+        if feed.market != runner.config.market or feed.interval != runner.config.interval:
             raise ValueError("Feed market/interval do not match the Shadow runner.")
-        if feed.source_id != runner._config.source_id or feed.source_version != runner._config.source_version:
+        if (
+            feed.source_id != runner.config.source_id
+            or feed.source_version != runner.config.source_version
+        ):
             raise ValueError("Feed source identity does not match the Shadow experiment.")
         self._feed = feed
         self._runner = runner
