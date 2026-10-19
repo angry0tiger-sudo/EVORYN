@@ -3,52 +3,50 @@
 Updated: 2026-10-19  
 Canonical repository: `angry0tiger-sudo/EVORYN`
 
-This ledger records unclosed verification and integration obligations. An item can be closed only with a recorded command/runner, exact commit SHA, exit status, and reviewable output or artifact. Do not mark an item complete merely because a test exists or because a conditional merge was accepted.
+This ledger records open verification and runtime-integration obligations. Close an item only with a command/runner or review record, exact commit/model/data identity, result, and inspectable output. A file or test definition is not execution evidence. A green CI run does not establish production readiness.
 
 ## Phase 18 — Connectivity Manager
 
-- [ ] **Run the complete GitHub Actions quality workflow** on the merged Phase 18 commit. Current runs `39212965648` and `39212970490` failed before any step ran: six jobs each reported `runner_id=0`, empty runner name and `steps=[]`. Investigate repository/account Actions availability and billing/minute allowance; quota exhaustion is suspected but not proven.
-- [ ] **Run the complete canonical pytest suite** from a complete checkout on Python 3.12. The nine local Phase 18 smoke cases are supplemental evidence only; they are not the full suite.
-- [ ] **Run Ruff**: `ruff check .` on the same commit.
-- [ ] **Run strict mypy**: `mypy src tests` on the same commit.
-- [ ] **Run Bandit**: `bandit -q -r src` on the same commit.
-- [ ] **Run pip-audit** after installing the canonical dependencies from `pyproject.toml`.
-- [ ] **Independent Phase 18 review**: check retry/circuit semantics, 429 shared cooldown, HTTP redirect behavior, hostname allowlist and route-authorization evidence, audit durability/fail-closed behavior, timestamp freshness and recovery behavior.
-- [ ] **Runtime integration review**: verify that actual permitted data connectors use `ConnectivityManager` and a durable, access-controlled `ConnectionAuditSink`; confirm route approvals and secrets-provider integration in the intended runtime. Unit-level abstractions alone do not prove runtime wiring.
+- [ ] **Verify the original conditional-merge commit directly.** Phase 18 was merged to `main` under the owner's documented conditional waiver while hosted-runner allocation was unavailable. Run #787 subsequently passed the full configured workflow on the later Phase 19 superset candidate, but it did not run on the exact Phase 18 merge SHA `bf111eb06fa13f28279154c2c4b30077a67999ca` alone.
+- [ ] **Independent Phase 18 review:** retry/circuit semantics, HTTP redirect behavior, 429 shared cooldown and `Retry-After`, exact host allowlist, time-bounded route authorization, timestamp freshness/reconciliation, and audit durability/fail-closed behavior.
+- [ ] **Production wiring review:** confirm the real approved connectors use `ConnectivityManager`, a durable access-controlled `ConnectionAuditSink`, and current route authorization/secret-provider configuration. The availability of unit-level contracts does not prove all intended runtime connectors are wired.
+- [x] **Quality-gate coverage on the later Phase 19 candidate:** GitHub Actions [Run #787](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39228082016) passed pytest (218 tests), Ruff, mypy, Bandit, preflight/compileall, and pip-audit on `fad5154e92b9b91319006f64390299b9492a3794`. This is superseding-tree evidence only, not a retroactive claim that the original Phase 18 SHA was run.
+
+### Historical runner issue
+
+- [x] **Hosted runner assignment restored for current workflow runs.** Before the repository became public, several jobs ended in about three seconds with `runner_id=0`, empty `runner_name`, and `steps=[]`; no commands executed. Run #787 now confirms all six jobs execute and pass on a hosted runner.
+- [ ] **Historical cause remains unconfirmed.** Exhausted quota/billing was a hypothesis, not a fact established by the raw Jobs API. Do not record it as a definitive root cause without account-level billing/Actions evidence.
 
 ## Phase 19 — Shadow Mode
 
-- [ ] Validate the read-only source/feed provider and exact permission scope before enabling any external data flow.
-- [ ] Verify that SHADOW event schemas preserve mode, feed provenance, model/strategy identity, timestamps, correlation ID and risk-gate outcomes.
-- [ ] Verify that SHADOW intent logging has no route to exchange order submission and that credentials capable of exchange writes are absent.
-- [ ] Run mock tests for disconnect/stale feed, repeated or out-of-order events, model identity mismatch, timeout, rejection/abstention, Auto-Halt, and duplicate event handling.
-- [ ] Run full lint/type/security/pytest gates for the Phase 19 candidate when a runner is available.
-- [ ] Obtain independent risk and architecture review before declaring Phase 19 accepted.
+### Verification status
 
-## Phase 19 — Shadow Mode runtime and verification debt
+- [x] **Full CI for the Phase 19 code candidate:** [Run #787](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39228082016), candidate HEAD `fad5154e92b9b91319006f64390299b9492a3794`: 218 pytest tests passed; Ruff, strict mypy, Bandit, preflight/compileall, and pip-audit all passed.
+- [x] **Documented verification evidence:** `docs/engineering/phase-19-verification-status.md` records exact Run #787, job IDs/results, historical runner behavior, and remaining release gates.
+- [x] **Read-only API/safety boundaries represented in tests:** mock tests exercise candidate/Paper comparison, persistent ledger requirement, model/strategy identity drift, stale/duplicate/gapped inputs, reconciliation, Auto-Halt behavior, risk assessment pass/reject/unavailable, feed timeout, and malformed experiment scope. These tests passed in Run #787.
+- [ ] **Independent architecture/risk review:** confirm Shadow cannot invoke order submission, mutate RiskEngine hard limits, clear Auto-Halt, or relabel SHADOW as PAPER telemetry. Inspect active Paper Champion pointer, immutable experiment/data split matching and reconciliation logic.
+- [ ] **Provision real registered runtime identities:** actual SHADOW candidate and active PAPER Champion specs from the immutable registry, their matching dataset/schema/evaluation/seed/split identity, and the exact controller instance backed by the same persistent registry/ledger.
+- [ ] **Implement and approve production `ShadowRiskAssessmentPort`:** current tests use a mock. Production assessment must have explicit reviewed virtual-state assumptions, remain read-only, and fail closed without altering the canonical Live RiskEngine or Auto-Halt state.
+- [ ] **Provision the real read-only Auto-Halt status source** and prove missing/invalid status abstains; current tests inject a callback and do not configure a production source.
+- [ ] **Review audit storage deployment:** filesystem/path access control, retention, backup/restore, monitoring, recovery and integrity checks. An fsync-backed local JSONL file/hash chain alone is not protection against a privileged attacker rewriting both data and chain.
+- [ ] **Review feed authorization and runtime transport wiring:** approved provider/source, market, interval, entitlement, route policy and operational limits. The implementation wraps bounded REST reads on the existing Nobitex read-only adapter; all production uses of Phase 18 ConnectivityManager remain a separate verification item.
+- [ ] **Configure a supervised external scheduler for bounded `poll_once` calls** only after the preceding production gates pass. No daemon/scheduler is bundled or active, and no live market request was issued during this development pass.
+- [ ] **Keep real market/execution evidence separate:** no real exchange order was sent; no fills, profitability, Paper-trust or live trading readiness are claimed by the Shadow library/API.
+- [ ] **Revalidate all gates on any subsequent source-code change.** The Run #787 pass applies to the code candidate SHA specified above; documentation-only follow-up commits do not modify the Phase 19 Python source/test blobs. The post-documentation head must still be checked against the CI workflow before merging.
 
-- [ ] **Run the complete Phase 19 tests and all project quality gates** on one exact commit: full pytest, Ruff, strict mypy, Bandit, and pip-audit. Source/test files now exist, but no Phase 19 test execution or green CI result is claimed.
-- [ ] **Restore a real GitHub Actions runner assignment**. Latest confirmed runs are #683 / ID `39219341686` (push) and #684 / ID `39219348790` (pull request), both on evidence-documentation snapshot HEAD `cff91e9cda982c4032c7462db35d44289ac58203`; the Phase 19 Python source/test blobs are unchanged. Earlier runs #681 / ID `39219317469` and #682 / ID `39219324682` failed identically on documentation snapshot `a3f591a02895868772746088ae607293c8efc1f3`, after the source-snapshot runs #679 / ID `39219231822` and #680 / ID `39219239566` on `2ac41e6b10942a3f78f2f1a84610dabf8a0b3669`. All six jobs in the repeated runs concluded `failure` within approximately three seconds with `runner_id=0`, empty `runner_name`, and `steps=[]`; job logs returned `BlobNotFound`. None of the configured commands ran. Root cause at the job-execution level is confirmed as runner non-allocation; exhaustion of the hosted-runner quota remains a hypothesis, not proven by this evidence. Owner/operator must review Actions availability, usage quota/billing, concurrency and policy settings.
-- [ ] **Supply the actual registered active Paper Champion and a compatible SHADOW experiment** from immutable registry artifacts. The runner now requires the same registry/ledger and a live `ChampionChallengerController.active_champion_id`; no production champion ID or approved runtime spec was present in this continuation.
-- [ ] **Validate the real data/experiment provenance contract**. Candidate and Paper Champion must have matching dataset version, feature schema, evaluation fingerprint, seed, and split boundaries; the live source/market/interval contract is separately recorded as a feed manifest. Obtain independent review that this split reflects the real registered experiment.
-- [ ] **Wire Phase 18 ConnectivityManager into the approved runtime path or record a reviewed exception**. The Phase 19 feed wraps the existing bounded read-only Nobitex adapter; generic Phase 18 manager use by production connectors remains unverified.
-- [ ] **Provision and review persistent audit storage** for the Learning Lab JSONL file: access control, backup/restore, storage integrity, retention and operational alerting. A local fsync-backed file and hash chain are not a complete defense against a privileged attacker rewriting both data and chain.
-- [ ] **Provision an approved read-only Auto-Halt status source** and prove runtime failure/unknown values abstain. The test API uses injected status callbacks; no real runtime provider was configured.
-- [ ] **Implement and independently approve the production `ShadowRiskAssessmentPort` adapter** using explicit virtual-state assumptions and reviewed risk policies without mutating canonical Live RiskEngine or Auto-Halt state. Phase 19 tests use only a mock assessor. A target must remain abstain/reject when risk assessment is unavailable, malformed, rejecting, halting or abstaining.
-- [ ] **Ensure Paper Champion pointer freshness is single-owner and current across the runtime**. The runner binds to one controller instance and rechecks its in-memory active pointer for each candle; multi-process controller state refresh/coordination is not implemented. Use one canonical process or add reviewed ledger refresh/locking before distributed runtime deployment.
-- [ ] **Configure an external scheduler and health supervision** for bounded `poll_once` calls. No continuous polling daemon, WebSocket client, live market request, or production schedule is included or was run in this PR.
-- [ ] **Independent Phase 19 architecture/risk review**: inspect Paper Champion pointer drift, strategy/regime identity and parameter drift, data freshness/gap recovery, baseline comparison, no-order boundary, and event ledger failure behavior.
-- [ ] **No performance or fill claims** until a separately reviewed fill/cost model and actual governed observations exist. This phase does not calculate counterfactual fills or establish profitability.
+## Phase 20 — Intelligence Core / Model Provider Interface
 
-## Phase 20 — Scope discovery gate
-
-- [ ] **Obtain and register the canonical Phase 20 scope before implementation.** Repository tree/code searches for `Phase 20`, `roadmap`, and `page 6` returned no matching roadmap/specification artifact. The current owner handover provides detailed acceptance requirements for Phases 18 and 19, but no Phase 20 objectives, interfaces, safety gates or acceptance criteria. Do not invent a trading, AI, connectivity or execution feature to fill that gap. Once the canonical scope is supplied or committed, record an ADR/acceptance plan and continue on a separate phase-specific branch.
+- [ ] **Review and accept ADR 0013 before implementation:** `docs/adr/0013-intelligence-core-model-provider-interface.md`, tracked on [PR #20](https://github.com/angry0tiger-sudo/EVORYN/pull/20). The proposal is provider-neutral and defines typed request/response, model identity/provenance, budgets, audit, abstention, privacy controls, and advisory-only boundaries.
+- [ ] **Keep OpenRouter and all other hosted LLM providers disabled until a separate review approves one.** Record data classification/transfer permission, retention/training terms, region, structured-output behavior, model immutability, costs, latency, quotas and failure tests.
+- [ ] **Verify open-source model and training-data rights independently.** Pin immutable model/code revisions, artifact digests, dataset revisions and license terms. The Phase 16 financial-news candidate's training-data-rights flag remains false unless explicit review evidence is recorded.
+- [ ] **Implement provider-neutral interfaces and fake/offline adapters first.** Core imports must not require model frameworks or cloud SDKs; tests must not call real inference endpoints by default.
+- [ ] **Review advisory-only isolation before Shadow integration.** No model/provider may send orders, alter hard risk caps, clear Auto-Halt, mutate live configuration or interpret untrusted input as higher-priority instructions. Phase 19 independent acceptance is a prerequisite for Shadow integration.
 
 ## Evidence classification
 
-- **Observed pass:** exact stated command passed in a recorded environment.
-- **Not run:** no command execution evidence exists.
+- **Observed pass:** exact command on an identified SHA ran and passed, with inspectable runner/log evidence.
+- **Not run:** no valid command execution evidence exists.
 - **Blocked:** execution was prevented by an external prerequisite.
-- **Unconfirmed:** available data does not establish a root cause or conclusion.
+- **Unconfirmed:** the available evidence does not establish the claimed cause or conclusion.
 
-No outstanding item may be closed by inference. This ledger does not authorize live trading, provider-policy circumvention, or changes to deterministic risk limits.
+No open item may be closed by inference. This ledger does not authorize live trading, provider-policy circumvention, or changes to deterministic risk limits.
