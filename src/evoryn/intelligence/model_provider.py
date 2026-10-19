@@ -907,6 +907,9 @@ class IntelligenceCore:
                 latency_ms=latency_ms,
                 input_tokens=response.usage.input_tokens if response.usage else None,
                 output_tokens=response.usage.output_tokens if response.usage else None,
+                estimated_cost_usd=(
+                    response.usage.estimated_cost_usd if response.usage else None
+                ),
             )
         ):
             return self._abstain(request, now, input_fingerprint, "AUDIT_UNAVAILABLE")
@@ -995,6 +998,7 @@ class IntelligenceCore:
         latency_ms: int | None = None,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        estimated_cost_usd: Decimal | None = None,
         reason_code: str | None = None,
     ) -> ModelAuditEvent:
         registered_provider = self._providers.get(request.provider_id)
@@ -1025,11 +1029,7 @@ class IntelligenceCore:
             latency_ms=latency_ms,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            estimated_cost_usd=(
-                None
-                if registered_provider is None
-                else None
-            ),
+            estimated_cost_usd=estimated_cost_usd,
             reason_code=reason_code,
         )
 
