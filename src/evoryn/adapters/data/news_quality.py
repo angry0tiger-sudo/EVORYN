@@ -83,7 +83,10 @@ class _AcceptedSignature:
 class NewsDeduplicationIndex:
     """Thread-safe in-memory duplicate index; only accepted records enter its signatures."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, near_duplicate_similarity: float = 0.94) -> None:
+        if not 0 < near_duplicate_similarity <= 1:
+            raise ValueError("near_duplicate_similarity must be in (0, 1].")
+        self.near_duplicate_similarity = near_duplicate_similarity
         self._lock = RLock()
         self._by_provider_identity: dict[tuple[str, str], _AcceptedSignature] = {}
         self._content_hashes: set[str] = set()
@@ -129,10 +132,6 @@ class NewsDeduplicationIndex:
                     return NewsIngestionStatus.DUPLICATE, "NEAR_DUPLICATE_NORMALIZED_TITLE"
         return None
 
-    @property
-    def _near_duplicate_similarity(self) -> float:
-        return getattr(self, "near_duplicate_similarity", 0.94)
-
     def commit(self, candidate: NewsArticleCandidate, *, canonical_url: str) -> None:
         """Index accepted content only; duplicate/suspicious candidates never poison the index."""
         signature = _AcceptedSignature(
@@ -167,8 +166,10 @@ class NewsQualityGate:
         policy: NewsQualityPolicy | None = None,
     ) -> None:
         self._licenses = license_registry
-        self._dedup = deduplication_index or NewsDeduplicationIndex()
         self._policy = policy or NewsQualityPolicy()
+        self._dedup = deduplication_index or NewsDeduplicationIndex(
+            near_duplicate_similarity=self._policy.near_duplicate_similarity
+        )
 
     @property
     def deduplication_index(self) -> NewsDeduplicationIndex:
@@ -297,7 +298,8 @@ class NewsQualityGate:
             return _result(
                 NewsIngestionStatus.SUSPICIOUS,
                 "DECLARED_CONTENT_HASH_MISMATCH",
-                "Provider-declared normalized text digest does not match the received title/summary.",
+                "Provider-declared normalized text digest does not match the "
+                "received title/summary.",
             )
         canonical_url = _canonical_url(candidate.article_url)
         duplicate = self._dedup.classify(candidate, canonical_url=canonical_url)
@@ -335,7 +337,10 @@ class NewsQualityGate:
         return NewsIngestionResult(
             status=NewsIngestionStatus.ACCEPTED,
             reason_code="ACCEPTED",
-            explanation="Licensed provider metadata passed freshness, provenance, integrity and dedup checks.",
+            explanation=(
+                "Licensed provider metadata passed freshness, provenance, integrity and "
+                "dedup checks."
+            ),
             article=record,
         )
 
