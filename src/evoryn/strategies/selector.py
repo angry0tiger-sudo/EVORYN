@@ -14,7 +14,10 @@ from enum import StrEnum
 
 from evoryn.execution.spot import ExecutionLedger, StrategySelectionLedgerEntry
 from evoryn.intelligence.regime import RegimeLabel, RegimePrediction
-from evoryn.strategies.plugins import StrategyPluginRegistry
+from evoryn.strategies.plugins import (
+    StrategyPluginRegistration,
+    StrategyPluginRegistry,
+)
 
 
 class SelectionStatus(StrEnum):
@@ -50,7 +53,11 @@ class StrategySelectionPolicy:
             raise ValueError("min_confidence must be a finite Decimal in (0, 1].")
         if type(self.required_evidence_count) is not int or self.required_evidence_count < 2:
             raise ValueError("required_evidence_count must be an integer >= 2.")
-        for name in ("required_stability_duration", "minimum_hold_duration", "maximum_prediction_age"):
+        for name in (
+            "required_stability_duration",
+            "minimum_hold_duration",
+            "maximum_prediction_age",
+        ):
             value = getattr(self, name)
             if not isinstance(value, timedelta) or value < timedelta(0):
                 raise ValueError(f"{name} must be a non-negative timedelta.")
@@ -228,7 +235,7 @@ class RegimeStrategySelector:
         correlation_id: str,
         market_symbol: str,
     ) -> StrategySelectionDecision:
-        """Apply gates, update hysteresis state, and always append a decision when a ledger exists."""
+        """Apply gates, update hysteresis state, and append the decision when a ledger exists."""
         _require_aware(now, "now")
         if not correlation_id.strip():
             raise ValueError("correlation_id must not be empty.")
@@ -301,7 +308,10 @@ class RegimeStrategySelector:
             )
         self._model_identity = identity
 
-        if self._last_prediction_as_of is not None and prediction.as_of <= self._last_prediction_as_of:
+        if (
+            self._last_prediction_as_of is not None
+            and prediction.as_of <= self._last_prediction_as_of
+        ):
             return self._make_decision(
                 prediction,
                 now=now,
@@ -453,9 +463,9 @@ class RegimeStrategySelector:
     def _ordered_options(
         self,
         regime: RegimeLabel,
-        options: tuple[object, ...],
-    ) -> tuple[object, ...]:
-        by_id = {getattr(plugin, "plugin_id"): plugin for plugin in options}
+        options: tuple[StrategyPluginRegistration, ...],
+    ) -> tuple[StrategyPluginRegistration, ...]:
+        by_id = {plugin.plugin_id: plugin for plugin in options}
         preferred = self._preferences.get(regime, ())
         ordered_ids = [plugin_id for plugin_id in preferred if plugin_id in by_id]
         ordered_ids.extend(sorted(plugin_id for plugin_id in by_id if plugin_id not in ordered_ids))
