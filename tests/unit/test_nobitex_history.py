@@ -100,7 +100,7 @@ def test_no_data_status_is_an_empty_page() -> None:
     "change",
     [
         {"s": "error", "errmsg": "private/raw provider text"},
-        {"t": [START, START + 3600]},
+        {"t": [START]},
         {"v": ["1"]},
         {"t": [True, START + 3600]},
         {"c": ["NaN", "102"]},

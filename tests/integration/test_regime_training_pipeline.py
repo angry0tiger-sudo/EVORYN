@@ -27,7 +27,7 @@ def synthetic_dataset() -> HistoricalDataset:
     """Create deterministic trend, reversal, range, and high-volatility regimes."""
     closes = [Decimal("100")]
     for index in range(1, 1600):
-        regime = (index // 160) % 4
+        regime = (index // 100) % 4
         prior = closes[-1]
         if regime == 0:
             multiplier = Decimal("1.002")

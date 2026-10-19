@@ -102,7 +102,9 @@ class TrainedRegimeProbabilityModel(RegimeProbabilityModel):
         matrix = numpy.asarray([features.as_float_tuple()], dtype="float64")
         raw = self._estimator.predict_proba(matrix)[0]
         if len(raw) != len(self._class_order):
-            raise TrainedRegimeArtifactError("Loaded estimator class count does not match manifest.")
+            raise TrainedRegimeArtifactError(
+                "Loaded estimator class count does not match manifest."
+            )
         logged = [
             math.log(max(float(value), 1e-15)) / self._temperature
             for value in raw

@@ -8,7 +8,6 @@ from threading import Event
 from evoryn.runtime.paper import PaperRuntimeResult, RuntimeStatus
 from evoryn.runtime.scheduler import PaperRuntimeScheduler
 
-
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 
 

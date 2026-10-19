@@ -68,7 +68,7 @@ jobs:
         run: |
           set -o pipefail
           DAYS="${{ inputs.lookback_days || '180' }}"
-          python scripts/train_nobitex_regime.py --symbol BTCUSDT --resolution 60 --lookback-days "$DAYS" --max-pages 16 --output artifacts/nobitex-regime 2>&1 | tee research-run.log
+          python scripts/train_nobitex_regime.py --symbol BTCUSDT --resolution 60 --lookback-days "$DAYS" --max-pages 24 --output artifacts/nobitex-regime 2>&1 | tee research-run.log
 
       - name: Publish evidence summary
         if: always()

@@ -15,7 +15,7 @@ import platform
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -27,7 +27,6 @@ from evoryn.learning_lab.backtest import BacktestConfig, BacktestResultStore, ru
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.strategies.baseline import SmaCrossoverBaseline
 from evoryn.strategies.contracts import CausalTargetStrategy
-
 
 _LABELS = (
     RegimeLabel.BULL_TREND,
@@ -110,7 +109,10 @@ def forward_outcome(
         returns.append(current / previous - 1.0)
     average = sum(returns) / len(returns)
     volatility = math.sqrt(sum((value - average) ** 2 for value in returns) / len(returns))
-    return ForwardOutcome(forward_return=end_price / start_price - 1.0, forward_volatility=volatility)
+    return ForwardOutcome(
+        forward_return=end_price / start_price - 1.0,
+        forward_volatility=volatility,
+    )
 
 
 def linear_quantile(values: Sequence[float], quantile: float) -> float:
@@ -228,7 +230,9 @@ def train_regime_model(
         or len(validation_indices) < 30
         or len(test_indices) < 30
     ):
-        raise ValueError("Historical dataset is too short for purged chronological model partitions.")
+        raise ValueError(
+            "Historical dataset is too short for purged chronological model partitions."
+        )
 
     extractor = RegimeFeatureExtractor(lookback=lookback)
     series = extractor.extract_series(candles)
@@ -483,9 +487,18 @@ def train_regime_model(
         "release_disposition": "RESEARCH_ONLY_NOT_APPROVED_FOR_LIVE_TRADING",
         "limitations": [
             "Regime labels are weak targets derived from future returns and realized volatility.",
-            "Only the validation partition fits the probability temperature; test is never used for tuning.",
-            "OHLCV cannot reconstruct historical spreads/depth; spread and slippage are explicit assumptions.",
-            "Volume is interpreted as base-asset volume for the fill model and requires provider semantics review.",
+            (
+                "Only the validation partition fits the probability temperature; "
+                "test is never used for tuning."
+            ),
+            (
+                "OHLCV cannot reconstruct historical spreads/depth; spread and slippage "
+                "are explicit assumptions."
+            ),
+            (
+                "Volume is interpreted as base-asset volume for the fill model and requires "
+                "provider semantics review."
+            ),
             "Historical market-data rights/commercial-use permission remain unreviewed.",
             "A positive simulated return is not evidence of future profitability.",
         ],
@@ -602,7 +615,10 @@ def _constant_classifier_metrics(
     accuracy = sum(target == label for target in targets) / len(targets)
     present = [item for item in class_order if any(target == item.value for target in targets)]
     recalls = [
-        sum(target == item.value and prediction == item.value for target, prediction in zip(targets, predicted, strict=True))
+        sum(
+            target == item.value and prediction == item.value
+            for target, prediction in zip(targets, predicted, strict=True)
+        )
         / sum(target == item.value for target in targets)
         for item in present
     ]

@@ -14,14 +14,12 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from http.client import HTTPResponse
-from typing import Any, cast
+from typing import Any, IO, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import (
     HTTPRedirectHandler,
     HTTPSHandler,
-
     ProxyHandler,
     Request,
     build_opener,
@@ -115,7 +113,7 @@ class _RejectRedirects(HTTPRedirectHandler):
     def redirect_request(
         self,
         req: Request,
-        fp: HTTPResponse,
+        fp: IO[bytes],
         code: int,
         msg: str,
         headers: Any,
@@ -165,7 +163,9 @@ def parse_udf_history_payload(
         try:
             timestamp = datetime.fromtimestamp(raw_timestamp, tz=UTC)
         except (OverflowError, OSError, ValueError):
-            raise HistoricalFetchError("UDF candle timestamp is outside the supported datetime range.") from None
+            raise HistoricalFetchError(
+                "UDF candle timestamp is outside the supported datetime range."
+            ) from None
         opening = _decimal(columns["o"][index], "open")
         high = _decimal(columns["h"][index], "high")
         low = _decimal(columns["l"][index], "low")
@@ -264,13 +264,20 @@ class NobitexHistoricalClient:
             pages_fetched += 1
             self._pages_fetched = pages_fetched
             for candle in candles:
-                if not self._config.from_unix_seconds <= int(candle.timestamp.timestamp()) <= self._config.to_unix_seconds:
+                candle_unix = int(candle.timestamp.timestamp())
+                if not (
+                    self._config.from_unix_seconds
+                    <= candle_unix
+                    <= self._config.to_unix_seconds
+                ):
                     continue
                 if candle.timestamp + candle.interval > now.astimezone(UTC):
                     continue
                 existing = collected.get(candle.timestamp)
                 if existing is not None and existing != candle:
-                    raise HistoricalFetchError("Paginated UDF results conflict at a repeated timestamp.")
+                    raise HistoricalFetchError(
+                        "Paginated UDF results conflict at a repeated timestamp."
+                    )
                 collected[candle.timestamp] = candle
             if len(candles) == _MAX_ROWS_PER_PAGE and len(collected) == prior_count:
                 raise HistoricalFetchError("Pagination repeated a full page without advancing.")
@@ -324,7 +331,9 @@ class NobitexHistoricalClient:
             try:
                 return json.loads(body.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise HistoricalFetchError("Historical UDF response is not valid UTF-8 JSON.") from exc
+                raise HistoricalFetchError(
+                    "Historical UDF response is not valid UTF-8 JSON."
+                ) from exc
         except HTTPError as exc:
             # Do not propagate the raw server body, URL query, or headers to logs.
             raise HistoricalFetchError(f"Historical UDF GET returned HTTP {exc.code}.") from None

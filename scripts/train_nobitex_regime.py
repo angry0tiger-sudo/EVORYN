@@ -26,9 +26,13 @@ from evoryn.learning_lab.nobitex_history import (
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", default="BTCUSDT", help="Compact public Nobitex market symbol.")
-    parser.add_argument("--resolution", default="60", help="UDF candle resolution; default is 1 hour.")
+    parser.add_argument(
+        "--resolution",
+        default="60",
+        help="UDF candle resolution; default is 1 hour.",
+    )
     parser.add_argument("--lookback-days", type=int, default=180)
-    parser.add_argument("--max-pages", type=int, default=16)
+    parser.add_argument("--max-pages", type=int, default=24)
     parser.add_argument("--output", type=Path, default=Path("artifacts/nobitex-regime"))
     return parser.parse_args(argv)
 

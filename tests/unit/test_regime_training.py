@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from collections.abc import Sequence
 from decimal import Decimal
-from typing import Sequence
 
 import pytest
 
