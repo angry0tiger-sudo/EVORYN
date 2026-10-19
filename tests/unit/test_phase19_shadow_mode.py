@@ -257,6 +257,11 @@ def test_shadow_runner_records_hypothetical_entry_to_persistent_learning_ledger(
     assert snapshot.target_exposure == Decimal("1")
     assert snapshot.target_quantity == Decimal("5.000")
     assert snapshot.quantity_delta == Decimal("5.000")
+    assert snapshot.baseline_experiment_id == fixture.baseline_spec.experiment_id
+    assert snapshot.baseline_strategy_id == fixture.baseline_strategy.strategy_id
+    assert snapshot.baseline_target_exposure == Decimal("0")
+    assert snapshot.baseline_target_quantity == Decimal("0.000")
+    assert snapshot.baseline_quantity_delta == Decimal("0.000")
     assert snapshot.risk_assessment_status == "NOT_EVALUATED"
     assert snapshot.execution_authorized is False
     assert fixture.ledger.events[-1].event_type is LearningEventType.SHADOW_DECISION_RECORDED
@@ -525,7 +530,6 @@ def test_unregistered_experiment_is_rejected(tmp_path: Path) -> None:
         ShadowRunner(
             config=fixture.config,
             experiment_spec=fixture.spec,
-            baseline_experiment_spec=fixture.baseline_spec,
             baseline_experiment_spec=fixture.baseline_spec,
             registry=other_registry,
             strategy=fixture.strategy,
