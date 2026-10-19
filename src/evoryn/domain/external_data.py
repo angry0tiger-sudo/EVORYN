@@ -42,9 +42,10 @@ class SentimentLabel(StrEnum):
 
 def require_aware_utc(value: datetime, name: str) -> None:
     """Require an aware UTC value so ingestion and as-of comparisons are unambiguous."""
-    if value.tzinfo is None or value.utcoffset() is None:
+    offset = value.utcoffset()
+    if value.tzinfo is None or offset is None:
         raise ValueError(f"{name} must be timezone-aware.")
-    if value.utcoffset().total_seconds() != 0:
+    if offset.total_seconds() != 0:
         raise ValueError(f"{name} must use canonical UTC.")
 
 
