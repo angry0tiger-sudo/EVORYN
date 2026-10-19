@@ -25,6 +25,8 @@ from evoryn.shadow.engine import (
     ShadowConfig,
     ShadowOutcome,
     ShadowPollStatus,
+    ShadowRiskAssessment,
+    ShadowRiskAssessmentStatus,
     ShadowPollingService,
     ShadowRunner,
     ShadowSafetyError,
@@ -100,6 +102,38 @@ class FakeRegimeClassifier:
         )
 
 
+class FakeRiskAssessor:
+    def __init__(
+        self,
+        status: ShadowRiskAssessmentStatus = ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS,
+        *,
+        fail: bool = False,
+    ) -> None:
+        self.status = status
+        self.fail = fail
+        self.calls = 0
+
+    def assess(
+        self,
+        *,
+        market: Market,
+        candle: MarketCandle,
+        target_exposure: Decimal,
+        target_quantity: Decimal,
+        quantity_delta: Decimal,
+        baseline_target_quantity: Decimal,
+        virtual_capital: Decimal,
+    ) -> ShadowRiskAssessment:
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("risk-assessor-secret")
+        return ShadowRiskAssessment(
+            status=self.status,
+            reason_code=f"SHADOW_RISK_{self.status.value.upper()}",
+            explanation=f"Mock-only observational result: {self.status.value}.",
+        )
+
+
 class FakeCandleReader:
     def __init__(self, candles: Sequence[MarketCandle] = ()) -> None:
         self.candles = tuple(candles)
@@ -152,6 +186,8 @@ class Fixture:
         unknown_regime: bool = False,
         identity_drift_at: int | None = None,
         halted: bool = False,
+        risk_status: ShadowRiskAssessmentStatus = ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS,
+        risk_failure: bool = False,
     ) -> None:
         self.now = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
         self.interval = timedelta(minutes=1)
@@ -176,6 +212,7 @@ class Fixture:
             identity_drift_at=identity_drift_at,
         )
         self.halted = halted
+        self.risk_assessor = FakeRiskAssessor(risk_status, fail=risk_failure)
         self.ledger = LearningLabLedger(tmp_path / "learning-ledger.jsonl")
         self.registry = ExperimentRegistry(tmp_path / "registry", self.ledger)
         self.spec = ExperimentSpec(
@@ -228,6 +265,7 @@ class Fixture:
             baseline_strategy=self.baseline_strategy,
             champion_controller=self.champion_controller,
             regime_classifier=self.regime,
+            risk_assessor=self.risk_assessor,
             auto_halt_status=lambda: self.halted,
             utcnow=lambda: self.now,
         )
@@ -269,7 +307,7 @@ def test_shadow_runner_records_hypothetical_entry_to_persistent_learning_ledger(
     assert snapshot.baseline_target_exposure == Decimal("0")
     assert snapshot.baseline_target_quantity == Decimal("0.000")
     assert snapshot.baseline_quantity_delta == Decimal("0.000")
-    assert snapshot.risk_assessment_status == "NOT_EVALUATED"
+    assert snapshot.risk_assessment_status == "observational_pass"
     assert snapshot.execution_authorized is False
     assert fixture.ledger.events[-1].event_type is LearningEventType.SHADOW_DECISION_RECORDED
     assert fixture.ledger.verify() is True
@@ -356,6 +394,30 @@ def test_stale_feed_abstains_and_does_not_mutate_virtual_state(tmp_path: Path) -
     assert snapshot.reason_code == "STALE_CANDLE"
     assert fixture.runner.last_candle_at is None
     assert fixture.runner.history == ()
+
+
+def test_risk_rejection_is_recorded_without_advancing_virtual_state(tmp_path: Path) -> None:
+    fixture = Fixture(tmp_path, risk_status=ShadowRiskAssessmentStatus.REJECT)
+    snapshot = fixture.runner.process_candle(fixture.candle(), received_at=fixture.now)
+
+    assert snapshot.outcome is ShadowOutcome.REJECT
+    assert snapshot.reason_code == "RISK_GATE_REJECTED"
+    assert snapshot.risk_assessment_status == "reject"
+    assert snapshot.target_quantity == Decimal("5.000")
+    assert fixture.runner.history == ()
+    assert fixture.runner.last_candle_at is None
+    assert fixture.ledger.events[-1].event_type is LearningEventType.SHADOW_INPUT_REJECTED
+
+
+def test_risk_assessor_failure_abstains_without_logging_exception_text(tmp_path: Path) -> None:
+    fixture = Fixture(tmp_path, risk_failure=True)
+    snapshot = fixture.runner.process_candle(fixture.candle(), received_at=fixture.now)
+
+    assert snapshot.outcome is ShadowOutcome.ABSTAIN
+    assert snapshot.reason_code == "RISK_ASSESSMENT_UNAVAILABLE"
+    assert snapshot.risk_assessment_status == "UNAVAILABLE"
+    assert fixture.runner.history == ()
+    assert "risk-assessor-secret" not in fixture.ledger.events[-1].payload_json
 
 
 def test_unknown_regime_abstains(tmp_path: Path) -> None:
@@ -504,6 +566,7 @@ def test_baseline_must_share_registered_training_data_identity(tmp_path: Path) -
             baseline_strategy=fixture.baseline_strategy,
             champion_controller=mismatched_controller,
             regime_classifier=fixture.regime,
+            risk_assessor=fixture.risk_assessor,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
         )
@@ -556,6 +619,7 @@ def test_runner_rejects_non_shadow_experiment(tmp_path: Path) -> None:
             baseline_strategy=fixture.baseline_strategy,
             champion_controller=fixture.champion_controller,
             regime_classifier=fixture.regime,
+            risk_assessor=fixture.risk_assessor,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
         )
