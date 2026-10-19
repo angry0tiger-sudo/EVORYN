@@ -549,6 +549,10 @@ class PaperStrategyRuntime:
     def halt_reason(self) -> str | None:
         return self._halt_reason or self.risk_engine.halt_reason
 
+    def _risk_is_halted(self) -> bool:
+        """Read the mutable RiskEngine latch after operations that may change it."""
+        return self.risk_engine.is_halted
+
     def bootstrap(self, *, now: datetime | None = None) -> PaperRuntimeResult:
         observed_at = self._set_now(now)
         correlation_id = self._cycle_id("bootstrap", observed_at)
@@ -811,7 +815,7 @@ class PaperStrategyRuntime:
                         correlation_id,
                         observed_at,
                     )
-                if self.risk_engine.is_halted:
+                if self._risk_is_halted():
                     self._commit_cycle(
                         observed_at,
                         correlation_id,
