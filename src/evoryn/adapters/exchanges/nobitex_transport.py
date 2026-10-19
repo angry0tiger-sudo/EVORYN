@@ -80,6 +80,7 @@ class NobitexHTTPTransport:
                 "/market/stats",
                 "/market/udf/history",
                 "/v2/wallets",
+                "/v2/options",
             }:
                 return True
             return (
@@ -188,6 +189,12 @@ class NobitexHTTPTransport:
             if not self._is_usdt_symbol(symbol):
                 raise InvalidExchangeRequest(
                     "Nobitex trade-data reads are restricted to USDT-quoted markets."
+                )
+
+        if normalized_method == "GET" and path == "/v2/options":
+            if params is not None or payload is not None:
+                raise InvalidExchangeRequest(
+                    "Nobitex options reads do not accept query parameters or a payload."
                 )
 
         if normalized_method == "GET" and payload is not None:

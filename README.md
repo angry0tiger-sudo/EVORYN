@@ -15,7 +15,7 @@ EVORYN is an independently governed, modular trading-intelligence platform plann
 
 ## Project status
 
-The repository contains modular Spot and delegated-Margin domain code and a read-only Nobitex market adapter. Do not assume authenticated live account reads are configured, production runtime wiring is complete, or any system is ready to place real orders. Check the exact commit and current CI evidence before relying on a capability.
+The repository contains modular Spot/Paper execution, delegated-Margin domain rules, a read-only Nobitex adapter, and a separately isolated, feature-gated Spot execution candidate. The candidate is not enabled by default, has no active trading loop, and has not been validated against a live account. Do not treat merged code or green CI as live-trading readiness.
 
 ## Agent foundation
 
@@ -32,4 +32,4 @@ The current agent-foundation branch adds specialized repository-level profiles f
 
 ## Current engineering gate
 
-Phase 22 is limited to read-only Nobitex account data and the hard USDT quote-currency whitelist. Live order submission, cancellation, withdrawals, transfers and collateral mutation remain out of scope. Provider-side read-only token permissions, live API connectivity and production runtime wiring require independent evidence.
+Phase 22 established the read-only Nobitex USDT account/data gate. A separate local Spot execution candidate is being reviewed; it remains disabled unless a local operator supplies both an explicit feature flag and acknowledgement. It requires the deterministic Risk Engine, reconciled account state, fresh Nobitex data/rules, and a persistent SQLite idempotency journal. No credentials are committed and no live test is run in GitHub. The candidate needs review and local verification before a production-ready claim. Withdrawals, transfers, Margin writes and Futures remain unsupported.
