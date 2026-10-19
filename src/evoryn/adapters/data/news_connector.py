@@ -166,7 +166,8 @@ class LicensedNewsJsonConnector:
                     or request_language != self._language_fallback
                 ):
                     raise NewsConnectorError(
-                        "Per-item language is missing and no matching explicit request filter exists."
+                        "Per-item language is missing and no matching explicit "
+                        "request filter exists."
                     )
                 language = self._language_fallback
                 language_evidence = "request_filter"
