@@ -468,18 +468,28 @@ def make_dataset(count: int = 100) -> HistoricalDataset:
 
 @dataclass(frozen=True, slots=True)
 class FakeTrainingManifest:
+    model_id: str
+    model_version: str
+    feature_schema_version: str
     training_dataset_version: str
     training_split: str
     train_start_index: int
     train_end_index_exclusive: int
+    train_start_at: datetime
+    train_end_at: datetime
     model_fingerprint: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "model_id": self.model_id,
+            "model_version": self.model_version,
+            "feature_schema_version": self.feature_schema_version,
             "training_dataset_version": self.training_dataset_version,
             "training_split": self.training_split,
             "train_start_index": self.train_start_index,
             "train_end_index_exclusive": self.train_end_index_exclusive,
+            "train_start_at": self.train_start_at.isoformat(),
+            "train_end_at": self.train_end_at.isoformat(),
             "model_fingerprint": self.model_fingerprint,
         }
 
@@ -515,10 +525,17 @@ def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy(tmp_path: P
     partitions = chronological_split(dataset)
     detector = FakeOutOfSampleDetector(
         FakeTrainingManifest(
+            model_id="synthetic-oos-detector",
+            model_version="test-v1",
+            feature_schema_version="synthetic-v1",
             training_dataset_version=dataset.version,
             training_split="train",
             train_start_index=partitions.train.start,
             train_end_index_exclusive=partitions.train.end,
+            train_start_at=dataset.candles[partitions.train.start].timestamp,
+            train_end_at=(
+                dataset.candles[partitions.train.end - 1].timestamp + dataset.interval
+            ),
             model_fingerprint="train-only-model",
         )
     )
@@ -580,10 +597,17 @@ def test_oos_evaluation_rejects_training_leakage_from_validation_or_test() -> No
     partitions = chronological_split(dataset)
     detector = FakeOutOfSampleDetector(
         FakeTrainingManifest(
+            model_id="synthetic-oos-detector",
+            model_version="test-v1",
+            feature_schema_version="synthetic-v1",
             training_dataset_version=dataset.version,
             training_split="validation",
             train_start_index=partitions.validation.start,
             train_end_index_exclusive=partitions.validation.end,
+            train_start_at=dataset.candles[partitions.validation.start].timestamp,
+            train_end_at=(
+                dataset.candles[partitions.validation.end - 1].timestamp + dataset.interval
+            ),
             model_fingerprint="invalid-leaked-model",
         )
     )
