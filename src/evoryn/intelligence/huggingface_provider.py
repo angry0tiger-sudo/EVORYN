@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from threading import RLock
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from evoryn.intelligence.model_provider import (
     ConfidenceSemantics,
@@ -101,7 +101,6 @@ class TransformersSequenceClassificationRuntime:
                     "Install EVORYN's optional news-nlp dependencies for local inference."
                 ) from None
             kwargs: dict[str, object] = {
-                "revision": revision,
                 "local_files_only": True,
                 "trust_remote_code": False,
                 "cache_dir": str(self._cache_dir) if self._cache_dir else None,
@@ -109,18 +108,21 @@ class TransformersSequenceClassificationRuntime:
             try:
                 tokenizer = AutoTokenizer.from_pretrained(
                     model_id,
+                    revision=revision,
                     use_fast=True,
                     **kwargs,
                 )
                 model = AutoModelForSequenceClassification.from_pretrained(
                     model_id,
+                    revision=revision,
                     use_safetensors=True,
                     **kwargs,
                 )
                 model.eval()
             except Exception:
                 raise ModelProviderError(
-                    "Pinned Hugging Face artifacts are not available locally or failed safe loading."
+                    "Pinned Hugging Face artifacts are not available locally "
+                    "or failed safe loading."
                 ) from None
             loaded = (tokenizer, model, torch)
             self._loaded[key] = loaded
@@ -131,7 +133,7 @@ class HuggingFaceSequenceClassificationProvider:
     """Provider-port implementation for an explicitly reviewed local Hugging Face classifier.
 
     A caller must independently approve model and training-data rights in ModelIdentity/ModelPolicy.
-    The adapter never downloads weights, executes remote code, provides tools, or sees trading ports.
+    The adapter never downloads weights or executes remote code, and it has no trading capabilities.
     """
 
     def __init__(
@@ -145,9 +147,13 @@ class HuggingFaceSequenceClassificationProvider:
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         if identity.provider_id != "huggingface-local":
-            raise ValueError("Local Hugging Face identities must use provider_id='huggingface-local'.")
+            raise ValueError(
+                "Local Hugging Face identities must use provider_id='huggingface-local'."
+            )
         if not _COMMIT_SHA.fullmatch(identity.revision):
-            raise ValueError("Hugging Face model revision must be a 40-character immutable commit SHA.")
+            raise ValueError(
+                "Hugging Face revision must be a 40-character immutable commit SHA."
+            )
         if type(max_input_chars) is not int or max_input_chars <= 0:
             raise ValueError("max_input_chars must be a positive integer.")
         if type(max_token_count) is not int or max_token_count <= 0:
@@ -209,7 +215,9 @@ class HuggingFaceSequenceClassificationProvider:
             normalized[label] = float(score)
         total = sum(normalized.values())
         if not math.isfinite(total) or total <= 0 or abs(total - 1.0) > 0.02:
-            raise ModelProviderError("Local classifier returned an invalid probability distribution.")
+            raise ModelProviderError(
+                "Local classifier returned an invalid probability distribution."
+            )
         normalized = {label: score / total for label, score in normalized.items()}
         best_label, best_score = max(normalized.items(), key=lambda item: item[1])
         return ModelResponse(
@@ -230,6 +238,10 @@ class HuggingFaceSequenceClassificationProvider:
 
     def _now(self) -> datetime:
         value = self._clock() if self._clock is not None else datetime.now(UTC)
-        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != timedelta(0):
+        if (
+            not isinstance(value, datetime)
+            or value.tzinfo is None
+            or value.utcoffset() != timedelta(0)
+        ):
             raise ModelProviderError("Local model clock must return an aware UTC timestamp.")
         return value
