@@ -70,8 +70,11 @@ class StrategySelectionPolicy:
             "maximum_prediction_age",
         ):
             value = getattr(self, name)
-            if not isinstance(value, timedelta) or value <= timedelta(0):
-                raise ValueError(f"{name} must be a positive timedelta.")
+            if not isinstance(value, timedelta):
+                raise ValueError(f"{name} must be a positive whole-second timedelta.")
+            seconds = value.total_seconds()
+            if seconds < 1 or not seconds.is_integer():
+                raise ValueError(f"{name} must be a positive whole-second timedelta.")
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -128,6 +131,7 @@ class StrategySelectionDecision:
             "model_fingerprint",
             "feature_schema_version",
             "registry_fingerprint",
+            "routing_fingerprint",
             "reason_code",
             "reason",
         ):
@@ -138,7 +142,8 @@ class StrategySelectionDecision:
         if self.last_switch_at is not None:
             _require_aware(self.last_switch_at, "last_switch_at")
         if (
-            not self.regime_confidence.is_finite()
+            not isinstance(self.regime_confidence, Decimal)
+            or not self.regime_confidence.is_finite()
             or self.regime_confidence < 0
             or self.regime_confidence > 1
         ):
@@ -147,8 +152,18 @@ class StrategySelectionDecision:
             raise ValueError("evidence_count must be a non-negative integer.")
         if type(self.allow_new_signals) is not bool:
             raise ValueError("allow_new_signals must be an explicit boolean.")
-        if self.status is SelectionStatus.ABSTAINED and self.allow_new_signals:
-            raise ValueError("Abstention must prohibit new strategy signals.")
+        if self.status in {
+            SelectionStatus.ABSTAINED,
+            SelectionStatus.DUPLICATE_EVIDENCE,
+            SelectionStatus.NO_COMPATIBLE_PLUGIN,
+            SelectionStatus.MODEL_IDENTITY_CHANGED,
+            SelectionStatus.REGISTRY_CHANGED,
+        } and self.allow_new_signals:
+            raise ValueError("Fail-closed selection outcomes must prohibit new strategy signals.")
+        if self.status in {SelectionStatus.SWITCHED, SelectionStatus.RETAINED} and (
+            self.selected_strategy_id is None or not self.allow_new_signals
+        ):
+            raise ValueError("Switched/retained decisions must expose an active strategy.")
         if len(set(self.alternative_strategy_ids)) != len(self.alternative_strategy_ids):
             raise ValueError("Alternative strategy IDs must be unique.")
 
