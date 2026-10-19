@@ -187,7 +187,7 @@ class StrategySelectionDecision:
             status=self.status.value,
             reason_code=self.reason_code,
             reason=self.reason,
-            evidence_count=min(self.evidence_count, self.policy.required_evidence_count),
+            evidence_count=self.evidence_count,
             required_evidence_count=self.policy.required_evidence_count,
             candidate_since=self.candidate_since,
             last_switch_at=self.last_switch_at,
