@@ -199,8 +199,11 @@ class LocalHuggingFaceRuntime:
     def _load(self, key: tuple[str, str]) -> None:
         model_id, revision = key
         try:
-            import torch
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            import torch  # type: ignore[import-not-found]
+            from transformers import (  # type: ignore[import-not-found]
+                AutoModelForSequenceClassification,
+                AutoTokenizer,
+            )
         except ImportError as exc:
             raise NLPDependencyUnavailable(
                 "Install the optional news-nlp dependencies before loading Hugging Face weights."
