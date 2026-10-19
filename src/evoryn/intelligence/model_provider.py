@@ -545,6 +545,8 @@ class ModelPolicy:
     allow_remote_providers: bool = False
     require_training_data_rights_verified: bool = True
     require_commercial_approval: bool = False
+    policy_id: str = "intelligence-core-policy"
+    policy_version: str = "1.0.0"
     max_cost_usd: Decimal | None = None
     minimum_confidence: Decimal | None = None
     accepted_confidence_semantics: frozenset[ConfidenceSemantics] = frozenset(
@@ -557,6 +559,8 @@ class ModelPolicy:
     def __post_init__(self) -> None:
         if not self.allowed_tasks or not self.allowed_data_classifications:
             raise ValueError("Model policy must explicitly allow tasks and data classifications.")
+        if not self.policy_id.strip() or not self.policy_version.strip():
+            raise ValueError("Model policy ID and version must not be empty.")
         if not self.allowed_identities:
             raise ValueError("Model policy must explicitly allow at least one model identity.")
         if len({item.identity_key for item in self.allowed_identities}) != len(
@@ -600,11 +604,19 @@ class ModelAuditEvent:
     correlation_id: str
     provider_id: str
     model_id: str | None
+    model_revision: str | None
+    task: ModelTask
+    data_classification: DataClassification
+    input_schema_id: str
+    output_schema_id: str
+    policy_id: str
+    policy_version: str
     input_fingerprint: str
     output_fingerprint: str | None = None
     latency_ms: int | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    estimated_cost_usd: Decimal | None = None
     reason_code: str | None = None
 
     def __post_init__(self) -> None:
@@ -617,6 +629,12 @@ class ModelAuditEvent:
             value = getattr(self, name)
             if value is not None and (type(value) is not int or value < 0):
                 raise ValueError(f"{name} must be None or a non-negative integer.")
+        if self.estimated_cost_usd is not None and (
+            not self.estimated_cost_usd.is_finite() or self.estimated_cost_usd < 0
+        ):
+            raise ValueError("estimated_cost_usd must be finite and non-negative.")
+        if not self.policy_id.strip() or not self.policy_version.strip():
+            raise ValueError("Audit policy identity must not be empty.")
 
 
 class ModelProviderPort(Protocol):
@@ -826,7 +844,10 @@ class IntelligenceCore:
         invalid_reason = self._response_rejection(request, provider, response, schema_out, now)
         output_fingerprint: str | None = None
         if invalid_reason is None:
-            output_fingerprint = hashlib.sha256(canonical_json_bytes(response.output)).hexdigest()
+            serialized_output = canonical_json_bytes(response.output)
+            output_fingerprint = hashlib.sha256(serialized_output).hexdigest()
+            if len(serialized_output) > self._policy.max_output_bytes:
+                invalid_reason = "OUTPUT_SIZE_EXCEEDED"
             if (
                 response.usage is not None
                 and response.usage.output_tokens > request.max_output_tokens
@@ -976,18 +997,39 @@ class IntelligenceCore:
         output_tokens: int | None = None,
         reason_code: str | None = None,
     ) -> ModelAuditEvent:
+        registered_provider = self._providers.get(request.provider_id)
+        resolved_model_id = (
+            model_id
+            if model_id is not None
+            else registered_provider.identity.model_id if registered_provider is not None else None
+        )
+        resolved_revision = (
+            registered_provider.identity.revision if registered_provider is not None else None
+        )
         return ModelAuditEvent(
             event_type=event_type,
             timestamp=timestamp,
             request_id=request.request_id,
             correlation_id=request.correlation_id,
             provider_id=request.provider_id,
-            model_id=model_id,
+            model_id=resolved_model_id,
+            model_revision=resolved_revision,
+            task=request.task,
+            data_classification=request.data_classification,
+            input_schema_id=request.input_schema_id,
+            output_schema_id=request.output_schema_id,
+            policy_id=self._policy.policy_id,
+            policy_version=self._policy.policy_version,
             input_fingerprint=input_fingerprint,
             output_fingerprint=output_fingerprint,
             latency_ms=latency_ms,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            estimated_cost_usd=(
+                None
+                if registered_provider is None
+                else None
+            ),
             reason_code=reason_code,
         )
 
