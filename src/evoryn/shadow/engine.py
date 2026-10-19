@@ -844,40 +844,44 @@ class ShadowRunner:
 
         if reason is None:
             try:
-                proposed_exposure = self._strategy.target_exposure(candidate_history)
-                baseline_exposure = self._baseline_strategy.target_exposure(candidate_history)
+                shadow_target_exposure = self._strategy.target_exposure(candidate_history)
+                paper_target_exposure = self._baseline_strategy.target_exposure(candidate_history)
                 if (
-                    not isinstance(proposed_exposure, Decimal)
-                    or not proposed_exposure.is_finite()
-                    or proposed_exposure < 0
-                    or proposed_exposure > 1
+                    not isinstance(shadow_target_exposure, Decimal)
+                    or not shadow_target_exposure.is_finite()
+                    or shadow_target_exposure < 0
+                    or shadow_target_exposure > 1
                 ):
                     raise ValueError("Shadow strategy target exposure is outside [0, 1].")
                 if (
-                    not isinstance(baseline_exposure, Decimal)
-                    or not baseline_exposure.is_finite()
-                    or baseline_exposure < 0
-                    or baseline_exposure > 1
+                    not isinstance(paper_target_exposure, Decimal)
+                    or not paper_target_exposure.is_finite()
+                    or paper_target_exposure < 0
+                    or paper_target_exposure > 1
                 ):
                     raise ValueError("Paper baseline target exposure is outside [0, 1].")
-                proposed_quantity = _floor_step(
+                shadow_target_quantity = _floor_step(
                     (
                         self._config.virtual_capital
                         * self._config.allocation_fraction
-                        * proposed_exposure
+                        * shadow_target_exposure
                     )
                     / candle.close,
                     self._config.quantity_step,
                 )
-                baseline_quantity = _floor_step(
+                paper_target_quantity = _floor_step(
                     (
                         self._config.virtual_capital
                         * self._config.allocation_fraction
-                        * baseline_exposure
+                        * paper_target_exposure
                     )
                     / candle.close,
                     self._config.quantity_step,
                 )
+                proposed_exposure = shadow_target_exposure
+                baseline_exposure = paper_target_exposure
+                proposed_quantity = shadow_target_quantity
+                baseline_quantity = paper_target_quantity
             except Exception:
                 proposed_exposure = None
                 proposed_quantity = None
@@ -890,17 +894,19 @@ class ShadowRunner:
                 )
                 outcome = ShadowOutcome.ABSTAIN
             else:
-                quantity_delta = proposed_quantity - self._target_quantity
-                baseline_quantity_delta = baseline_quantity - self._baseline_target_quantity
+                quantity_delta = shadow_target_quantity - self._target_quantity
+                baseline_quantity_delta = (
+                    paper_target_quantity - self._baseline_target_quantity
+                )
                 notional_delta = quantity_delta * candle.close
                 try:
                     risk_result = self._risk_assessor.assess(
                         market=self._config.market,
                         candle=candle,
-                        target_exposure=proposed_exposure,
-                        target_quantity=proposed_quantity,
+                        target_exposure=shadow_target_exposure,
+                        target_quantity=shadow_target_quantity,
                         quantity_delta=quantity_delta,
-                        baseline_target_quantity=baseline_quantity,
+                        baseline_target_quantity=paper_target_quantity,
                         virtual_capital=self._config.virtual_capital,
                     )
                     if not isinstance(risk_result, ShadowRiskAssessment):
@@ -915,7 +921,7 @@ class ShadowRunner:
                     risk_status = risk_result.status.value
                     risk_reason = risk_result.explanation
                     if risk_result.status is ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS:
-                        outcome = _outcome_for(self._target_quantity, proposed_quantity)
+                        outcome = _outcome_for(self._target_quantity, shadow_target_quantity)
                         reason_code = "SHADOW_TARGET_COMPUTED"
                         explanation = (
                             "The candidate and registered Paper baseline were evaluated on the "
