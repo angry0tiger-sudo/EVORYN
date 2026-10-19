@@ -305,6 +305,7 @@ class ShadowDecisionSnapshot:
     reason_code: str
     reason: str
     risk_assessment_status: str
+    risk_assessment_reason_code: str
     risk_assessment_reason: str
     auto_halt_status: str
     execution_authorized: bool = False
@@ -337,6 +338,7 @@ class ShadowDecisionSnapshot:
             "reason_code",
             "reason",
             "risk_assessment_status",
+            "risk_assessment_reason_code",
             "risk_assessment_reason",
             "auto_halt_status",
         ):
@@ -456,6 +458,7 @@ class ShadowDecisionSnapshot:
             "reason": self.reason,
             "risk_assessment": {
                 "status": self.risk_assessment_status,
+                "reason_code": self.risk_assessment_reason_code,
                 "reason": self.risk_assessment_reason,
             },
             "auto_halt_status": self.auto_halt_status,
@@ -837,6 +840,7 @@ class ShadowRunner:
         baseline_quantity: Decimal | None = None
         baseline_quantity_delta: Decimal | None = None
         risk_status = "NOT_EVALUATED"
+        risk_reason_code = "PRIOR_GATE_BLOCKED"
         risk_reason = "Risk assessment not run because a prior input gate abstained."
         outcome = ShadowOutcome.ABSTAIN
         reason_code = reason or "UNSET"
@@ -913,12 +917,14 @@ class ShadowRunner:
                         raise ValueError("Risk assessor returned an invalid result type.")
                 except Exception:
                     risk_status = "UNAVAILABLE"
+                    risk_reason_code = "RISK_ASSESSMENT_UNAVAILABLE"
                     risk_reason = "Read-only risk assessment failed or returned an invalid result."
                     reason_code = "RISK_ASSESSMENT_UNAVAILABLE"
                     explanation = risk_reason
                     outcome = ShadowOutcome.ABSTAIN
                 else:
                     risk_status = risk_result.status.value
+                    risk_reason_code = risk_result.reason_code
                     risk_reason = risk_result.explanation
                     if risk_result.status is ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS:
                         outcome = _outcome_for(self._target_quantity, shadow_target_quantity)
@@ -966,6 +972,7 @@ class ShadowRunner:
             baseline_target_quantity=baseline_quantity,
             baseline_quantity_delta=baseline_quantity_delta,
             risk_assessment_status=risk_status,
+            risk_assessment_reason_code=risk_reason_code,
             risk_assessment_reason=risk_reason,
         )
         event_type = (
@@ -1148,6 +1155,7 @@ class ShadowRunner:
                 "target_exposure": str(exposure),
                 "target_quantity": str(target_quantity),
                 "risk_assessment_status": risk_result.status.value,
+                "risk_assessment_reason_code": risk_result.reason_code,
                 "risk_assessment_reason": risk_result.explanation,
                 "paper_baseline": {
                     "experiment_id": self._baseline_spec.experiment_id,
@@ -1289,6 +1297,7 @@ class ShadowRunner:
         baseline_target_quantity: Decimal | None,
         baseline_quantity_delta: Decimal | None,
         risk_assessment_status: str,
+        risk_assessment_reason_code: str,
         risk_assessment_reason: str,
     ) -> ShadowDecisionSnapshot:
         return ShadowDecisionSnapshot(
@@ -1342,6 +1351,7 @@ class ShadowRunner:
             reason_code=reason_code,
             reason=reason,
             risk_assessment_status=risk_assessment_status,
+            risk_assessment_reason_code=risk_assessment_reason_code,
             risk_assessment_reason=risk_assessment_reason,
             auto_halt_status=auto_halt_status,
             execution_authorized=False,
