@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from urllib.parse import urlsplit
@@ -215,13 +215,34 @@ class CapabilityMatrix:
         venue: str,
         market_type: MarketType,
         feature: CapabilityFeature,
+        *,
+        now: datetime,
+        max_age: timedelta,
     ) -> VenueCapability:
-        """Fail closed unless the exact capability has an affirmative evidence row."""
+        """Require affirmative, fresh evidence for the exact capability.
+
+        Callers must supply the current time and an explicit freshness policy.
+        Stale or future-dated evidence is reported as UNKNOWN and cannot pass.
+        """
+        _require_aware(now, field_name="now")
+        if max_age <= timedelta(0):
+            raise ValueError("max_age must be positive.")
+
         item = self.lookup(venue, market_type, feature)
         if item is None or item.status is not CapabilityStatus.SUPPORTED:
             status = CapabilityStatus.UNKNOWN if item is None else item.status
             raise CapabilityNotSupportedError(
                 venue.casefold(), market_type, feature, status
+            )
+
+        if item.observed_at is None:
+            raise CapabilityNotSupportedError(
+                venue.casefold(), market_type, feature, CapabilityStatus.UNKNOWN
+            )
+        age = now - item.observed_at
+        if age < timedelta(0) or age > max_age:
+            raise CapabilityNotSupportedError(
+                venue.casefold(), market_type, feature, CapabilityStatus.UNKNOWN
             )
         return item
 

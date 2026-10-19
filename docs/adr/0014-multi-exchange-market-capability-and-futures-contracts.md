@@ -25,10 +25,11 @@ individually. Futures contract math must not be guessed from Spot or Nobitex del
 1. Add immutable, typed domain records for `MarketType`, `CapabilityFeature`, `CapabilityStatus`,
    evidence-backed `VenueCapability`, and `CapabilityMatrix`.
 2. Use exactly four capability states: `supported`, `unsupported`, `unknown`, and `restricted`.
-   Missing records resolve to `unknown`. Only an explicit `supported` record can pass
-   `CapabilityMatrix.require_supported`. A `supported` or `unsupported` claim requires an HTTPS
-   evidence reference and a timezone-aware observation timestamp. `restricted` requires a policy
-   rationale. Absence from a documentation page is not sufficient evidence for `unsupported`.
+   Missing records resolve to `unknown`. `CapabilityMatrix.require_supported` requires callers to supply
+   an aware current timestamp and an explicit positive maximum evidence age. Stale or future-dated
+   observations fail as `unknown`. A `supported` or `unsupported` claim requires an HTTPS evidence
+   reference and a timezone-aware observation timestamp. `restricted` requires a policy rationale.
+   Absence from a documentation page is not sufficient evidence for `unsupported`.
 3. Give each instrument both a canonical symbol and the venue's exact native symbol. Include venue
    and market type in the identity key. Futures identity must declare settlement asset, contract kind,
    settlement lifecycle, and positive contract size; expiring contracts also require an aware expiry.

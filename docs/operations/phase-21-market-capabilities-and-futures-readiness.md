@@ -13,8 +13,10 @@ or Futures. An omitted record is `unknown`, not a permissive default. A record m
 `unsupported` must carry an HTTPS evidence reference and an aware observation timestamp. `restricted`
 requires a specific policy rationale. Evidence scope must match the exact market and operation.
 
-`CapabilityMatrix.require_supported` is a pure fail-closed domain check. It is not yet a production runtime
-permission service and must not be mistaken for one until it is explicitly wired into reviewed adapters.
+`CapabilityMatrix.require_supported` is a pure fail-closed domain check. Callers must supply the current
+aware timestamp and a positive maximum age for the evidence; stale or future-dated evidence fails as
+`unknown`. It is not yet a production runtime permission service and must not be mistaken for one until
+it is explicitly wired into reviewed adapters.
 
 ## Instrument and rules
 

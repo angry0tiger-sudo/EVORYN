@@ -127,7 +127,13 @@ def test_non_supported_capabilities_never_pass_gate(status: CapabilityStatus) ->
     matrix = CapabilityMatrix(entries=(row,))
 
     with pytest.raises(CapabilityNotSupportedError) as error:
-        matrix.require_supported("FIXTURE", MarketType.SPOT, CapabilityFeature.MARKET_DATA_READ)
+        matrix.require_supported(
+            "FIXTURE",
+            MarketType.SPOT,
+            CapabilityFeature.MARKET_DATA_READ,
+            now=NOW,
+            max_age=timedelta(hours=1),
+        )
 
     assert error.value.status is status
 
@@ -136,7 +142,11 @@ def test_supported_capability_is_scoped_to_exact_market_and_feature() -> None:
     matrix = CapabilityMatrix(entries=(capability(),))
 
     assert matrix.require_supported(
-        "fixture", MarketType.SPOT, CapabilityFeature.MARKET_DATA_READ
+        "fixture",
+        MarketType.SPOT,
+        CapabilityFeature.MARKET_DATA_READ,
+        now=NOW,
+        max_age=timedelta(hours=1),
     ).status is CapabilityStatus.SUPPORTED
     assert (
         matrix.status_for(
@@ -148,6 +158,63 @@ def test_supported_capability_is_scoped_to_exact_market_and_feature() -> None:
         matrix.status_for("fixture", MarketType.SPOT, CapabilityFeature.ORDER_SUBMIT)
         is CapabilityStatus.UNKNOWN
     )
+
+
+def test_stale_capability_evidence_fails_closed_as_unknown() -> None:
+    row = VenueCapability(
+        venue="fixture",
+        market_type=MarketType.SPOT,
+        feature=CapabilityFeature.MARKET_DATA_READ,
+        status=CapabilityStatus.SUPPORTED,
+        evidence_url=OFFICIAL_SOURCE,
+        observed_at=NOW - timedelta(hours=2),
+    )
+    matrix = CapabilityMatrix(entries=(row,))
+
+    with pytest.raises(CapabilityNotSupportedError) as error:
+        matrix.require_supported(
+            "fixture",
+            MarketType.SPOT,
+            CapabilityFeature.MARKET_DATA_READ,
+            now=NOW,
+            max_age=timedelta(hours=1),
+        )
+    assert error.value.status is CapabilityStatus.UNKNOWN
+
+
+def test_future_dated_capability_evidence_fails_closed_as_unknown() -> None:
+    row = capability()
+    future = VenueCapability(
+        venue=row.venue,
+        market_type=row.market_type,
+        feature=row.feature,
+        status=row.status,
+        evidence_url=row.evidence_url,
+        observed_at=NOW + timedelta(minutes=1),
+    )
+    matrix = CapabilityMatrix(entries=(future,))
+
+    with pytest.raises(CapabilityNotSupportedError) as error:
+        matrix.require_supported(
+            "fixture",
+            MarketType.SPOT,
+            CapabilityFeature.MARKET_DATA_READ,
+            now=NOW,
+            max_age=timedelta(hours=1),
+        )
+    assert error.value.status is CapabilityStatus.UNKNOWN
+
+
+def test_capability_freshness_policy_must_be_positive() -> None:
+    matrix = CapabilityMatrix(entries=(capability(),))
+    with pytest.raises(ValueError, match="max_age must be positive"):
+        matrix.require_supported(
+            "fixture",
+            MarketType.SPOT,
+            CapabilityFeature.MARKET_DATA_READ,
+            now=NOW,
+            max_age=timedelta(0),
+        )
 
 
 def test_duplicate_capability_keys_are_rejected() -> None:
