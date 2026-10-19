@@ -414,7 +414,9 @@ class NobitexRestCandleFeed:
         completed: list[MarketCandle] = []
         for candle in rows:
             if candle.market != self.market or candle.interval != self.interval:
-                raise ValueError("Nobitex returned a candle with unexpected market identity/interval.")
+                raise ValueError(
+                    "Nobitex returned a candle with unexpected market identity/interval."
+                )
             if candle.timestamp.tzinfo is None or candle.timestamp.utcoffset() != timedelta(0):
                 raise ValueError("Nobitex returned a candle with a non-canonical timestamp.")
             if candle.source != self.source_id:
@@ -442,11 +444,17 @@ class ShadowRunner:
         utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         if experiment_spec.mode is not ExperimentMode.SHADOW:
-            raise ShadowSafetyError("Experiment spec mode must be SHADOW; PAPER/LIVE are forbidden.")
+            raise ShadowSafetyError(
+                "Experiment spec mode must be SHADOW; PAPER/LIVE are forbidden."
+            )
         if registry.get(experiment_spec.experiment_id) != experiment_spec:
-            raise ShadowSafetyError("Shadow experiment is not identically registered in the ledger.")
+            raise ShadowSafetyError(
+                "Shadow experiment is not identically registered in the ledger."
+            )
         if not registry.ledger.is_persistent:
-            raise ShadowSafetyError("Shadow requires a path-backed, fsync-persistent Learning Lab ledger.")
+            raise ShadowSafetyError(
+                "Shadow requires a path-backed, fsync-persistent Learning Lab ledger."
+            )
         if not registry.ledger.verify():
             raise ShadowSafetyError("Learning Lab ledger verification failed.")
         actual_fingerprint = strategy_fingerprint(strategy)
@@ -456,9 +464,13 @@ class ShadowRunner:
             or experiment_spec.model_version != strategy.strategy_version
             or experiment_spec.parameters != strategy_parameters
         ):
-            raise ShadowSafetyError("Strategy identity/parameters do not match the registered experiment.")
+            raise ShadowSafetyError(
+                "Strategy identity/parameters do not match the registered experiment."
+            )
         if experiment_spec.evaluation_config_fingerprint != config.evaluation_config_fingerprint:
-            raise ShadowSafetyError("Shadow configuration does not match the registered fingerprint.")
+            raise ShadowSafetyError(
+                "Shadow configuration does not match the registered fingerprint."
+            )
         if not callable(auto_halt_status):
             raise ValueError("A read-only Auto-Halt status reader is required.")
         self._config = config
@@ -533,7 +545,9 @@ class ShadowRunner:
         if self._continuity_blocked or self._identity_blocked:
             raise ShadowSafetyError("A blocked Shadow run requires explicit recovery/replacement.")
         if not 2 <= len(rows) <= self._config.max_history_candles:
-            raise ShadowSafetyError("Initial feed window must contain 2..max_history_candles candles.")
+            raise ShadowSafetyError(
+                "Initial feed window must contain 2..max_history_candles candles."
+            )
         previous: MarketCandle | None = None
         for candle in rows:
             # Older warm-up candles are expected to be old; validate shape at their own close time.
@@ -543,7 +557,10 @@ class ShadowRunner:
             )
             if invalid is not None:
                 raise ShadowSafetyError(f"Initial feed window rejected: {invalid}.")
-            if previous is not None and candle.timestamp - previous.timestamp != self._config.interval:
+            if (
+                previous is not None
+                and candle.timestamp - previous.timestamp != self._config.interval
+            ):
                 raise ShadowSafetyError("Initial feed window contains a gap or duplicate.")
             previous = candle
         last = rows[-1]
@@ -740,7 +757,7 @@ class ShadowRunner:
         evidence_ref: str,
         received_at: datetime,
     ) -> None:
-        """Replace local history only after a caller supplies contiguous, fresh reconciliation data."""
+        """Replace local history only after a caller supplies contiguous and fresh data."""
         ref = _validate_id(evidence_ref, "evidence_ref")
         received = _require_utc(received_at, "received_at")
         rows = tuple(candles)
@@ -748,7 +765,7 @@ class ShadowRunner:
             raise ValueError("Reconciliation history length is outside configured bounds.")
         previous: MarketCandle | None = None
         for candle in rows:
-            # Historic candles are tested at their own close time; only the newest must be fresh now.
+            # Historic candles are checked at their close time; only the newest must be fresh now.
             reason = self._validate_candle(
                 candle, candle.timestamp + candle.interval, compare_sequence=False
             )
