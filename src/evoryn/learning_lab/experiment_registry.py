@@ -479,6 +479,11 @@ class LearningLabLedger:
             return tuple(self._events)
 
     @property
+    def is_persistent(self) -> bool:
+        """Return whether ledger events are written to an fsync-backed JSONL file."""
+        return self._path is not None
+
+    @property
     def last_event_hash(self) -> str:
         with self._lock:
             return self._events[-1].event_hash if self._events else "0" * 64
