@@ -29,6 +29,17 @@ _ZERO = Decimal("0")
 _ONE = Decimal("1")
 
 
+def _canonical_json_bytes(value: object) -> bytes:
+    """Serialize a JSON-compatible report deterministically for fingerprints and storage."""
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
 @dataclass(frozen=True, slots=True)
 class BacktestConfig:
     """All economically material simulator assumptions are mandatory and fingerprinted."""
