@@ -25,8 +25,9 @@ was tested, where it was tested, which evidence supported a change, and what hap
   evaluation configuration. The unique experiment ID also incorporates UTC creation time, allowing
   repeated trials to remain separate while preserving the same content fingerprint.
 - Evaluation configuration must include every economically material assumption, including fees,
-  spread, slippage, fill limits, initial cash/allocation, engine/version and other simulation settings.
-  Champion and Challenger must use the same config fingerprint and test range for a valid comparison.
+  spread, slippage, fill limits, initial cash/allocation, and other simulation settings. The engine
+  version/code revision is captured separately in the run/experiment identity. Champion and
+  Challenger must use the same config fingerprint and test range for a valid comparison.
 - Specs and run evidence are stored as canonical JSON beneath immutable content-derived IDs. Existing
   conflicting bytes, altered fields, mismatched run identities or an unregistered artifact are rejected.
 - Backtest replay evidence can only be created for a BACKTEST experiment and must match the registered
