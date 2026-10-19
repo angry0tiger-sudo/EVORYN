@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -316,6 +316,13 @@ def test_duplicate_evidence_cannot_increment_hysteresis_and_is_logged() -> None:
     assert len(ledger.strategy_selections) == 2
 
 
+def test_regime_prediction_rejects_confidence_inconsistent_with_probabilities() -> None:
+    valid = prediction(RegimeLabel.BULL_TREND, selection_time(1))
+
+    with pytest.raises(ValueError, match="must equal the selected label"):
+        replace(valid, confidence=Decimal("0.4"))
+
+
 def test_invalid_duplicate_regime_evidence_clears_a_pending_candidate() -> None:
     selector = RegimeStrategySelector(build_baseline_registry())
     first = select_at(selector, RegimeLabel.BULL_TREND, 1)
@@ -512,6 +519,7 @@ def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy() -> None:
     assert report.test_range_end_exclusive == partitions.test.end
     assert report.adaptive_result.evaluation_range == partitions.test
     assert report.fixed_baseline_result.evaluation_range == partitions.test
+    assert report.selector_engine_version == "1.0.0"
     assert report.adaptive_result.run_id != report.fixed_baseline_result.run_id
     assert len(report.decision_ledger_entries) == partitions.test.size
     assert report.decision_ledger_entries[0].correlation_id.startswith("backtest:BTC-USDT:")
