@@ -44,15 +44,22 @@ This ledger records open verification and runtime-integration obligations. Close
 - [ ] **Implement/validate a production durable `ModelAuditSink` and approved credential/transport integration.** The in-memory audit sink is test-only. Remote execution stays blocked on absent cost ceilings, policy approval, data permission or auditable usage.
 - [ ] **Review advisory-only isolation before Shadow integration.** No model/provider may send orders, alter hard risk caps, clear Auto-Halt, mutate live configuration or interpret untrusted input as higher-priority instructions. Phase 19's independent runtime/risk acceptance remains a prerequisite for Shadow integration.
 
-## Phase 21A — Market Capability and Futures Contract Foundation
+## Phase 21A — Market Capability Contract Foundation
 
-- [ ] **Wire the typed capability evidence into each runtime adapter only after explicit review.** The initial `CapabilityMatrix` model is a domain foundation, not yet a runtime authorization service; legacy booleans must not be interpreted as per-market Futures permission.
-- [ ] **Select no Futures venue until official API, terms/license, account/market eligibility, and jurisdictional/contract constraints are reviewed.** Nobitex Futures and all unselected venue capabilities remain Unknown where evidence is incomplete.
-- [ ] **Implement a venue-specific Futures adapter only after ADR and contract evidence.** Required fields include contract identity/size, precision and minimums, funding/settlement applicability, margin inputs, position mode, liquidation data, order lifecycle, idempotency, reconciliation, rate limits and safe timeout handling.
-- [ ] **Keep CCXT as adapter-only and dependency-free until a pinned-version PoC passes.** The PoC must prove exact venue/mode semantics, license/SBOM, precision/error mapping, offline contract/failure tests and measurable benefit.
-- [ ] **Complete adapter-isolation failure drills.** Prove one plugin failure cannot mutate or block other plugin state, registry entries, per-venue rate budgets, or audit/reconciliation ledgers.
-- [ ] **Keep transfer/custody/cross-exchange orchestration restricted.** Atomicity, partial completion, asynchronous settlement, duplicate transfer handling, custody assumptions, and recovery invariants need a separate reviewed architecture.
-- [ ] **No live order-writing route, credentials, real transfer, or hard-risk mutation is in scope.** The new Futures data types are not a risk decision or a production authorization.
+- [x] **Merged bounded capability-contract foundation.** PR #23 was squash-merged at `1a7871dad08a12565bf63edcd8c21af8794da816`. The merge is a domain-contract milestone, not production authorization or Futures support.
+- [x] **Exact merge-SHA CI verified.** GitHub Actions [Run #39256040848](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39256040848) passed all six configured jobs on `1a7871dad08a12565bf63edcd8c21af8794da816`.
+- [ ] **Runtime wiring remains unverified.** `CapabilityMatrix` is not yet a production runtime authorization service. Legacy booleans do not imply market-specific support.
+- [x] **Owner scope directive recorded:** subsequent Phase 21 work is focused only on Nobitex Spot and documented delegated Margin. No international venue investigation is in scope. Nobitex Futures remains Unknown and is not being pursued.
+
+## Phase 21B — Nobitex Margin Conformance and Pool-Aware Risk
+
+- [ ] **Require an explicit, fresh liquidity-pool snapshot for every new Margin opening-intent assessment.** Unknown/stale/future evidence must halt; an inactive or exhausted pool must not permit a new opening.
+- [ ] **Prove exact side-specific delegation units and boundaries.** BUY compares `amount × price` against the unique BUY limit in destination currency; SELL compares `amount` against the unique SELL limit in source currency. Equality is permitted; any excess is rejected.
+- [ ] **Keep market-level `buyEnabled`/`sellEnabled`, source-reported `maxLeverage`, user/side/leverage-specific delegation rows, pool currency, pool capacity, and timestamp freshness independent checks.**
+- [ ] **Ensure a healthy existing-position assessment cannot independently authorize additional exposure.** New risk must pass the open-intent policy with current market settings, user limits and pool capacity.
+- [ ] **Keep Margin adapter normalization-only and the generic Nobitex ExchangePort Spot-read-only.** No authenticated Margin runtime, Margin order/close endpoint, collateral edit, transfer, or Live order path is introduced by Phase 21B.
+- [ ] **Verify with offline unit and contract conformance tests on the exact PR SHA:** pytest, Ruff, strict mypy, Bandit, preflight/compileall and pip-audit. Any failing or unrun gate remains open.
+- [ ] **Account-collateral sufficiency remains a runtime-integration gap.** The generic initial-collateral estimate is planning-only; the current pure Margin policy has no approved Margin-wallet balance source or fully specified server calculation.
 
 ## Evidence classification
 

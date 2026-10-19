@@ -12,6 +12,8 @@ from decimal import Decimal, InvalidOperation
 from evoryn.margin.models import (
     DelegationLimit,
     DelegationLimitSnapshot,
+    MarginLiquidityPoolSnapshot,
+    MarginLiquidityPoolStatus,
     MarginMarketSettings,
     MarginMode,
     MarginPosition,
@@ -87,6 +89,49 @@ class NobitexMarginAdapter:
             mark_price=_optional_decimal(payload, "markPrice"),
             realized_pnl=_optional_decimal(payload, "PNL"),
             realized_pnl_percent=_optional_decimal(payload, "PNLPercent"),
+        )
+
+    @staticmethod
+    def normalize_liquidity_pool(
+        payload: Mapping[str, object],
+        *,
+        currency: str,
+        observed_at: datetime,
+    ) -> MarginLiquidityPoolSnapshot:
+        """Normalize the documented active-pools listing for one source currency.
+
+        Only a successful, well-formed response can establish a pool snapshot. A currency
+        omitted from that complete active-pool response is inactive for the observation.
+        """
+        if not currency.strip():
+            raise ValueError("Liquidity-pool currency must not be empty.")
+        if payload.get("status") != "ok":
+            raise ValueError("Nobitex liquidity-pool response status is not ok.")
+        raw_pools = payload.get("pools")
+        if not isinstance(raw_pools, Mapping):
+            raise ValueError("Nobitex liquidity-pool response requires a 'pools' mapping.")
+        matches = [
+            (key, row)
+            for key, row in raw_pools.items()
+            if isinstance(key, str) and key.casefold() == currency.casefold()
+        ]
+        if len(matches) > 1:
+            raise ValueError("Nobitex liquidity-pool response duplicates a currency key.")
+        if not matches:
+            return MarginLiquidityPoolSnapshot(
+                currency=currency,
+                status=MarginLiquidityPoolStatus.INACTIVE,
+                observed_at=observed_at,
+            )
+        raw_row = matches[0][1]
+        if not isinstance(raw_row, Mapping):
+            raise ValueError("Nobitex liquidity-pool row must be an object.")
+        return MarginLiquidityPoolSnapshot(
+            currency=currency,
+            status=MarginLiquidityPoolStatus.ACTIVE,
+            observed_at=observed_at,
+            capacity=_required_decimal(raw_row, "capacity"),
+            filled_capacity=_required_decimal(raw_row, "filledCapacity"),
         )
 
     @staticmethod

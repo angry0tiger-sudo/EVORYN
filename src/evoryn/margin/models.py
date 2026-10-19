@@ -20,6 +20,14 @@ class MarginSide(StrEnum):
     SELL = "sell"
 
 
+class MarginLiquidityPoolStatus(StrEnum):
+    """Status of a source-currency pool in the documented active-pools response."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    UNKNOWN = "unknown"
+
+
 class MarginPositionStatus(StrEnum):
     """Documented position states plus an explicit fail-closed unknown state."""
 
@@ -141,6 +149,39 @@ class DelegationLimitSnapshot:
             if key in seen:
                 raise ValueError("duplicate side/leverage rows in delegation limit snapshot.")
             seen.add(key)
+
+
+@dataclass(frozen=True, slots=True)
+class MarginLiquidityPoolSnapshot:
+    """Source-currency liquidity capacity from Nobitex's active-pools listing."""
+
+    currency: str
+    status: MarginLiquidityPoolStatus
+    observed_at: datetime
+    capacity: Decimal | None = None
+    filled_capacity: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self.currency, "currency")
+        if not isinstance(self.status, MarginLiquidityPoolStatus):
+            raise ValueError("Pool status must be MarginLiquidityPoolStatus.")
+        _require_aware(self.observed_at, "Liquidity pool observation timestamp")
+        if self.status is MarginLiquidityPoolStatus.ACTIVE:
+            if self.capacity is None or self.filled_capacity is None:
+                raise ValueError("An active liquidity pool requires capacity and filledCapacity.")
+            _require_nonnegative(self.capacity, "pool capacity")
+            _require_nonnegative(self.filled_capacity, "pool filledCapacity")
+        elif self.capacity is not None or self.filled_capacity is not None:
+            raise ValueError("Inactive/unknown pools must not carry active capacity values.")
+
+    @property
+    def available_capacity(self) -> Decimal | None:
+        """Return the reported unfilled source-currency capacity, if known."""
+        if self.status is not MarginLiquidityPoolStatus.ACTIVE:
+            return None
+        if self.capacity is None or self.filled_capacity is None:
+            return None
+        return self.capacity - self.filled_capacity
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,8 +358,10 @@ class MarginRiskAssessment:
         _require_aware(self.assessed_at, "Risk assessment timestamp")
         _require_nonempty(self.reason_code, "reason_code")
         _require_nonempty(self.explanation, "explanation")
-        if self.new_risk_permitted and self.health is not MarginHealth.HEALTHY:
-            raise ValueError("Only a healthy position assessment may permit new risk.")
+        if self.new_risk_permitted:
+            raise ValueError(
+                "Position health assessments cannot authorize additional risk."
+            )
 
 
 @dataclass(frozen=True, slots=True)
