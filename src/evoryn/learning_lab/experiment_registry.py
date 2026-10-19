@@ -605,7 +605,7 @@ class ExperimentRegistry:
                 "specs", f"{spec.experiment_id}.json", spec.to_dict()
             )
             if not stored:
-                existing_spec = self.get(spec.experiment_id)
+                existing_spec = self._load_spec_file(spec.experiment_id)
                 if existing_spec.to_dict() != spec.to_dict():
                     raise ExperimentIntegrityError(
                         "Existing experiment file conflicts with registration."
@@ -630,8 +630,8 @@ class ExperimentRegistry:
                 "model_fingerprint": spec.model_fingerprint,
             }
             if registered_events:
-                if not any(
-                    json.loads(event.payload_json) == expected_payload
+                if any(
+                    json.loads(event.payload_json) != expected_payload
                     for event in registered_events
                 ):
                     raise ExperimentIntegrityError(
@@ -654,25 +654,58 @@ class ExperimentRegistry:
             return spec.experiment_id
 
     def get(self, experiment_id: str) -> ExperimentSpec:
-        """Load an immutable spec by digest, verifying its self-contained identity."""
+        """Load an experiment only when immutable bytes and its ledger registration agree."""
         _require_sha(code=experiment_id, name="experiment_id", length=64)
         with self._lock:
-            if experiment_id in self._specs:
-                return self._specs[experiment_id]
-            path = self._root / "specs" / f"{experiment_id}.json"
-            try:
-                value = json.loads(path.read_bytes())
-            except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-                raise KeyError(f"Unknown experiment ID: {experiment_id}") from exc
-            if not isinstance(value, dict):
-                raise ExperimentIntegrityError("Experiment file must be a JSON object.")
-            spec = ExperimentSpec.from_dict(value)
-            if spec.experiment_id != experiment_id:
-                raise ExperimentIntegrityError(
-                    "Experiment ID differs from the requested file name."
-                )
-            self._specs[experiment_id] = spec
+            spec = self._specs.get(experiment_id)
+            if spec is None:
+                spec = self._load_spec_file(experiment_id)
+                self._specs[experiment_id] = spec
+            self._require_spec_ledger_record(spec)
             return spec
+
+    def _load_spec_file(self, experiment_id: str) -> ExperimentSpec:
+        """Decode and verify the immutable spec file without requiring its ledger event."""
+        path = self._root / "specs" / f"{experiment_id}.json"
+        try:
+            value = json.loads(path.read_bytes())
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise KeyError(f"Unknown experiment ID: {experiment_id}") from exc
+        if not isinstance(value, dict):
+            raise ExperimentIntegrityError("Experiment file must be a JSON object.")
+        spec = ExperimentSpec.from_dict(value)
+        if spec.experiment_id != experiment_id:
+            raise ExperimentIntegrityError(
+                "Experiment ID differs from the requested file name."
+            )
+        return spec
+
+    def _require_spec_ledger_record(self, spec: ExperimentSpec) -> None:
+        """Fail closed if a registered experiment has no exact append-only ledger event."""
+        expected_payload = {
+            "experiment_fingerprint": spec.fingerprint,
+            "mode": spec.mode.value,
+            "dataset_version": spec.dataset_version,
+            "code_revision": spec.code_revision,
+            "model_fingerprint": spec.model_fingerprint,
+        }
+        matching_events = tuple(
+            event
+            for event in self._ledger.events
+            if event.experiment_id == spec.experiment_id
+            and event.event_type
+            in {
+                LearningEventType.EXPERIMENT_REGISTERED,
+                LearningEventType.EXPERIMENT_REGISTRATION_REUSED,
+            }
+        )
+        if not matching_events or any(
+            json.loads(event.payload_json) != expected_payload
+            for event in matching_events
+        ):
+            raise ExperimentIntegrityError(
+                "Experiment specification lacks a matching Learning Lab Ledger event."
+            )
 
     def record_evidence(
         self,
