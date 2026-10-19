@@ -229,6 +229,16 @@ class ShadowDecisionSnapshot:
     model_version: str
     model_fingerprint: str
     feature_schema_version: str
+    baseline_experiment_id: str
+    baseline_model_id: str
+    baseline_model_version: str
+    baseline_model_fingerprint: str
+    baseline_strategy_id: str
+    baseline_strategy_version: str
+    baseline_strategy_fingerprint: str
+    baseline_target_exposure: Decimal | None
+    baseline_target_quantity: Decimal | None
+    baseline_quantity_delta: Decimal | None
     regime_label: str
     regime_confidence: Decimal | None
     regime_as_of: datetime | None
@@ -266,6 +276,13 @@ class ShadowDecisionSnapshot:
             "model_version",
             "model_fingerprint",
             "feature_schema_version",
+            "baseline_experiment_id",
+            "baseline_model_id",
+            "baseline_model_version",
+            "baseline_model_fingerprint",
+            "baseline_strategy_id",
+            "baseline_strategy_version",
+            "baseline_strategy_fingerprint",
             "regime_label",
             "reason_code",
             "reason",
@@ -304,10 +321,22 @@ class ShadowDecisionSnapshot:
             or self.target_exposure > 1
         ):
             raise ValueError("target_exposure must be None or in [0, 1].")
-        for name in ("target_quantity", "quantity_delta", "estimated_notional_delta"):
+        for name in (
+            "target_quantity",
+            "quantity_delta",
+            "estimated_notional_delta",
+            "baseline_target_quantity",
+            "baseline_quantity_delta",
+        ):
             value = getattr(self, name)
             if value is not None and not value.is_finite():
                 raise ValueError(f"{name} must be None or finite.")
+        if self.baseline_target_exposure is not None and (
+            not self.baseline_target_exposure.is_finite()
+            or self.baseline_target_exposure < 0
+            or self.baseline_target_exposure > 1
+        ):
+            raise ValueError("baseline_target_exposure must be None or in [0, 1].")
 
     def to_payload(self) -> dict[str, Any]:
         """Serialize without any URL, credential, request body, or order-routing material."""
@@ -341,6 +370,23 @@ class ShadowDecisionSnapshot:
                 "version": self.model_version,
                 "fingerprint": self.model_fingerprint,
                 "feature_schema_version": self.feature_schema_version,
+            },
+            "paper_baseline": {
+                "experiment_id": self.baseline_experiment_id,
+                "model_id": self.baseline_model_id,
+                "model_version": self.baseline_model_version,
+                "model_fingerprint": self.baseline_model_fingerprint,
+                "strategy_id": self.baseline_strategy_id,
+                "strategy_version": self.baseline_strategy_version,
+                "strategy_fingerprint": self.baseline_strategy_fingerprint,
+                "target_exposure": _decimal_or_none(self.baseline_target_exposure),
+                "target_quantity": _decimal_or_none(self.baseline_target_quantity),
+                "quantity_delta": _decimal_or_none(self.baseline_quantity_delta),
+                "comparison_status": (
+                    "COMPUTED"
+                    if self.baseline_target_exposure is not None
+                    else "NOT_EVALUATED"
+                ),
             },
             "regime": {
                 "label": self.regime_label,
