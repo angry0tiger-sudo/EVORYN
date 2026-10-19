@@ -709,16 +709,13 @@ class ChampionChallengerController:
             )
 
         failed = self._active_champion_id
-        if self._previous_champion_id is not None:
-            self._active_champion_id = self._previous_champion_id
-            self._previous_champion_id = None
+        restore_id = self._previous_champion_id
+        if restore_id is not None:
             status = RollbackStatus.ROLLED_BACK
             reason = (
-                f"Rolled Paper champion {failed} back to last known-good "
-                f"{self._active_champion_id}."
+                f"Rolled Paper champion {failed} back to last known-good {restore_id}."
             )
         else:
-            self._active_champion_id = None
             status = RollbackStatus.SAFE_HOLD_NO_CHAMPION
             reason = "No known-good predecessor is available; Paper selection is disabled."
         self._ledger.append(
@@ -729,7 +726,7 @@ class ChampionChallengerController:
             payload={
                 "trigger": trigger.value,
                 "failed_experiment_id": failed,
-                "restored_experiment_id": self._active_champion_id,
+                "restored_experiment_id": restore_id,
                 "rollback_status": status.value,
                 "evidence_id": evidence.evidence_id,
                 "data_quality_pass": evidence.data_quality_pass,
@@ -738,6 +735,8 @@ class ChampionChallengerController:
                 "net_return_fraction": str(evidence.net_return_fraction),
             },
         )
+        self._active_champion_id = restore_id
+        self._previous_champion_id = None
         decision = RollbackDecision(
             status=status,
             trigger=trigger,
