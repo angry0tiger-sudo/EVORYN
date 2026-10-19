@@ -18,6 +18,7 @@ on:
       - "src/evoryn/intelligence/trained_regime.py"
       - "scripts/train_nobitex_regime.py"
       - "tests/integration/test_regime_training_pipeline.py"
+      - "tests/integration/test_paper_strategy_runtime.py"
       - "tests/unit/test_nobitex_history.py"
       - "tests/unit/test_regime_training.py"
       - ".github/workflows/nobitex-regime-training.yml"
