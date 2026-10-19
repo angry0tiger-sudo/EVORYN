@@ -36,11 +36,13 @@ This ledger records open verification and runtime-integration obligations. Close
 
 ## Phase 20 — Intelligence Core / Model Provider Interface
 
-- [ ] **Review and accept ADR 0013 before implementation:** `docs/adr/0013-intelligence-core-model-provider-interface.md`, proposed in [PR #21](https://github.com/angry0tiger-sudo/EVORYN/pull/21). The proposal is provider-neutral and defines typed request/response, model identity/provenance, budgets, audit, abstention, privacy controls, and advisory-only boundaries.
-- [ ] **Keep OpenRouter and all other hosted LLM providers disabled until a separate review approves one.** Record data classification/transfer permission, retention/training terms, region, structured-output behavior, model immutability, costs, latency, quotas and failure tests.
-- [ ] **Verify open-source model and training-data rights independently.** Pin immutable model/code revisions, artifact digests, dataset revisions and license terms. The Phase 16 financial-news candidate's training-data-rights flag remains false unless explicit review evidence is recorded.
-- [ ] **Implement provider-neutral interfaces and fake/offline adapters first.** Core imports must not require model frameworks or cloud SDKs; tests must not call real inference endpoints by default.
-- [ ] **Review advisory-only isolation before Shadow integration.** No model/provider may send orders, alter hard risk caps, clear Auto-Halt, mutate live configuration or interpret untrusted input as higher-priority instructions. Phase 19 independent acceptance is a prerequisite for Shadow integration.
+- [x] **ADR 0013 accepted into main.** PR #21 was merged at `836737d955bdcb7d8e70ff76afb58b9fa1ed6704`; its PR CI Run #797 passed all six configured jobs. This adopts the architecture, not a particular LLM vendor or production provider.
+- [x] **Provider-neutral contracts implemented on the Phase 20 development branch:** typed request/response and model identity, schema-bound JSON, model/task/data allowlists, deadlines and budgets, sanitized audit events, abstention, the generic compatible-LLM adapter port, and a local-files-only Hugging Face classifier adapter. See `docs/operations/phase-20-model-provider-interface.md`.
+- [ ] **Run all project CI gates on the exact Phase 20 implementation SHA before merge.** Offline tests must pass without network/model weights; include pytest, Ruff, strict mypy, Bandit, preflight/compileall and pip-audit.
+- [ ] **Keep OpenRouter and all other hosted LLM providers disabled until a separate review approves one.** Record data classification/transfer permission, retention/training terms, region, structured-output behavior, model immutability, costs, latency, quotas and failure tests. There is no bundled HTTP transport or configured cloud endpoint in this phase.
+- [ ] **Review a concrete Hugging Face model and training-data rights independently before enabling weights.** Pin immutable revisions and artifact digests where available. The Phase 16 Financial PhraseBank candidate's training-data-rights flag remains false unless explicit review evidence is recorded.
+- [ ] **Implement/validate a production durable `ModelAuditSink` and approved credential/transport integration.** The in-memory audit sink is test-only. Remote execution stays blocked on absent cost ceilings, policy approval, data permission or auditable usage.
+- [ ] **Review advisory-only isolation before Shadow integration.** No model/provider may send orders, alter hard risk caps, clear Auto-Halt, mutate live configuration or interpret untrusted input as higher-priority instructions. Phase 19's independent runtime/risk acceptance remains a prerequisite for Shadow integration.
 
 ## Evidence classification
 
