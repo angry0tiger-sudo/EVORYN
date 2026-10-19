@@ -994,11 +994,12 @@ class ShadowRunner:
             risk_assessment_reason_code=risk_reason_code,
             risk_assessment_reason=risk_reason,
         )
-        event_type = (
-            LearningEventType.SHADOW_INPUT_REJECTED
-            if outcome in {ShadowOutcome.ABSTAIN, ShadowOutcome.REJECT}
-            else LearningEventType.SHADOW_DECISION_RECORDED
-        )
+        if outcome is ShadowOutcome.REJECT:
+            event_type = LearningEventType.SHADOW_RISK_REJECTED
+        elif outcome is ShadowOutcome.ABSTAIN:
+            event_type = LearningEventType.SHADOW_INPUT_REJECTED
+        else:
+            event_type = LearningEventType.SHADOW_DECISION_RECORDED
         self._append_event(
             event_type,
             correlation_id=cid,
