@@ -130,7 +130,7 @@ class NewsDeduplicationIndex:
             for known_title in self._titles:
                 if min(len(title), len(known_title)) >= 20 and (
                     SequenceMatcher(None, title, known_title).ratio()
-                    >= self._near_duplicate_similarity
+                    >= self.near_duplicate_similarity
                 ):
                     return NewsIngestionStatus.DUPLICATE, "NEAR_DUPLICATE_NORMALIZED_TITLE"
         return None
