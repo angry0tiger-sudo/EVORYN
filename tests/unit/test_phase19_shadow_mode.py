@@ -383,7 +383,9 @@ def test_gap_latches_continuity_until_explicit_reconciliation(tmp_path: Path) ->
         received_at=fixture.now,
     )
     assert fixture.runner.continuity_blocked is False
-    assert fixture.runner.last_candle_at == history[-1].timestamp
+    reconciled_last_candle_at = fixture.runner.last_candle_at
+    assert reconciled_last_candle_at is not None
+    assert reconciled_last_candle_at == history[-1].timestamp
     assert fixture.ledger.events[-1].event_type is LearningEventType.SHADOW_RECONCILIATION
 
 
