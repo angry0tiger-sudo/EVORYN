@@ -73,6 +73,7 @@ class StrategySelectionDecision:
 
     decision_id: str
     correlation_id: str
+    market_symbol: str
     recorded_at: datetime
     regime_as_of: datetime
     regime_label: RegimeLabel
@@ -103,6 +104,7 @@ class StrategySelectionDecision:
         for name in (
             "decision_id",
             "correlation_id",
+            "market_symbol",
             "confidence_semantics",
             "model_id",
             "model_version",
@@ -139,7 +141,7 @@ class StrategySelectionDecision:
             event_id=self.decision_id,
             correlation_id=self.correlation_id,
             recorded_at=self.recorded_at,
-            market_symbol=self._market_symbol_from_correlation(),
+            market_symbol=self.market_symbol,
             regime_label=self.regime_label.value,
             regime_confidence=self.regime_confidence,
             confidence_semantics=self.confidence_semantics,
@@ -167,10 +169,7 @@ class StrategySelectionDecision:
             registry_fingerprint=self.registry_fingerprint,
         )
 
-    def _market_symbol_from_correlation(self) -> str:
-        """Decision correlation IDs may optionally carry a market symbol; otherwise use scope."""
-        parts = self.correlation_id.split(":")
-        return parts[1] if len(parts) >= 3 and parts[0] in {"selector", "backtest"} else "unspecified"
+
 
 
 class RegimeStrategySelector:
@@ -227,16 +226,20 @@ class RegimeStrategySelector:
         *,
         now: datetime,
         correlation_id: str,
+        market_symbol: str,
     ) -> StrategySelectionDecision:
         """Apply gates, update hysteresis state, and always append a decision when a ledger exists."""
         _require_aware(now, "now")
         if not correlation_id.strip():
             raise ValueError("correlation_id must not be empty.")
+        if not market_symbol.strip():
+            raise ValueError("market_symbol must not be empty.")
         if prediction.as_of > now:
             return self._make_decision(
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.ABSTAINED,
                 reason_code="FUTURE_REGIME_PREDICTION",
                 reason="The regime prediction timestamp is later than the selector decision time.",
@@ -477,6 +480,7 @@ class RegimeStrategySelector:
         *,
         now: datetime,
         correlation_id: str,
+        market_symbol: str,
         status: SelectionStatus,
         reason_code: str,
         reason: str,
@@ -492,6 +496,7 @@ class RegimeStrategySelector:
         decision = StrategySelectionDecision(
             decision_id=decision_id,
             correlation_id=correlation_id,
+            market_symbol=market_symbol,
             recorded_at=now.astimezone(UTC),
             regime_as_of=prediction.as_of,
             regime_label=prediction.label,
