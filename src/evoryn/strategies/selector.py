@@ -489,9 +489,10 @@ class RegimeStrategySelector:
                 allow_new_signals=False,
             )
         desired = ordered_options[0]
+        desired_id = desired.plugin_id
         alternative_ids = tuple(plugin.plugin_id for plugin in ordered_options)
 
-        if desired == self._current_strategy_id:
+        if desired_id == self._current_strategy_id:
             self._clear_candidate()
             return self._make_decision(
                 prediction,
@@ -501,12 +502,12 @@ class RegimeStrategySelector:
                 status=SelectionStatus.RETAINED,
                 reason_code="CURRENT_STRATEGY_COMPATIBLE",
                 reason="The current plugin remains the configured choice for this regime.",
-                candidate_id=desired,
+                candidate_id=desired_id,
                 alternatives=alternative_ids,
                 allow_new_signals=True,
             )
 
-        self._observe_candidate(desired, prediction.as_of)
+        self._observe_candidate(desired_id, prediction.as_of)
         stability_elapsed = (
             prediction.as_of - self._candidate_since
             if self._candidate_since is not None
@@ -520,7 +521,7 @@ class RegimeStrategySelector:
         hold_ready = hold_elapsed is None or hold_elapsed >= self._policy.minimum_hold_duration
         if evidence_ready and stability_ready and hold_ready:
             previous = self._current_strategy_id
-            self._current_strategy_id = desired
+            self._current_strategy_id = desired_id
             self._last_switch_at = now
             decision = self._make_decision(
                 prediction,
@@ -530,10 +531,10 @@ class RegimeStrategySelector:
                 status=SelectionStatus.SWITCHED,
                 reason_code="HYSTERESIS_REQUIREMENTS_MET",
                 reason=(
-                    f"Selected {desired!r} after {self._policy.required_evidence_count} "
+                    f"Selected {desired_id!r} after {self._policy.required_evidence_count} "
                     "distinct regime observations, stable-duration and hold-duration checks."
                 ),
-                candidate_id=desired,
+                candidate_id=desired_id,
                 alternatives=alternative_ids,
                 allow_new_signals=True,
                 previous_strategy_id=previous,
