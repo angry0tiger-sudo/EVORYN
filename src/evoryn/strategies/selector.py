@@ -203,12 +203,19 @@ class RegimeStrategySelector:
     ) -> None:
         self._registry = registry
         self._policy = policy or StrategySelectionPolicy()
-        self._preferences = preferred_strategy_by_regime or {
-            RegimeLabel.BULL_TREND: ("sma-crossover-long-flat", "sma-trend-long-flat"),
-            RegimeLabel.BEAR_TREND: ("flat-no-position",),
-            RegimeLabel.RANGE_BOUND: ("sma-trend-long-flat", "flat-no-position"),
-            RegimeLabel.HIGH_VOLATILITY: ("flat-no-position",),
-        }
+        self._preferences = (
+            {
+                RegimeLabel.BULL_TREND: (
+                    "sma-crossover-long-flat",
+                    "sma-trend-long-flat",
+                ),
+                RegimeLabel.BEAR_TREND: ("flat-no-position",),
+                RegimeLabel.RANGE_BOUND: ("sma-trend-long-flat", "flat-no-position"),
+                RegimeLabel.HIGH_VOLATILITY: ("flat-no-position",),
+            }
+            if preferred_strategy_by_regime is None
+            else preferred_strategy_by_regime
+        )
         self._validate_preferences()
         self._ledger = decision_ledger
         self._current_strategy_id: str | None = None
