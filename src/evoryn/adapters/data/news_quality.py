@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from decimal import Decimal
 from difflib import SequenceMatcher
 from threading import RLock
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
