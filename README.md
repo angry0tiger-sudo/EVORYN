@@ -45,7 +45,7 @@ scripts\setup.bat
 bash scripts/setup.sh
 ```
 
-The scripts create a project-local `.venv`, install the package and development dependencies, create `data/ `, copy `.env.example` to `.env` only when `.env` does not already exist, compile source/test files and run the offline unit-test suite. They do not call Nobitex, do not create an order and do not start a trading process.
+The scripts create a project-local `.venv`, install the package and development dependencies, create `data/`, copy `.env.example` to `.env` only when `.env` does not already exist, compile source/test files and run the offline unit-test suite. They do not call Nobitex, do not create an order and do not start a trading process.
 
 If setup fails, keep the full terminal output and the exact `git rev-parse HEAD`. Do not work around a failed test by disabling a CI gate.
 

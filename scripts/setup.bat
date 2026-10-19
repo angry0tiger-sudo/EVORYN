@@ -22,6 +22,7 @@ if not exist ".env" (
 )
 
 if not exist "data" mkdir "data"
+if errorlevel 1 goto :error
 call ".venv\Scripts\activate.bat"
 python -m pip install --upgrade pip
 if errorlevel 1 goto :error

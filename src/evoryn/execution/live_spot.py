@@ -52,7 +52,6 @@ from evoryn.risk.models import (
     RiskResult,
 )
 
-
 _LIVE_ACKNOWLEDGEMENT = "I_UNDERSTAND_ORDERS_ARE_REAL"
 _RULES_MAX_AGE_SECONDS = 300.0
 _BLOCKING_STATES = frozenset(
