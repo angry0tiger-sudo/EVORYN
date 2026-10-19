@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-
 from scripts.live_readonly_nobitex_usdt import (
     WalletOnlyNobitexTransport,
     format_snapshot,
