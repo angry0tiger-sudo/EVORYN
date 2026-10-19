@@ -1,6 +1,6 @@
 # ADR 0011: Connectivity Management, Bounded Recovery, and Feed Freshness
 
-- Status: Proposed for review
+- Status: Proposed; implementation and mock-only CI evidence exist on a candidate branch; independent review and runtime integration remain gated
 - Date: 2026-10-19
 - Scope: Roadmap Phase 18
 - Depends on: Phases 5-7 market-data quality gates, the existing read-only JSON transport, audit/correlation contracts, and approved provider licensing.
@@ -11,7 +11,7 @@ A successful TCP/HTTPS request does not prove that the returned market observati
 
 ## Decision
 
-1. Keep `HttpsJsonTransport` as one bounded HTTPS JSON GET implementation. It performs one request and never retries on its own. HTTP errors expose only sanitized status metadata and parsed `Retry-After` delay; response bodies and headers are not copied into exception messages or telemetry.
+1. Keep `HttpsJsonTransport` as one bounded HTTPS JSON GET implementation. It performs one request and never retries on its own. HTTP errors expose only sanitized status metadata and parsed `Retry-After` delay, including HTTP dates; response bodies and headers are not copied into exception messages or telemetry. Fixed official-host transports explicitly ignore ambient proxy settings.
 2. Wrap an injected read-only `JsonApiTransport` with `ConnectivityManager`. The manager validates exact HTTPS host allowlists, applies bounded attempts with exponential backoff and jitter, records correlation/latency/status evidence, honors `Retry-After`, and maintains a shared cooldown for HTTP 429 backpressure.
 3. Retry only the transport's idempotent GET contract and selected transient statuses. Authentication/authorization failures, policy failures, malformed JSON and arbitrary protocol errors are not retried. The API contains no POST/order method, no exchange-write path and no reconciliation-bypassing order retry.
 4. Use a thread-safe circuit breaker with CLOSED, OPEN and single-probe HALF_OPEN states. Repeated transient failures open the circuit; calls are refused while open; successful recovery closes it. HTTP 429 is handled as rate limiting, not as proof of endpoint outage.
@@ -44,6 +44,12 @@ A successful TCP/HTTPS request does not prove that the returned market observati
 Mock tests cover destination allowlisting, secret-free telemetry, bounded retry, rate-limit handling, authentication failure, circuit recovery, audit failure, retry-after parsing and freshness rejection/reset. Test definitions are not evidence of execution; runner results must be captured separately.
 
 No proxy/SOCKS/VPN implementation is enabled by this ADR. The availability and legality of any such route remain provider-, environment-, and jurisdiction-specific and require a separate evidence-backed review before use.
+
+## Current verification record (2026-10-19)
+
+The latest connectivity code/test candidate, SHA `787bc5186628389f23c43809ba6eb00cd25e3091`, passed all six configured jobs in GitHub Actions [Run #879](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312972444) and [PR Run #880](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312976737). The full suite reported 347 passed, including all 13 tests in `tests/unit/test_phase18_connectivity.py`. The added direct transport test exercises a timeout through a fake opener and asserts one underlying attempt, the configured timeout value, and sanitized error output.
+
+All evidence is mock/fixture-only. It does not prove provider interoperability, native Windows/Linux setup, approved egress, durable production audit storage, or use by all intended runtime connectors. No live Nobitex request was issued from GitHub Actions. These run IDs apply to the exact code/test SHA above; always recheck the final PR-head status after a later change. ADR acceptance and production release remain blocked on independent review and runtime-wiring evidence.
 
 ## Rollback
 

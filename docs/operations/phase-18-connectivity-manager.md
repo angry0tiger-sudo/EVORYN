@@ -49,12 +49,23 @@ Inspect and alert on event type, correlation ID, route ID, allowlisted target ho
 
 ## Test evidence status
 
-`tests/unit/test_phase18_connectivity.py` contains mock-only scenarios. A test being present is not a passing run. Record lint, type-check, security scan, pytest and CI results from an identifiable runner. If reliable CI job logs remain unavailable, Phase 18 acceptance is blocked rather than inferred from a PR merge or synthetic fixtures.
+The 13 explicit tests in `tests/unit/test_phase18_connectivity.py` passed in GitHub Actions [Run #879](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312972444) and [PR Run #880](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39312976737) on code/test SHA `787bc5186628389f23c43809ba6eb00cd25e3091`. The full suite reported 347 passed; both runs passed all six configured jobs: pytest, Ruff, strict mypy, Bandit, runner/dependency preflight including `bash -n scripts/setup.sh`, and pip-audit. The added timeout regression test uses an injected fake opener and sends no network traffic.
+
+This is mock-only code/test evidence. It does not validate the exact historical Phase 18 merge SHA by itself. No live Nobitex request or order was sent from GitHub Actions. The workflow does not execute `setup.bat` on Windows and does not prove installation or route authorization on the owner's host.
 
 ## Remaining gate items
 
-1. Independent review of the new state/retry/freshness contracts and use by actual allowed connectors.
-2. Verified runner output for unit tests, lint, strict type checking and security checks.
-3. Evidence that route authorization and the audit sink are configured in the intended runtime.
-4. Separate authorization/evidence for any proxy, SOCKS5 or VPN/tunnel transport; no such transport is implicitly enabled by this PR.
-5. Failure-drill evidence for source timeout/outage, rate limit, feed gap, audit persistence loss and recovery.
+1. Independent review of retry/circuit/freshness semantics, redirects, host allowlisting, 429 cooldown, and audit fail-closed behavior.
+2. Evidence that approved runtime connectors actually use `ConnectivityManager` and a durable, access-controlled `ConnectionAuditSink` with current route authorization and secret-provider configuration.
+3. Failure-drill evidence on the target runtime for source timeout/outage, rate limit, feed gap, audit persistence loss and recovery.
+4. Separate authorization and implementation evidence for any proxy, SOCKS5 or VPN/tunnel transport; no such transport is enabled.
+5. Historical verification of the exact conditional-merge commit remains open in `TECHNICAL_DEBT.md`; current superset CI does not retroactively test that SHA.
+
+
+## Verified code boundaries and current runtime integration status
+
+The reusable connection manager implements bounded retries (maximum five total attempts), exponential backoff with jitter, transport timeout, Retry-After delta/date parsing, a shared HTTP 429 cooldown, a CLOSED/OPEN single-probe HALF_OPEN circuit, and feed freshness/gap validation. The "reconnect" behavior means attempting a fresh logical read after bounded delay or after the single half-open recovery probe; the code does not keep a persistent socket alive or blindly replay order writes.
+
+The Nobitex fixed-host transports explicitly disable ambient environment proxy discovery and use direct HTTPS. `EVORYN_PROXY_URL` in `.env.example` is a reserved placeholder and is ignored. No proxy/SOCKS/VPN adapter is delivered. Alternative egress requires an independent implementation and route authorization record, not merely setting a variable.
+
+The manager's GET retry policy and audit protocol are available and covered by mock-only tests. A complete production trading runtime and its connector composition root are not yet present, so this document does not claim every runtime connector is already wired through a manager and durable audit sink. Before a live runtime is authorized, the approved route record and durable sink must be supplied by the local composition root and failure drills must be performed locally. Signed Spot order submit/cancel and order-status POSTs remain single-attempt operations and must never be automatically retried.

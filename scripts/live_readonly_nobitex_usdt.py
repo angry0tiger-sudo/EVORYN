@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from dotenv import load_dotenv
+
 from evoryn.adapters.exchanges.nobitex_account import (
     NobitexAccountTransport,
     NobitexReadOnlyAccountReader,
@@ -123,6 +125,7 @@ def format_snapshot(snapshot: NobitexUSDTAccountSnapshot) -> str:
 
 def main() -> int:
     """Execute one read-only check and never print exception text or credentials."""
+    load_dotenv()
     try:
         config = NobitexReadOnlyConfig.from_environment()
         if not config.read_only_api_token:

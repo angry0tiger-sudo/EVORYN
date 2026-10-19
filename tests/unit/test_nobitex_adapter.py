@@ -357,6 +357,19 @@ def test_non_usdt_market_is_rejected_before_market_data_transport_call() -> None
     assert transport.calls == []
 
 
+def test_options_endpoint_is_allowlisted_read_only_and_rejects_parameters() -> None:
+    """Public precision metadata is a GET-only route with no query or body."""
+    transport = NobitexHTTPTransport()
+    assert transport._is_allowed_route("GET", "/v2/options")
+
+    with pytest.raises(InvalidExchangeRequest, match="do not accept query parameters"):
+        transport.request(
+            "GET",
+            "/v2/options",
+            params={"symbol": "BTCUSDT"},
+        )
+
+
 def test_transport_blocks_non_usdt_market_and_wallet_reads_before_network_io() -> None:
     transport = NobitexHTTPTransport()
 

@@ -8,14 +8,16 @@ query are allowed. It does not implement API-key signing or any order-write rout
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import NoReturn
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+from evoryn.adapters.network.json_http import parse_retry_after_seconds
 from evoryn.ports.exchange_errors import (
     AuthenticationError,
     AuthorizationError,
@@ -69,8 +71,8 @@ class NobitexHTTPTransport:
             or parsed.fragment
         ):
             raise ValueError("Nobitex transport requires the official HTTPS API host.")
-        if self.timeout_seconds <= 0:
-            raise ValueError("HTTP timeout must be positive.")
+        if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+            raise ValueError("HTTP timeout must be finite and positive.")
 
     @staticmethod
     def _is_allowed_route(method: str, path: str) -> bool:
@@ -80,6 +82,7 @@ class NobitexHTTPTransport:
                 "/market/stats",
                 "/market/udf/history",
                 "/v2/wallets",
+                "/v2/options",
             }:
                 return True
             return (
@@ -114,11 +117,7 @@ class NobitexHTTPTransport:
         if error.code == 409:
             raise ExchangeConflict("Nobitex reported a conflicting resource state.")
         if error.code == 429:
-            raw_retry_after = error.headers.get("Retry-After", "0")
-            try:
-                retry_after = max(0.0, float(raw_retry_after))
-            except (TypeError, ValueError):
-                retry_after = 0.0
+            retry_after = parse_retry_after_seconds(error.headers.get("Retry-After")) or 0.0
             raise RateLimitExceeded(
                 "Nobitex request rate limit was exceeded.",
                 retry_after_seconds=retry_after,
@@ -190,6 +189,15 @@ class NobitexHTTPTransport:
                     "Nobitex trade-data reads are restricted to USDT-quoted markets."
                 )
 
+        if (
+            normalized_method == "GET"
+            and path == "/v2/options"
+            and (params is not None or payload is not None)
+        ):
+            raise InvalidExchangeRequest(
+                "Nobitex options reads do not accept query parameters or a payload."
+            )
+
         if normalized_method == "GET" and payload is not None:
             raise InvalidExchangeRequest("GET requests must not contain a JSON payload.")
         if normalized_method == "POST" and payload is None:
@@ -208,7 +216,7 @@ class NobitexHTTPTransport:
             body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
         request = Request(url, data=body, headers=headers, method=normalized_method)
-        opener = build_opener(_NoRedirectHandler())
+        opener = build_opener(ProxyHandler({}), _NoRedirectHandler())
         try:
             with opener.open(request, timeout=self.timeout_seconds) as response:
                 raw_response = response.read()
