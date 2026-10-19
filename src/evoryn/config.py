@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass, field
-from typing import Mapping
+from collections.abc import Mapping
 from urllib.parse import urlsplit
 
 from evoryn.domain.models import Market

@@ -5,12 +5,12 @@ is part of this reader. Transport and clock are injectable for offline tests.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
-from typing import Callable, Protocol
+from typing import Protocol
 
 from evoryn.adapters.exchanges.nobitex_transport import NobitexHTTPTransport
 from evoryn.config import NobitexReadOnlyConfig

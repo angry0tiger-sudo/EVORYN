@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
-from decimal import Decimal
 
 from evoryn.domain.models import Market, MarketSnapshot, OrderRequest, OrderType, Side
 from evoryn.risk.engine import RiskEngine

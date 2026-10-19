@@ -142,18 +142,23 @@ class NobitexHTTPTransport:
         normalized_method = method.upper()
         if not self._is_allowed_route(normalized_method, path):
             raise InvalidExchangeRequest("Nobitex transport blocked a non-allowlisted route.")
-        if normalized_method == "GET" and path == "/v2/wallets":
-            if (
+        if (
+            normalized_method == "GET"
+            and path == "/v2/wallets"
+            and (
                 params is None
                 or params.get("currencies", "").strip().casefold() != "usdt"
                 or params.get("type", "").strip().casefold() not in {"spot", "margin"}
                 or set(params) != {"currencies", "type"}
-            ):
+            )
+        ):
                 raise InvalidExchangeRequest(
                     "Nobitex wallet reads are restricted to USDT Spot or Margin balances."
                 )
-        if normalized_method == "GET" and path == "/market/stats":
-            if (
+        if (
+            normalized_method == "GET"
+            and path == "/market/stats"
+            and (
                 params is None
                 or params.get("dstCurrency", "").strip().casefold() != "usdt"
                 or set(params) - {"srcCurrency", "dstCurrency"}
@@ -161,7 +166,8 @@ class NobitexHTTPTransport:
                     "srcCurrency" in params
                     and not params["srcCurrency"].strip().isalnum()
                 )
-            ):
+            )
+        ):
                 raise InvalidExchangeRequest(
                     "Nobitex market-statistics reads are restricted to USDT-quoted markets."
                 )
