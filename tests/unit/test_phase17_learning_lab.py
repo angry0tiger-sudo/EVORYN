@@ -729,6 +729,33 @@ def test_release_gate_requires_approved_risk_fingerprint_and_blocks_live(tmp_pat
     assert reloaded_ledger.events[-1].event_type is LearningEventType.RELEASE_APPROVED
 
 
+def test_release_candidate_requires_a_ledgered_passing_promotion_decision(
+    tmp_path: Path,
+) -> None:
+    registry, ledger = make_registry(tmp_path)
+    spec = make_spec(model_id="release-without-promotion", model_fingerprint="5" * 64)
+    registry.register(spec, correlation_id="release:no-promotion-register")
+    gate = ReleasePipelineGate(
+        registry=registry,
+        ledger=ledger,
+        approved_risk_policy_sha256="9" * 64,
+    )
+
+    with pytest.raises(PermissionError, match="matching passing Champion/Challenger decision"):
+        gate.create_candidate(
+            spec.experiment_id,
+            target=ReleaseTarget.PAPER,
+            promotion_decision_id="f" * 64,
+            test_report_sha256="1" * 64,
+            security_report_sha256="2" * 64,
+            risk_policy_sha256="9" * 64,
+            created_at=NOW + timedelta(hours=1),
+            correlation_id="release:no-promotion",
+        )
+
+    assert ledger.events[-1].event_type is LearningEventType.RELEASE_REJECTED
+
+
 def test_release_gate_rejects_risk_policy_drift_at_creation_and_approval(
     tmp_path: Path,
 ) -> None:
