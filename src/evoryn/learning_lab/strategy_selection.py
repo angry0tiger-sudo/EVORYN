@@ -82,6 +82,7 @@ class AdaptiveRegimeStrategy:
             "dataset_id": self.dataset_id,
             "dataset_version": self.dataset_version,
             "registry_fingerprint": self.registry.fingerprint,
+            "routing_fingerprint": self.selector.routing_fingerprint,
             "selection_policy": json.dumps(
                 policy, sort_keys=True, separators=(",", ":"), ensure_ascii=False
             ),
@@ -121,8 +122,9 @@ class AdaptiveRegimeStrategy:
             or not target.is_finite()
             or target not in (Decimal("0"), Decimal("1"))
         ):
-            # Research selector is fail-closed even if a plugin violates its contract.
-            return Decimal("0")
+            raise ValueError(
+                f"Plugin {registration.plugin_id!r} violated the target-exposure contract."
+            )
         return target
 
 
@@ -142,6 +144,7 @@ class StrategySelectionOOSReport:
     fixed_baseline_strategy_id: str
     fixed_baseline_strategy_version: str
     registry_fingerprint: str
+    routing_fingerprint: str
     model_metadata: tuple[tuple[str, str], ...]
     training_manifest_json: str
     decision_ledger_entries: tuple[StrategySelectionLedgerEntry, ...]
@@ -175,6 +178,7 @@ class StrategySelectionOOSReport:
                 "strategy_version": self.fixed_baseline_strategy_version,
             },
             "registry_fingerprint": self.registry_fingerprint,
+            "routing_fingerprint": self.routing_fingerprint,
             "model_metadata": dict(self.model_metadata),
             "training_manifest": json.loads(self.training_manifest_json),
             "comparison_deltas": {
@@ -222,6 +226,7 @@ class StrategySelectionOOSReport:
                     "allow_new_signals": entry.allow_new_signals,
                     "invalidation_conditions": list(entry.invalidation_conditions),
                     "registry_fingerprint": entry.registry_fingerprint,
+                    "routing_fingerprint": entry.routing_fingerprint,
                 }
                 for entry in self.decision_ledger_entries
             ],
@@ -343,6 +348,7 @@ def evaluate_strategy_selector_out_of_sample(
         "adaptive_run_id": adaptive_result.run_id,
         "fixed_baseline_run_id": fixed_result.run_id,
         "registry_fingerprint": registry.fingerprint,
+        "routing_fingerprint": selector.routing_fingerprint,
         "model_metadata": dict(metadata),
         "selection_policy": selection_policy.as_dict(),
         "model_training_manifest": json.loads(manifest_json),
@@ -361,6 +367,7 @@ def evaluate_strategy_selector_out_of_sample(
         fixed_baseline_strategy_id=fixed_baseline.strategy_id,
         fixed_baseline_strategy_version=fixed_baseline.strategy_version,
         registry_fingerprint=registry.fingerprint,
+        routing_fingerprint=selector.routing_fingerprint,
         model_metadata=metadata,
         training_manifest_json=manifest_json,
         decision_ledger_entries=decision_entries,
