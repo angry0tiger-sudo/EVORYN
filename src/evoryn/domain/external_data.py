@@ -210,6 +210,7 @@ class NewsArticleCandidate:
     payload_sha256: str
     declared_content_sha256: str | None = None
     related_asset_ids: tuple[str, ...] = ()
+    language_evidence: str = "provider_field"
 
     def __post_init__(self) -> None:
         """Validate structural provenance, while leaving content quality to the quality gate."""
@@ -233,6 +234,12 @@ class NewsArticleCandidate:
             _require_sha256(self.declared_content_sha256, "declared_content_sha256")
         if self.provider_revision is not None and not self.provider_revision.strip():
             raise ValueError("provider_revision must be None or a non-empty string.")
+        if self.language_evidence not in {
+            "provider_field",
+            "request_filter",
+            "operator_asserted",
+        }:
+            raise ValueError("language_evidence must identify the actual provenance of language.")
         if len(set(self.related_asset_ids)) != len(self.related_asset_ids):
             raise ValueError("related_asset_ids must be unique.")
         if any(not asset.strip() for asset in self.related_asset_ids):
@@ -271,6 +278,7 @@ class NewsArticleRecord:
     integrity_evidence: str
     related_asset_ids: tuple[str, ...] = ()
     source_trust_score: Decimal = Decimal("0")
+    language_evidence: str = "provider_field"
 
     def __post_init__(self) -> None:
         for name in (
@@ -292,6 +300,12 @@ class NewsArticleRecord:
             raise ValueError("An accepted article must have a title.")
         _require_sha256(self.content_sha256, "content_sha256")
         _require_sha256(self.payload_sha256, "payload_sha256")
+        if self.language_evidence not in {
+            "provider_field",
+            "request_filter",
+            "operator_asserted",
+        }:
+            raise ValueError("language_evidence must identify the actual provenance of language.")
         if len(set(self.related_asset_ids)) != len(self.related_asset_ids):
             raise ValueError("related_asset_ids must be unique.")
         if any(not asset.strip() for asset in self.related_asset_ids):
