@@ -5,11 +5,11 @@ network access, authorize orders, or calculate an exchange's liquidation formula
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-import re
 from urllib.parse import urlsplit
 
 
