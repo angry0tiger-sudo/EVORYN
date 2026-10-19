@@ -542,7 +542,7 @@ def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy(tmp_path: P
     report = evaluate_strategy_selector_out_of_sample(
         dataset,
         partitions=partitions,
-        detector=detector,  # type: ignore[arg-type]
+        detector=detector,
         registry=build_baseline_registry(),
         selection_policy=StrategySelectionPolicy(
             min_confidence=Decimal("0.65"),
