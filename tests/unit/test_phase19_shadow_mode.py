@@ -192,6 +192,7 @@ class Fixture:
         self.now = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
         self.interval = timedelta(minutes=1)
         self.market = Market(symbol="BTC/USDT", venue="nobitex", market_type="spot")
+        self.experiment_evaluation_fingerprint = "8" * 64
         self.config = ShadowConfig(
             market=self.market,
             interval=self.interval,
@@ -219,10 +220,10 @@ class Fixture:
             code_revision="a" * 40,
             dataset_version="b" * 64,
             feature_schema_version="shadow-market-candle/v1",
-            evaluation_config_fingerprint=self.config.evaluation_config_fingerprint,
+            evaluation_config_fingerprint=self.experiment_evaluation_fingerprint,
             model_id=self.strategy.strategy_id,
             model_version=self.strategy.strategy_version,
-            model_fingerprint="c" * 64,
+            model_fingerprint=strategy_fingerprint(self.strategy),
             parameters=tuple(sorted(self.strategy.parameters().items())),
             random_seed=0,
             train_range=_index_range(0, 1),
@@ -235,10 +236,10 @@ class Fixture:
             code_revision="d" * 40,
             dataset_version="b" * 64,
             feature_schema_version="shadow-market-candle/v1",
-            evaluation_config_fingerprint=self.config.evaluation_config_fingerprint,
+            evaluation_config_fingerprint=self.experiment_evaluation_fingerprint,
             model_id=self.baseline_strategy.strategy_id,
             model_version=self.baseline_strategy.strategy_version,
-            model_fingerprint="e" * 64,
+            model_fingerprint=strategy_fingerprint(self.baseline_strategy),
             parameters=tuple(sorted(self.baseline_strategy.parameters().items())),
             random_seed=0,
             train_range=_index_range(0, 1),
@@ -298,6 +299,10 @@ def test_shadow_runner_records_hypothetical_entry_to_persistent_learning_ledger(
     snapshot = fixture.runner.process_candle(candle, received_at=fixture.now)
 
     assert snapshot.mode is ExperimentMode.SHADOW
+    assert snapshot.run_id == fixture.runner.run_id
+    assert snapshot.evaluation_config_fingerprint == fixture.spec.evaluation_config_fingerprint
+    assert snapshot.projection_config_fingerprint == fixture.config.projection_config_fingerprint
+    assert snapshot.feed_manifest_fingerprint == fixture.config.feed_manifest_fingerprint
     assert snapshot.outcome is ShadowOutcome.ENTER_LONG
     assert snapshot.target_exposure == Decimal("1")
     assert snapshot.target_quantity == Decimal("5.000")
@@ -327,6 +332,7 @@ def test_snapshot_never_contains_auth_header_url_or_exception_body(tmp_path: Pat
     assert "https://" not in rendered
     assert '"mode":"shadow"' in rendered
     assert '"execution_authorized":false' in rendered
+    assert fixture.runner.run_id in rendered
 
 
 def test_duplicate_candle_is_rejected_without_advancing_state(tmp_path: Path) -> None:
