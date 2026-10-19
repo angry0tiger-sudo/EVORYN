@@ -14,12 +14,19 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from evoryn.adapters.data.license_registry import SourceLicenseRegistry
-from evoryn.domain.external_data import DataUse, NewsSentimentRecord, SentimentLabel, require_aware_utc
+from evoryn.domain.external_data import (
+    DataUse,
+    NewsSentimentRecord,
+    SentimentLabel,
+    require_aware_utc,
+)
+from evoryn.domain.models import MarketCandle
 from evoryn.learning_lab.backtest import (
     BacktestConfig,
     BacktestResult,
@@ -71,7 +78,10 @@ class NewsAblationPolicy:
             raise ValueError("negative_sentiment_threshold must be positive.")
         if self.minimum_sentiment_confidence <= Decimal("0.5"):
             raise ValueError("minimum_sentiment_confidence must exceed chance-level 0.5.")
-        if not isinstance(self.maximum_news_age, timedelta) or self.maximum_news_age <= timedelta(0):
+        if (
+            not isinstance(self.maximum_news_age, timedelta)
+            or self.maximum_news_age <= timedelta(0)
+        ):
             raise ValueError("maximum_news_age must be positive.")
         if (
             type(self.minimum_effective_news_events) is not int
@@ -127,11 +137,6 @@ class NewsAwareConservativeOverlay:
         self._veto_decision_times: set[datetime] = set()
         self._corpus_fingerprint = _sentiment_corpus_fingerprint(self._sentiments)
 
-    @property
-    def parameters(self) -> dict[str, str]:  # pragma: no cover - property is intentionally absent
-        """Not used by CausalTargetStrategy; use parameters() below."""
-        return {}
-
     def parameters(self) -> dict[str, str]:
         """Include baseline, article corpus, model revisions and veto policy in run identity."""
         return {
@@ -149,10 +154,14 @@ class NewsAwareConservativeOverlay:
             "action": "negative_news_veto_only",
         }
 
-    def target_exposure(self, history) -> Decimal:
+    def target_exposure(self, history: Sequence[MarketCandle]) -> Decimal:
         """Return the price-only target unless usable, timely negative news vetoes a long."""
         baseline_target = self._baseline.target_exposure(history)
-        if baseline_target not in (_ZERO, _ONE):
+        if (
+            not isinstance(baseline_target, Decimal)
+            or not baseline_target.is_finite()
+            or baseline_target not in (_ZERO, _ONE)
+        ):
             raise ValueError("Price-only baseline must return Decimal('0') or Decimal('1').")
         if baseline_target == _ZERO or not history:
             return baseline_target
@@ -309,7 +318,10 @@ def evaluate_news_ablation(
     """Compare price-only and licensed news-veto variants on identical untouched test data."""
     require_aware_utc(evaluated_at, "ablation evaluation timestamp")
     chosen_policy = policy or NewsAblationPolicy()
-    if partitions.dataset_version != dataset.version or partitions.total_bars != len(dataset.candles):
+    if (
+        partitions.dataset_version != dataset.version
+        or partitions.total_bars != len(dataset.candles)
+    ):
         raise ValueError("Temporal partitions do not match the exact historical dataset.")
     if dataset.market.market_type.casefold() != "spot":
         raise ValueError("Phase 16 news ablation currently supports Spot data only.")
@@ -320,19 +332,29 @@ def evaluate_news_ablation(
     if type(commercial_use) is not bool:
         raise ValueError("commercial_use must be an explicit boolean.")
 
-    # Every candidate article must retain an active license allowing storage, NLP and research use.
-    for sentiment in sentiment_records:
+    # Only records linked to this canonical market can enter this ablation.
+    relevant_records = tuple(
+        record
+        for record in sentiment_records
+        if dataset.market.symbol.upper()
+        in {asset.upper() for asset in record.article.related_asset_ids}
+    )
+    # Every relevant article must retain active authorization for storage, NLP and research use.
+    for sentiment in relevant_records:
         article = sentiment.article
         authorization = license_registry.require(
             article.source_id, DataUse.NEWS_TEXT_PROCESSING, now=evaluated_at
         )
         authorization.authorize(DataUse.INTERNAL_RESEARCH, now=evaluated_at)
+        authorization.authorize(DataUse.LOCAL_CONTENT_STORAGE, now=evaluated_at)
         if (
             article.source_license_id != authorization.license_id
             or article.source_terms_revision != authorization.terms_revision
             or article.attribution_text != authorization.attribution_text
         ):
-            raise PermissionError("News evidence license provenance differs from current authorization.")
+            raise PermissionError(
+                "News evidence license provenance differs from current authorization."
+            )
         if not sentiment.model_training_data_rights_verified:
             raise PermissionError("Sentiment model training-data rights are not verified.")
         if commercial_use and not sentiment.commercial_use_approved:
@@ -343,7 +365,7 @@ def evaluate_news_ablation(
     overlay = NewsAwareConservativeOverlay(
         market_symbol=dataset.market.symbol,
         price_only_strategy=price_only_strategy,
-        sentiment_records=sentiment_records,
+        sentiment_records=relevant_records,
         policy=chosen_policy,
     )
     baseline = run_backtest(
@@ -364,7 +386,7 @@ def evaluate_news_ablation(
         warmup_start_index=0,
         segment_name="phase16-price-plus-news-ablation",
     )
-    if not sentiment_records:
+    if not relevant_records:
         conclusion = AblationConclusion.INCONCLUSIVE
         reason = "No licensed sentiment records were available for comparison."
     elif overlay.veto_event_count < chosen_policy.minimum_effective_news_events:
@@ -405,7 +427,7 @@ def evaluate_news_ablation(
                     item.article.source_terms_revision,
                     item.article.attribution_text,
                 )
-                for item in sentiment_records
+                for item in relevant_records
             }
         )
     )
@@ -420,7 +442,7 @@ def evaluate_news_ablation(
                     item.model_training_dataset_license_id,
                     item.model_training_data_rights_verified,
                 )
-                for item in sentiment_records
+                for item in relevant_records
             }
         )
     )
@@ -442,8 +464,8 @@ def evaluate_news_ablation(
     report_id = hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
     news_evidence_in_test = sum(
         1
-        for sentiment in sentiment_records
-        if partitions.test.start < _available_time_as_index(
+        for sentiment in relevant_records
+        if partitions.test.start <= _available_time_as_index(
             sentiment.available_at,
             dataset,
         ) < partitions.test.end
