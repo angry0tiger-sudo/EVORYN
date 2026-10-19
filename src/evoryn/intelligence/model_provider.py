@@ -274,6 +274,8 @@ class StructuredJsonSchema:
             raise ValueError("required_fields must be a subset of allowed_fields.")
         if any(name not in self.allowed_fields for name, _ in self.field_types):
             raise ValueError("field_types can only refer to allowed fields.")
+        if len({name for name, _ in self.field_types}) != len(self.field_types):
+            raise ValueError("field_types must not contain duplicate fields.")
         supported_types = {"string", "number", "integer", "boolean", "object", "array", "null"}
         if any(field_type not in supported_types for _, field_type in self.field_types):
             raise ValueError("field_types contains an unsupported JSON type.")
@@ -415,9 +417,19 @@ class ModelResponse:
     usage: TokenUsage | None = None
 
     def __post_init__(self) -> None:
-        if not self.request_id.strip() or not self.output_schema_id.strip():
-            raise ValueError("Response request and schema IDs must not be empty.")
-        if not self.finish_reason.strip():
+        if not isinstance(self.identity, ModelIdentity):
+            raise ValueError("Response identity must be a validated ModelIdentity.")
+        if not isinstance(self.task, ModelTask):
+            raise ValueError("Response task must be a canonical ModelTask.")
+        if not isinstance(self.confidence_semantics, ConfidenceSemantics):
+            raise ValueError("Response confidence semantics must be canonical.")
+        if self.usage is not None and not isinstance(self.usage, TokenUsage):
+            raise ValueError("Response usage must be a validated TokenUsage.")
+        if not isinstance(self.request_id, str) or not self.request_id.strip():
+            raise ValueError("Response request ID must not be empty.")
+        if not isinstance(self.output_schema_id, str) or not self.output_schema_id.strip():
+            raise ValueError("Response schema ID must not be empty.")
+        if not isinstance(self.finish_reason, str) or not self.finish_reason.strip():
             raise ValueError("finish_reason must not be empty.")
         _require_utc(self.started_at, "started_at")
         _require_utc(self.completed_at, "completed_at")
@@ -425,8 +437,11 @@ class ModelResponse:
             raise ValueError("completed_at cannot precede started_at.")
         if type(self.truncated) is not bool:
             raise ValueError("truncated must be an explicit boolean.")
+        if self.identity is None and not self.abstained:
+            raise ValueError("A validated recommendation requires model provenance.")
         if self.confidence is not None and (
-            not self.confidence.is_finite()
+            not isinstance(self.confidence, Decimal)
+            or not self.confidence.is_finite()
             or self.confidence < 0
             or self.confidence > 1
         ):
@@ -511,8 +526,13 @@ class ModelPolicy:
                 raise ValueError(f"{name} must be a positive integer.")
         if not math.isfinite(self.max_timeout_seconds) or self.max_timeout_seconds <= 0:
             raise ValueError("max_timeout_seconds must be finite and positive.")
-        if type(self.allow_remote_providers) is not bool:
-            raise ValueError("allow_remote_providers must be an explicit boolean.")
+        for name in (
+            "allow_remote_providers",
+            "require_training_data_rights_verified",
+            "require_commercial_approval",
+        ):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f"{name} must be an explicit boolean.")
         if self.max_cost_usd is not None and (
             not self.max_cost_usd.is_finite() or self.max_cost_usd < 0
         ):
