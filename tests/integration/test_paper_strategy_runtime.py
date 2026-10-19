@@ -665,7 +665,9 @@ def test_fitted_trained_detector_runs_through_risk_gated_mock_paper_runtime(
         ):
             selected_seed = seed_index
             break
-    assert selected_seed is not None, "Synthetic trained model did not produce a stable, high-confidence long regime."
+    assert selected_seed is not None, (
+        "Synthetic trained model did not produce a stable, high-confidence long regime."
+    )
 
     initial_candle = training_candles[selected_seed]
     initial_now = initial_candle.timestamp + INTERVAL
