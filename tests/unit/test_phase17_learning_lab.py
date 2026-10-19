@@ -291,6 +291,74 @@ def test_champion_challenger_promotes_only_after_predeclared_gates(tmp_path: Pat
     assert ledger.events[-1].event_type is LearningEventType.CANDIDATE_PROMOTED_TO_PAPER
 
 
+def test_repeated_challengers_on_the_same_holdout_hit_the_predeclared_trial_cap(
+    tmp_path: Path,
+) -> None:
+    registry, ledger = make_registry(tmp_path)
+    champion_spec = make_spec(model_id="trial-cap-champion", model_fingerprint="1" * 64)
+    first_spec = make_spec(
+        model_id="trial-cap-first",
+        model_fingerprint="2" * 64,
+        created_minutes=1,
+        parameters=(("fast_window", "4"), ("slow_window", "18")),
+    )
+    second_spec = make_spec(
+        model_id="trial-cap-second",
+        model_fingerprint="3" * 64,
+        created_minutes=2,
+        parameters=(("fast_window", "3"), ("slow_window", "15")),
+    )
+    champion_evidence = make_evidence(
+        champion_spec, net_return="0.02", max_drawdown="0.10", run_suffix="trial-cap-champion"
+    )
+    first_evidence = make_evidence(
+        first_spec, net_return="0.03", max_drawdown="0.08", run_suffix="trial-cap-first"
+    )
+    second_evidence = make_evidence(
+        second_spec, net_return="0.04", max_drawdown="0.07", run_suffix="trial-cap-second"
+    )
+    for spec, evidence in (
+        (champion_spec, champion_evidence),
+        (first_spec, first_evidence),
+        (second_spec, second_evidence),
+    ):
+        register_spec_and_evidence(registry, spec, evidence)
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=champion_spec.experiment_id,
+        gate=ChampionChallengerGate(
+            PromotionPolicy(
+                minimum_observations=100,
+                minimum_closed_trades=10,
+                maximum_comparisons_per_dataset_test_range=1,
+            )
+        ),
+    )
+
+    first_decision = controller.compare_and_promote(
+        champion_evidence_id=champion_evidence.evidence_id,
+        challenger_experiment_id=first_spec.experiment_id,
+        challenger_evidence_id=first_evidence.evidence_id,
+        target_mode=ExperimentMode.PAPER,
+        evaluated_at=NOW + timedelta(hours=2),
+        correlation_id="trial-cap:first",
+    )
+    second_decision = controller.compare_and_promote(
+        champion_evidence_id=first_evidence.evidence_id,
+        challenger_experiment_id=second_spec.experiment_id,
+        challenger_evidence_id=second_evidence.evidence_id,
+        target_mode=ExperimentMode.PAPER,
+        evaluated_at=NOW + timedelta(hours=3),
+        correlation_id="trial-cap:second",
+    )
+
+    assert first_decision.status is PromotionStatus.PROMOTED_TO_PAPER
+    assert second_decision.status is PromotionStatus.INSUFFICIENT_EVIDENCE
+    assert "MAX_HOLDOUT_COMPARISONS_REACHED" in second_decision.reasons
+    assert controller.active_champion_id == first_spec.experiment_id
+
+
 def test_champion_challenger_rejects_changed_cost_configuration(tmp_path: Path) -> None:
     registry, _ = make_registry(tmp_path)
     champion_spec = make_spec(model_id="champion", model_fingerprint="1" * 64)
