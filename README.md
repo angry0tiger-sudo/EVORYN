@@ -15,7 +15,7 @@ EVORYN is an independently governed, modular trading-intelligence platform plann
 
 ## Project status
 
-This repository is at its foundation stage. Do not assume a working trading engine, exchange adapter, model runtime, or agent service exists until its code and execution evidence are checked.
+The repository contains modular Spot and delegated-Margin domain code and a read-only Nobitex market adapter. Do not assume authenticated live account reads are configured, production runtime wiring is complete, or any system is ready to place real orders. Check the exact commit and current CI evidence before relying on a capability.
 
 ## Agent foundation
 
@@ -30,6 +30,6 @@ The current agent-foundation branch adds specialized repository-level profiles f
 - Exchange behavior must be verified against current official documentation.
 - No hosted agent workflow should be enabled before its model cost/license, data handling, permissions, and sandbox are reviewed.
 
-## Next engineering gate
+## Current engineering gate
 
-Complete Phase 0: requirements, engineering contract, source-of-truth inventory, official Nobitex API review, architecture decision records, threat model, and verification plan before implementing trading behavior.
+Phase 22 is limited to read-only Nobitex account data and the hard USDT quote-currency whitelist. Live order submission, cancellation, withdrawals, transfers and collateral mutation remain out of scope. Provider-side read-only token permissions, live API connectivity and production runtime wiring require independent evidence.

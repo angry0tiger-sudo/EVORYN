@@ -80,7 +80,6 @@ class NobitexHTTPTransport:
                 "/market/stats",
                 "/market/udf/history",
                 "/v2/wallets",
-                "/users/wallets/list",
             }:
                 return True
             return (
@@ -91,6 +90,17 @@ class NobitexHTTPTransport:
                 and path.removeprefix("/v2/trades/").isalnum()
             )
         return method == "POST" and path == "/market/orders/status"
+
+    @staticmethod
+    def _is_usdt_symbol(symbol: str) -> bool:
+        """Accept only compact BASEUSDT symbols at the lowest HTTP boundary."""
+        normalized = symbol.strip().upper()
+        return (
+            normalized.isalnum()
+            and normalized.endswith("USDT")
+            and len(normalized) > len("USDT")
+            and normalized[: -len("USDT")].isalnum()
+        )
 
     @staticmethod
     def _raise_http_error(error: HTTPError) -> NoReturn:
@@ -132,6 +142,54 @@ class NobitexHTTPTransport:
         normalized_method = method.upper()
         if not self._is_allowed_route(normalized_method, path):
             raise InvalidExchangeRequest("Nobitex transport blocked a non-allowlisted route.")
+        if (
+            normalized_method == "GET"
+            and path == "/v2/wallets"
+            and (
+                params is None
+                or params.get("currencies", "").strip().casefold() != "usdt"
+                or params.get("type", "").strip().casefold() not in {"spot", "margin"}
+                or set(params) != {"currencies", "type"}
+            )
+        ):
+                raise InvalidExchangeRequest(
+                    "Nobitex wallet reads are restricted to USDT Spot or Margin balances."
+                )
+        if (
+            normalized_method == "GET"
+            and path == "/market/stats"
+            and (
+                params is None
+                or params.get("dstCurrency", "").strip().casefold() != "usdt"
+                or set(params) - {"srcCurrency", "dstCurrency"}
+                or (
+                    "srcCurrency" in params
+                    and not params["srcCurrency"].strip().isalnum()
+                )
+            )
+        ):
+                raise InvalidExchangeRequest(
+                    "Nobitex market-statistics reads are restricted to USDT-quoted markets."
+                )
+        if normalized_method == "GET" and path == "/market/udf/history":
+            symbol = "" if params is None else params.get("symbol", "")
+            if not self._is_usdt_symbol(symbol):
+                raise InvalidExchangeRequest(
+                    "Nobitex candle reads are restricted to USDT-quoted markets."
+                )
+        if normalized_method == "GET" and path.startswith("/v3/orderbook/"):
+            symbol = path.removeprefix("/v3/orderbook/")
+            if not self._is_usdt_symbol(symbol):
+                raise InvalidExchangeRequest(
+                    "Nobitex order-book reads are restricted to USDT-quoted markets."
+                )
+        if normalized_method == "GET" and path.startswith("/v2/trades/"):
+            symbol = path.removeprefix("/v2/trades/")
+            if not self._is_usdt_symbol(symbol):
+                raise InvalidExchangeRequest(
+                    "Nobitex trade-data reads are restricted to USDT-quoted markets."
+                )
+
         if normalized_method == "GET" and payload is not None:
             raise InvalidExchangeRequest("GET requests must not contain a JSON payload.")
         if normalized_method == "POST" and payload is None:

@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
-from urllib.parse import urlsplit
 
 from evoryn.adapters.exchanges.nobitex_transport import NobitexHTTPTransport
+from evoryn.config import MarketPolicy, NobitexReadOnlyConfig
 from evoryn.domain.models import (
     ExchangeCapabilities,
     Market,
@@ -119,6 +119,10 @@ class NobitexExchangeAdapter:
         default_factory=lambda: lambda: datetime.now(UTC),
         repr=False,
     )
+    market_policy: MarketPolicy = field(
+        default_factory=MarketPolicy.from_environment,
+        repr=False,
+    )
 
     def get_capabilities(self) -> ExchangeCapabilities:
         """Declare currently implemented capabilities; no order-writing is available."""
@@ -165,12 +169,16 @@ class NobitexExchangeAdapter:
             "Market stats require an explicit BASE/QUOTE market symbol."
         )
 
-    @staticmethod
-    def _require_spot(market: Market) -> None:
-        """Reject markets outside this Spot-only adapter's reviewed scope."""
+    def _require_spot(self, market: Market) -> None:
+        """Reject markets outside the current Nobitex Spot/USDT hard whitelist."""
         if market.market_type.strip().lower() != "spot":
             raise UnsupportedExchangeCapability(
                 "This Nobitex adapter currently supports Spot market data only."
+            )
+        reason = self.market_policy.rejection_reason(market)
+        if reason is not None:
+            raise UnsupportedExchangeCapability(
+                "Nobitex market is outside the current USDT-only whitelist."
             )
 
     def _request(
@@ -371,6 +379,34 @@ class NobitexExchangeAdapter:
                 raise MalformedExchangeResponse("Nobitex trade row is invalid.") from exc
         return tuple(sorted(trades, key=lambda trade: trade.occurred_at))
 
+    def get_usdt_markets(self) -> Sequence[Market]:
+        """Discover markets from the official statistics endpoint, filtering to USDT quotes."""
+        response = self._request(
+            "market_stats",
+            "GET",
+            "/market/stats",
+            params={"dstCurrency": "usdt"},
+        )
+        stats_raw = response.get("stats")
+        if not isinstance(stats_raw, dict):
+            raise MalformedExchangeResponse("Nobitex stats field must be an object.")
+
+        markets: dict[str, Market] = {}
+        for symbol, row in stats_raw.items():
+            if not isinstance(symbol, str) or not isinstance(row, dict):
+                continue
+            parts = symbol.upper().split("-")
+            if len(parts) != 2 or not parts[0].isalnum() or parts[1] != "USDT":
+                continue
+            market = Market(
+                symbol=f"{parts[0]}-USDT",
+                venue="nobitex",
+                market_type="spot",
+            )
+            if self.market_policy.allows_market(market):
+                markets[market.symbol] = market
+        return tuple(markets[key] for key in sorted(markets))
+
     def get_market_stats(self, market: Market) -> MarketStatistics:
         """Read and normalize the selected market from Nobitex aggregate market stats."""
         self._require_spot(market)
@@ -419,40 +455,49 @@ class NobitexExchangeAdapter:
         )
 
     def get_balances(self) -> Sequence[WalletBalance]:
-        """Read spot wallet balances; missing credentials fail before transport access."""
+        """Read only the Spot USDT wallet; absent USDT is not fabricated as zero."""
         if not self.token:
             raise AuthenticationError(
-                "A read-only NOBITEX_API_TOKEN is required to read account balances."
+                "A read-only NOBITEX_READONLY_API_TOKEN is required to read USDT balances."
             )
         response = self._request(
-            "balances", "GET", "/v2/wallets", params={"type": "spot"}
+            "balances",
+            "GET",
+            "/v2/wallets",
+            params={"currencies": "usdt", "type": "spot"},
         )
         wallets_raw = response.get("wallets")
         if not isinstance(wallets_raw, dict):
             raise MalformedExchangeResponse("Nobitex wallets field must be an object.")
-        balances: list[WalletBalance] = []
-        for currency, wallet_raw in wallets_raw.items():
-            if not isinstance(wallet_raw, dict):
-                raise MalformedExchangeResponse("Nobitex wallet entry must be an object.")
-            balance_value = wallet_raw.get("balance")
-            blocked_value = wallet_raw.get("blocked", "0")
-            try:
-                balances.append(
-                    WalletBalance(
-                        currency=str(currency).upper(),
-                        balance=_decimal(balance_value, field_name="balance"),
-                        blocked=_decimal(blocked_value, field_name="blocked"),
-                    )
-                )
-            except ValueError as exc:
-                raise MalformedExchangeResponse("Nobitex wallet entry is invalid.") from exc
-        return tuple(balances)
+        matching = [
+            (currency, wallet_raw)
+            for currency, wallet_raw in wallets_raw.items()
+            if isinstance(currency, str) and currency.upper() == "USDT"
+        ]
+        if len(matching) > 1:
+            raise MalformedExchangeResponse("Nobitex returned duplicate USDT wallet keys.")
+        if not matching:
+            return ()
+        currency, wallet_raw = matching[0]
+        if not isinstance(wallet_raw, dict):
+            raise MalformedExchangeResponse("Nobitex USDT wallet entry must be an object.")
+        try:
+            return (
+                WalletBalance(
+                    currency=currency.upper(),
+                    balance=_decimal(wallet_raw.get("balance"), field_name="balance"),
+                    blocked=_decimal(wallet_raw.get("blocked"), field_name="blocked"),
+                ),
+            )
+        except ValueError as exc:
+            raise MalformedExchangeResponse("Nobitex USDT wallet entry is invalid.") from exc
 
     def get_order(self, order_id: str, market: Market) -> Order | None:
-        """Query a numeric order ID via the provider's read-only order-status endpoint."""
+        """Query a numeric USDT Spot order ID via the read-only order-status endpoint."""
+        self._require_spot(market)
         if not self.token:
             raise AuthenticationError(
-                "A read-only NOBITEX_API_TOKEN is required to query order status."
+                "A read-only NOBITEX_READONLY_API_TOKEN is required to query order status."
             )
         normalized_id = order_id.strip()
         if not normalized_id.isdigit():
@@ -543,26 +588,15 @@ class NobitexExchangePlugin:
                 "Order writes remain hard-disabled until the Phase 9/10 release gates."
             )
 
-        base_url = config.get("NOBITEX_BASE_URL", "https://apiv2.nobitex.ir")
-        token = config.get("NOBITEX_API_TOKEN") or None
-        timeout_text = config.get("NOBITEX_TIMEOUT_SECONDS", "10")
-        try:
-            timeout_seconds = float(timeout_text)
-        except ValueError as exc:
-            raise InvalidExchangeRequest("NOBITEX_TIMEOUT_SECONDS must be numeric.") from exc
-
-        parsed = urlsplit(base_url)
-        if parsed.hostname != "apiv2.nobitex.ir" or parsed.scheme != "https":
-            raise InvalidExchangeRequest(
-                "Nobitex plugin accepts only the official HTTPS API host."
-            )
+        settings = NobitexReadOnlyConfig.from_mapping(config)
         transport = NobitexHTTPTransport(
-            base_url=base_url,
-            token=token,
-            timeout_seconds=timeout_seconds,
+            base_url=settings.base_url,
+            token=settings.read_only_api_token,
+            timeout_seconds=settings.timeout_seconds,
         )
         return NobitexExchangeAdapter(
             transport=transport,
-            token=token,
+            token=settings.read_only_api_token,
             rate_limiter=SlidingWindowRateLimiter(),
+            market_policy=settings.market_policy,
         )

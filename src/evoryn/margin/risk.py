@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from evoryn.config import MarketPolicy
 from evoryn.margin.models import (
     DelegationLimitSnapshot,
     MarginHealth,
@@ -82,6 +83,7 @@ class MarginRiskPolicy:
         maintenance_margin_ratio: Decimal = Decimal("1.1"),
         max_data_age_seconds: int = 30,
         cross_margin_enabled: bool = False,
+        market_policy: MarketPolicy | None = None,
     ) -> None:
         _positive(initial_margin_ratio, "initial_margin_ratio")
         _positive(maintenance_margin_ratio, "maintenance_margin_ratio")
@@ -95,6 +97,7 @@ class MarginRiskPolicy:
         self.maintenance_margin_ratio = maintenance_margin_ratio
         self.max_data_age_seconds = max_data_age_seconds
         self.cross_margin_enabled = cross_margin_enabled
+        self.market_policy = market_policy or MarketPolicy.from_environment()
 
     def evaluate_open_intent(
         self,
@@ -111,6 +114,17 @@ class MarginRiskPolicy:
                 MarginOrderDisposition.HALT,
                 "invalid_evaluation_time",
                 "Margin evaluation time must be timezone-aware.",
+            )
+        intent_quote = self.market_policy.quote_currency_for_symbol(intent.market_symbol)
+        if (
+            settings.dst_currency.strip().upper() not in self.market_policy.allowed_quote_currencies
+            or intent_quote != settings.dst_currency.strip().upper()
+            or intent_quote not in self.market_policy.allowed_quote_currencies
+        ):
+            return _order_result(
+                MarginOrderDisposition.REJECT,
+                "quote_currency_not_allowed",
+                "Only the configured USDT quote currency is permitted for Margin risk.",
             )
         if (
             intent.market_symbol.casefold() != settings.market_symbol.casefold()

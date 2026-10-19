@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+
+import pytest
 
 from evoryn.domain.models import Market, MarketSnapshot, OrderRequest, OrderType, Side
 from evoryn.risk.engine import RiskEngine
@@ -234,6 +237,43 @@ def test_total_and_market_exposure_each_reduce_order_size() -> None:
     assert market_limited.action is RiskAction.REDUCE
     assert market_limited.approved_quantity is not None
     assert market_limited.approved_quantity * Decimal("101") <= Decimal("5")
+
+
+@pytest.mark.parametrize("symbol", ["BTC-IRT", "ETH-BTC", "USDT-IRT", "BTC"])
+def test_risk_engine_rejects_non_usdt_or_unrecognized_market_symbols(symbol: str) -> None:
+    risk = engine()
+    disallowed_market = Market(symbol=symbol, venue="nobitex", market_type="spot")
+    disallowed_request = replace(request(), market=disallowed_market)
+
+    result = risk.evaluate(
+        disallowed_request, portfolio(), market_snapshot(), now=NOW
+    )
+
+    assert result.action is RiskAction.REJECT
+    assert result.reason_code in {
+        "quote_currency_not_allowed",
+        "market_quote_unrecognized",
+    }
+    assert not risk.is_halted
+
+
+def test_risk_engine_rejects_non_nobitex_and_non_spot_markets() -> None:
+    risk = engine()
+    markets = (
+        Market(symbol="BTC-USDT", venue="other", market_type="spot"),
+        Market(symbol="BTC-USDT", venue="nobitex", market_type="margin"),
+    )
+
+    for market in markets:
+        result = risk.evaluate(
+            replace(request(), market=market),
+            portfolio(),
+            market_snapshot(),
+            now=NOW,
+        )
+        assert result.action is RiskAction.REJECT
+        assert result.reason_code in {"venue_not_allowed", "market_type_not_allowed"}
+        assert not risk.is_halted
 
 
 def test_risk_action_vocabulary_is_exactly_four_uppercase_values() -> None:
