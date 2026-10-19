@@ -162,7 +162,7 @@ class RegimeFeatureExtractor:
             raise ValueError("Internal feature window has an unexpected length.")
         returns = tuple(
             (current.close / previous.close) - Decimal("1")
-            for previous, current in zip(window, window[1:])
+            for previous, current in zip(window, window[1:], strict=False)
         )
         mean_return = sum(returns, Decimal("0")) / Decimal(len(returns))
         variance = sum(
