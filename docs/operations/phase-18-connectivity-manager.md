@@ -6,21 +6,29 @@ Phase 18 is read-only and route-policy-bound. It does not submit exchange orders
 
 ## Integration
 
-Construct `ConnectivityManager` around an approved implementation of `JsonApiTransport` and pass it to existing market/news connectors in place of the raw transport. The manager preserves `get_json(url, headers=..., params=...)`, with an optional `correlation_id`. Configure an exact hostname allowlist, a unique `route_id`, `route_authorized=True` only after independent approval, a durable `ConnectionAuditSink`, retry and circuit policies. Do not log URLs, query strings, request headers, bodies or credential material.
+Construct `ConnectivityManager` around an approved implementation of `JsonApiTransport` and pass it to existing market/news connectors in place of the raw transport. The manager preserves `get_json(url, headers=..., params=...)`, with an optional `correlation_id`. Bind it to a `NetworkRouteAuthorization` record with an exact hostname allowlist, approval reference/actor, and UTC review deadline, plus a durable `ConnectionAuditSink`, retry and circuit policies. Authorization is rechecked before each request; an expired approval stops outbound calls. Do not log URLs, query strings, request headers, bodies or credential material.
 
-Example shape (the sink is an application-owned durable audit adapter, not a no-op sink):
+Example shape (the values below are placeholders; the audit sink is an application-owned durable adapter, not a no-op sink):
 
 ```python
+from datetime import UTC, datetime, timedelta
+
+route_authorization = NetworkRouteAuthorization(
+    route_id="provider-api-direct",
+    authorization_ref="change-ticket:approved-route",
+    approved_by="authorized-reviewer",
+    approved_at=datetime.now(UTC),
+    review_due_at=datetime.now(UTC) + timedelta(days=30),
+    allowed_hosts=frozenset({"api.provider.example"}),
+)
 manager = ConnectivityManager(
     transport=approved_read_only_transport,
-    allowed_hosts=frozenset({"api.provider.example"}),
-    route_id="provider-api-direct",
-    route_authorized=True,
+    route_authorization=route_authorization,
     audit_sink=durable_connection_audit,
 )
 ```
 
-The hostname is illustrative only. Replace it with an exact provider host already authorized in the source/license register. Do not copy this example hostname into production configuration.
+The hostname, ticket, reviewer and dates are illustrative only. Replace them with current route approval evidence and an exact provider host already authorized in the source/license register. Do not copy placeholder values into production configuration.
 
 ## Retry, circuit and rate-limit behavior
 
