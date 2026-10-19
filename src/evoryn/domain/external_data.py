@@ -296,10 +296,17 @@ class NewsArticleRecord:
         valid_https_url(self.article_url, "article_url")
         for name in ("published_at", "retrieved_at", "ingested_at"):
             require_aware_utc(getattr(self, name), name)
+        if self.retrieved_at > self.ingested_at:
+            raise ValueError("Article ingestion cannot precede retrieval.")
         if not self.title.strip():
             raise ValueError("An accepted article must have a title.")
         _require_sha256(self.content_sha256, "content_sha256")
         _require_sha256(self.payload_sha256, "payload_sha256")
+        expected_content_hash = hashlib.sha256(
+            f"{self.title.strip()}\\n{self.summary.strip()}".strip().encode("utf-8")
+        ).hexdigest()
+        if self.content_sha256 != expected_content_hash:
+            raise ValueError("Accepted article content hash does not match title/summary bytes.")
         if self.language_evidence not in {
             "provider_field",
             "request_filter",
@@ -387,10 +394,13 @@ class NewsSentimentRecord:
             raise ValueError("Sentiment analysis cannot precede data retrieval.")
         if self.analyzed_at < self.article.ingested_at:
             raise ValueError("Sentiment analysis cannot precede article ingestion.")
-        if self.label is SentimentLabel.UNKNOWN:
+        if not isinstance(self.label, SentimentLabel) or self.label is SentimentLabel.UNKNOWN:
             raise ValueError(
-                "UNKNOWN sentiment must be represented by abstention, not probabilities."
+                "UNKNOWN or invalid sentiment must be represented by abstention, not probabilities."
             )
+        for name in ("model_training_data_rights_verified", "commercial_use_approved"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f"{name} must be an explicit boolean.")
 
     @property
     def sentiment_score(self) -> Decimal:
