@@ -964,9 +964,13 @@ class ReleasePipelineGate:
             or not correlation_id.strip()
         ):
             raise ValueError("Human approver, approval reference and correlation ID are required.")
+        try:
+            candidate = self._candidates[candidate_id]
+        except KeyError as exc:
+            raise KeyError("Unknown release candidate ID.") from exc
         if current_risk_policy_sha256 != self._approved_risk_policy_sha256:
             self._record_rejection(
-                candidate.experiment_id if candidate_id in self._candidates else "0" * 64,
+                candidate.experiment_id,
                 correlation_id=correlation_id,
                 occurred_at=approved_at,
                 reason_code="RISK_POLICY_CHANGED_ON_APPROVAL",
@@ -976,10 +980,6 @@ class ReleasePipelineGate:
                 },
             )
             raise PermissionError("Risk policy changed after release candidate creation.")
-        try:
-            candidate = self._candidates[candidate_id]
-        except KeyError as exc:
-            raise KeyError("Unknown release candidate ID.") from exc
         if candidate.is_approved:
             if (
                 candidate.approved_by == approved_by
