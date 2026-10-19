@@ -255,7 +255,22 @@ class RegimeStrategySelector:
             raise ValueError("correlation_id must not be empty.")
         if not market_symbol.strip():
             raise ValueError("market_symbol must not be empty.")
+        if prediction.as_of.utcoffset() != timedelta(0):
+            self._clear_candidate()
+            return self._make_decision(
+                prediction,
+                now=now,
+                correlation_id=correlation_id,
+                market_symbol=market_symbol,
+                status=SelectionStatus.ABSTAINED,
+                reason_code="NON_CANONICAL_REGIME_TIMESTAMP",
+                reason="Regime prediction timestamps must be canonical UTC values.",
+                candidate_id=None,
+                alternatives=(),
+                allow_new_signals=False,
+            )
         if prediction.as_of > now:
+            self._clear_candidate()
             return self._make_decision(
                 prediction,
                 now=now,
@@ -338,6 +353,12 @@ class RegimeStrategySelector:
                 alternatives=(),
                 allow_new_signals=False,
             )
+        if (
+            self._last_prediction_as_of is not None
+            and prediction.as_of - self._last_prediction_as_of
+            > self._policy.maximum_prediction_age
+        ):
+            self._clear_candidate()
         self._last_prediction_as_of = prediction.as_of
 
         if (
