@@ -184,6 +184,16 @@ class ChampionChallengerGate:
         pairs = (
             ("dataset version", champion_spec.dataset_version, challenger_spec.dataset_version),
             ("dataset version", champion_evidence.dataset_version, challenger_evidence.dataset_version),
+            (
+                "feature schema",
+                champion_spec.feature_schema_version,
+                challenger_spec.feature_schema_version,
+            ),
+            (
+                "evaluation config",
+                champion_spec.evaluation_config_fingerprint,
+                challenger_spec.evaluation_config_fingerprint,
+            ),
             ("test range", champion_spec.test_range, challenger_spec.test_range),
             ("test range", champion_evidence.test_range, challenger_evidence.test_range),
             ("evaluation mode", champion_evidence.mode, challenger_evidence.mode),
@@ -200,6 +210,7 @@ class ChampionChallengerGate:
             if (
                 evidence.code_revision != spec.code_revision
                 or evidence.feature_schema_version != spec.feature_schema_version
+                or evidence.evaluation_config_fingerprint != spec.evaluation_config_fingerprint
                 or evidence.model_id != spec.model_id
                 or evidence.model_version != spec.model_version
                 or evidence.model_fingerprint != spec.model_fingerprint
