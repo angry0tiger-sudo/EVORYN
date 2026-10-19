@@ -153,7 +153,7 @@ def test_plugin_registration_rejects_unknown_regime_as_a_route() -> None:
 
 
 def test_hysteresis_configuration_requires_positive_time_guards() -> None:
-    with pytest.raises(ValueError, match="positive timedelta"):
+    with pytest.raises(ValueError, match="positive whole-second timedelta"):
         StrategySelectionPolicy(required_stability_duration=timedelta(0))
     with pytest.raises(ValueError, match="positive timedelta"):
         StrategySelectionPolicy(minimum_hold_duration=timedelta(0))
@@ -326,9 +326,9 @@ def test_unknown_low_confidence_stale_or_uncalibrated_scores_abstain() -> None:
         correlation_id="selector:BTC-USDT:heuristic",
         market_symbol=MARKET.symbol,
     )
-    stale_timestamp = selection_time(4)
+    stale_timestamp = selection_time(10)
     stale = selector.select(
-        prediction(RegimeLabel.BULL_TREND, stale_timestamp - timedelta(hours=3)),
+        prediction(RegimeLabel.BULL_TREND, selection_time(7)),
         now=stale_timestamp,
         correlation_id="selector:BTC-USDT:stale",
         market_symbol=MARKET.symbol,
