@@ -78,7 +78,12 @@ class SentimentModelReview:
                 raise ValueError(f"{name} must not be empty.")
         for name in ("model_license_uri", "model_card_uri", "training_dataset_license_uri"):
             parsed = urlsplit(getattr(self, name))
-            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+            ):
                 raise ValueError(f"{name} must be an HTTPS URL without embedded credentials.")
         if len(self.model_revision) != 40 or any(
             character not in "0123456789abcdef" for character in self.model_revision
@@ -144,7 +149,12 @@ class SentimentRuntime(Protocol):
 class LocalHuggingFaceRuntime:
     """Lazily load pinned, safetensors-only model files; offline by default."""
 
-    def __init__(self, *, cache_dir: str | Path | None = None, allow_model_download: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        cache_dir: str | Path | None = None,
+        allow_model_download: bool = False,
+    ) -> None:
         self._cache_dir = None if cache_dir is None else str(Path(cache_dir).expanduser())
         if type(allow_model_download) is not bool:
             raise ValueError("allow_model_download must be an explicit boolean.")
@@ -175,8 +185,9 @@ class LocalHuggingFaceRuntime:
             scores = torch.softmax(logits[0], dim=-1).tolist()
         raw_labels = model.config.id2label
         return {
-            str(raw_labels[str(index)] if str(index) in raw_labels else raw_labels[index]).casefold():
-                Decimal(str(float(score)))
+            str(
+                raw_labels[str(index)] if str(index) in raw_labels else raw_labels[index]
+            ).casefold(): Decimal(str(float(score)))
             for index, score in enumerate(scores)
         }
 
@@ -228,7 +239,7 @@ class NewsSentimentOutcome:
 
 
 class HuggingFaceNewsSentimentAdapter:
-    """News sentiment inference gate with source permission, model rights and confidence abstention."""
+    """News sentiment gate with source permission, model-rights and confidence abstention."""
 
     def __init__(
         self,
@@ -269,7 +280,9 @@ class HuggingFaceNewsSentimentAdapter:
             article.source_license_id != authorization.license_id
             or article.source_terms_revision != authorization.terms_revision
         ):
-            raise PermissionError("Article source-license provenance differs from current authorization.")
+            raise PermissionError(
+                "Article source-license provenance differs from current authorization."
+            )
         if article.language.lower() not in {
             lang.lower() for lang in self._review.supported_languages
         }:
@@ -293,7 +306,10 @@ class HuggingFaceNewsSentimentAdapter:
             revision=self._review.model_revision,
             max_token_count=self._review.max_token_count,
         )
-        mapping = {raw_label.casefold(): normalized for raw_label, normalized in self._review.model_labels}
+        mapping = {
+            raw_label.casefold(): normalized
+            for raw_label, normalized in self._review.model_labels
+        }
         if set(raw) != set(mapping):
             return NewsSentimentOutcome(
                 record=None,
@@ -331,12 +347,20 @@ class HuggingFaceNewsSentimentAdapter:
             model_revision=self._review.model_revision,
             model_license_id=self._review.model_license_id,
             model_card_uri=self._review.model_card_uri,
+            model_training_dataset_id=self._review.training_dataset_id,
+            model_training_dataset_revision=self._review.training_dataset_revision,
+            model_training_dataset_license_id=self._review.training_dataset_license_id,
+            model_training_data_rights_verified=self._review.training_data_rights_verified,
+            commercial_use_approved=self._review.commercial_use_approved,
         )
         return NewsSentimentOutcome(
             record=record,
             abstained=False,
             reason_code="SENTIMENT_CLASSIFIED",
-            explanation="Sentiment was classified by a reviewed local model; this is advisory metadata.",
+            explanation=(
+                "Sentiment was classified by a reviewed local model; "
+                "this is advisory metadata."
+            ),
         )
 
     @staticmethod
