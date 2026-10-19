@@ -59,10 +59,8 @@ class StrategySelectionPolicy:
             "maximum_prediction_age",
         ):
             value = getattr(self, name)
-            if not isinstance(value, timedelta) or value < timedelta(0):
-                raise ValueError(f"{name} must be a non-negative timedelta.")
-        if self.maximum_prediction_age == timedelta(0):
-            raise ValueError("maximum_prediction_age must be positive.")
+            if not isinstance(value, timedelta) or value <= timedelta(0):
+                raise ValueError(f"{name} must be a positive timedelta.")
 
     def as_dict(self) -> dict[str, object]:
         return {
