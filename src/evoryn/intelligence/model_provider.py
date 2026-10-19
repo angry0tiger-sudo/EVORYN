@@ -1137,7 +1137,7 @@ class OpenAICompatibleChatAdapter:
         completed_at = self._now()
         returned_model = raw.get("model")
         if returned_model != self.identity.model_id:
-            raise ModelProviderError("Provider response model identity is missing or changed.")
+            raise ModelProviderError("Provider response model identity changed or is missing.")
         choices = raw.get("choices")
         if not isinstance(choices, (tuple, list)) or not choices:
             raise ModelProviderError("Provider response has no choice.")
@@ -1154,7 +1154,11 @@ class OpenAICompatibleChatAdapter:
         if parsed_mapping is None:
             raise ModelProviderError("Provider output must be a JSON object.")
         usage = _parse_token_usage(raw.get("usage"))
-        if usage is not None and usage.estimated_cost_usd is None and self._cost_estimator is not None:
+        if (
+            usage is not None
+            and usage.estimated_cost_usd is None
+            and self._cost_estimator is not None
+        ):
             try:
                 estimated_cost = self._cost_estimator(
                     self.identity, usage.input_tokens, usage.output_tokens
