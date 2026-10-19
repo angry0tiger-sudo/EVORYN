@@ -60,12 +60,12 @@ This ledger records open verification and runtime-integration obligations. Close
 
 ## Phase 22 — Nobitex Read-Only Account Data and USDT-Only Market Gate
 
-- [ ] **Read-only wallet reader:** implement isolated Spot/Margin USDT wallet snapshots through `GET /v2/wallets?currencies=usdt&type=spot|margin`; no profile, banking, transfer, withdrawal, or order endpoint is used by the new account reader.
+- [x] **Read-only wallet reader merged in PR #25.** The account reader returns isolated Spot/Margin USDT wallet snapshots through `GET /v2/wallets?currencies=usdt&type=spot|margin`; the reader does not call profile, banking, transfer, withdrawal or order endpoints.
 - [ ] **Provider-side token permission remains an external deployment prerequisite.** Code accepts only `NOBITEX_READONLY_API_TOKEN`; it cannot independently inspect or prove the account's server-side permissions. Do not deploy until the supplied token is verified in Nobitex account/API-key settings to have no trade or withdrawal permissions.
-- [ ] **Hard whitelist:** configuration and the Risk Engine reject markets outside Nobitex Spot/USDT. The supported quote-currency ceiling is fixed in source to USDT; unsupported currencies in environment config fail at startup. Margin's separate policy also rejects non-USDT quote currency.
-- [ ] **Transport-level defense:** constrain market-statistics, candle, order-book, trade-data, and wallet reads to USDT quote/wallet requests, so adapter bypass does not silently broaden the read scope.
-- [ ] **Exact-SHA evidence required:** unit tests, Ruff, strict mypy, Bandit, preflight/compileall and pip-audit. Tests use mock transports; no live account call is issued in CI.
-- [ ] **Live API smoke test is intentionally unrun.** No read-only token is available inside this engineering session. Do not claim live-data connectivity until a separately supervised, read-only smoke test runs with a provider-confirmed restricted token; never ask for that token in chat or put it in source control.
+- [x] **Hard whitelist merged in PR #25.** Configuration and Risk Engine reject markets outside Nobitex Spot/USDT. The supported quote-currency ceiling is fixed in source to USDT; unsupported environment values cannot widen it. The Margin policy also rejects non-USDT quote currency.
+- [x] **Transport-level defense merged in PR #25.** Market-statistics, candle, order-book, trade-data and wallet reads are constrained to USDT quote/wallet requests.
+- [x] **Offline verification passed on exact PR #25 head.** SHA `9ea98dbb1d67cdc7c1f9b290557aa17dbdfbb4b0` passed 318 pytest tests and all six configured gates: [CI Run #39263527045](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39263527045). Tests use mock transports; no live account call was issued.
+- [ ] **Live API smoke test remains unrun.** PR #26 prepares `scripts/live_readonly_nobitex_usdt.py`, whose dedicated transport permits only the exact USDT wallet GET requests. No read-only token is available in this session. Do not claim live connectivity until a supervised test uses a provider-confirmed restricted token; never ask for that token in chat or source-control it.
 - [ ] **No trade/write route is enabled.** Live order submission/cancel, withdrawal, transfer and collateral mutation remain unavailable.
 
 ## Evidence classification
