@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -332,9 +333,7 @@ class ExperimentRunEvidence:
             raise ValueError("Backtest result dataset differs from experiment specification.")
         if result.evaluation_range != spec.test_range:
             raise ValueError("Backtest result range differs from the registered test window.")
-        expected_config_fingerprint = _sha256(
-            _canonical_json_bytes(result.config.as_dict())
-        )
+        expected_config_fingerprint = configuration_fingerprint(result.config.as_dict())
         if expected_config_fingerprint != spec.evaluation_config_fingerprint:
             raise ValueError("Backtest configuration differs from the registered fingerprint.")
         if result.strategy_parameters != tuple(spec.parameters):
@@ -983,6 +982,11 @@ def _canonical_json_bytes(value: object) -> bytes:
         )
         + "\n"
     ).encode("utf-8")
+
+
+def configuration_fingerprint(configuration: Mapping[str, object]) -> str:
+    """Fingerprint canonical, JSON-compatible model/evaluation settings without hidden defaults."""
+    return _sha256(_canonical_json_bytes(dict(configuration)))
 
 
 def _sha256(value: bytes) -> str:
