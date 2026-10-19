@@ -34,6 +34,7 @@ FINANCIAL_NEWS_MODEL_CARD = (
     "https://huggingface.co/mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
 )
 FINANCIAL_PHRASEBANK_DATASET_ID = "takala/financial_phrasebank"
+FINANCIAL_PHRASEBANK_DATASET_REVISION = "8d3fe0c36d5feec6b3cc5e455b0fcb4820fb9964"
 FINANCIAL_PHRASEBANK_DATASET_LICENSE = "CC-BY-NC-SA-3.0"
 
 
@@ -85,10 +86,12 @@ class SentimentModelReview:
                 or parsed.password
             ):
                 raise ValueError(f"{name} must be an HTTPS URL without embedded credentials.")
-        if len(self.model_revision) != 40 or any(
-            character not in "0123456789abcdef" for character in self.model_revision
-        ):
-            raise ValueError("model_revision must be an immutable 40-character Git commit SHA.")
+        for name in ("model_revision", "training_dataset_revision"):
+            value = getattr(self, name)
+            if len(value) != 40 or any(
+                character not in "0123456789abcdef" for character in value
+            ):
+                raise ValueError(f"{name} must be an immutable 40-character Git commit SHA.")
         require_aware_utc(self.reviewed_at, "model review timestamp")
         require_aware_utc(self.review_due_at, "model review expiry")
         if self.review_due_at <= self.reviewed_at:
@@ -99,6 +102,8 @@ class SentimentModelReview:
             raise ValueError("commercial_use_approved must be explicit.")
         if len(self.model_labels) != 3:
             raise ValueError("Model review must map exactly three output labels.")
+        if any(not raw.strip() for raw, _ in self.model_labels):
+            raise ValueError("Raw model output labels must not be empty.")
         if len({raw.casefold() for raw, _ in self.model_labels}) != 3:
             raise ValueError("Raw model output labels must be unique.")
         if {normalized for _, normalized in self.model_labels} != {
@@ -380,7 +385,7 @@ class HuggingFaceNewsSentimentAdapter:
             model_license_uri="https://www.apache.org/licenses/LICENSE-2.0",
             model_card_uri=FINANCIAL_NEWS_MODEL_CARD,
             training_dataset_id=FINANCIAL_PHRASEBANK_DATASET_ID,
-            training_dataset_revision="main",
+            training_dataset_revision=FINANCIAL_PHRASEBANK_DATASET_REVISION,
             training_dataset_license_id=FINANCIAL_PHRASEBANK_DATASET_LICENSE,
             training_dataset_license_uri="https://creativecommons.org/licenses/by-nc-sa/3.0/",
             training_data_rights_verified=training_data_rights_verified,
