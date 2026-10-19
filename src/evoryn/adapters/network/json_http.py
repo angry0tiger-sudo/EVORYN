@@ -112,6 +112,13 @@ class HttpsJsonTransport:
                 raise JsonApiError("Invalid HTTP header name.")
             if "\r" in value or "\n" in value:
                 raise JsonApiError("Invalid HTTP header value.")
+            if name.casefold() in {
+                "host",
+                "content-length",
+                "transfer-encoding",
+                "connection",
+            }:
+                raise JsonApiError("The transport owns framing and routing headers.")
             request_headers[name] = value
 
         request = Request(request_url, headers=request_headers, method="GET")
