@@ -684,7 +684,10 @@ class ShadowRunner:
                     "strategy_fingerprint": self._baseline_strategy_fingerprint,
                 },
                 "feed_manifest_fingerprint": self._config.feed_manifest_fingerprint,
-                "evaluation_config_fingerprint": self._config.evaluation_config_fingerprint,
+                "experiment_evaluation_config_fingerprint": (
+                    self._spec.evaluation_config_fingerprint
+                ),
+                "projection_config_fingerprint": self._config.projection_config_fingerprint,
                 "execution_authorized": False,
             },
         )
