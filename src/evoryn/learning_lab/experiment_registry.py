@@ -44,6 +44,7 @@ class LearningEventType(StrEnum):
     CANDIDATE_PROMOTED_TO_PAPER = "candidate_promoted_to_paper"
     PROMOTION_REJECTED = "promotion_rejected"
     AUTO_ROLLBACK_TRIGGERED = "auto_rollback_triggered"
+    CHAMPION_HEALTH_CHECKED = "champion_health_checked"
     RELEASE_CANDIDATE_CREATED = "release_candidate_created"
     RELEASE_APPROVED = "release_approved"
     RELEASE_REJECTED = "release_rejected"
