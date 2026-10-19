@@ -70,14 +70,14 @@ This ledger records open verification and runtime-integration obligations. Close
 
 ## Gated Nobitex Spot Execution — local validation required
 
-- [ ] **Code candidate is not an operational release.** The separate signed Spot gateway and application service are on a feature branch and are not merged until exact-head CI and review succeed.
+- [ ] **Code candidate is not an operational release.** The separate signed Spot gateway and application service are on a feature branch and are not merged until exact-head CI and review succeed. The first scope is Limit-only; Market orders remain rejected until request and price-protection semantics are verified.
 - [ ] **Default-off invariant.** Writes require `EVORYN_SPOT_ORDER_WRITES_ENABLED=True`, the explicit acknowledgement `EVORYN_LIVE_TRADING_ACK=I_UNDERSTAND_ORDERS_ARE_REAL`, and locally injected Nobitex Ed25519 API/private keys. The legacy `ENABLE_REAL_TRADING` remains false.
 - [ ] **Provider permission is external.** The selected Nobitex API key must have only the permissions required for the Spot flow, including READ/TRADE as applicable, and no withdrawal permission. The code cannot prove remote account permissions.
 - [ ] **No live validation during development.** CI tests use fake transports and keys generated in memory. User-directed account/API validation is deferred until the full source is transferred to the local system.
 - [ ] **Durable unknown-result stop.** SQLite claims the client order ID before network I/O. Timeout or ambiguous submit/cancel result latches Risk Engine halt and leaves a blocking unknown state. No write is retried automatically.
 - [ ] **Single-active-order baseline.** New submissions are blocked while a previous order is submitting, unknown, pending, open, or partially filled. This remains until the runtime portfolio/exposure builder incorporates journal state and venue reconciliation.
 - [ ] **Phase 18 separation.** Only idempotent reads may be wrapped by bounded retry. Signed POST submit/cancel/status operations are not passed through automatic retry orchestration.
-- [ ] **Local integration and release gate remain open.** Windows/Linux packaging, secret-store integration, process supervision, backup/recovery, account-state builder, order/fill reconciliation, protective exit policy, and local verification must precede a production-ready claim.
+- [ ] **Local integration and release gate remain open.** Windows/Linux packaging, secret-store integration, process supervision, backup/recovery, account-state builder, order/fill reconciliation, protective exit policy, and local verification must precede a production-ready claim. This candidate supports Limit orders only; Market orders stay rejected.
 
 ## Evidence classification
 

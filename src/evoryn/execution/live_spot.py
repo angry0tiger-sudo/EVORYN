@@ -12,7 +12,7 @@ import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -54,7 +54,6 @@ from evoryn.risk.models import (
 
 
 _LIVE_ACKNOWLEDGEMENT = "I_UNDERSTAND_ORDERS_ARE_REAL"
-_HARD_MAX_MARKET_SLIPPAGE_BPS = Decimal("100")
 _RULES_MAX_AGE_SECONDS = 300.0
 _BLOCKING_STATES = frozenset(
     {
@@ -74,23 +73,16 @@ def _env_true(value: str | None) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class LiveSpotExecutionSettings:
-    """Explicit local-only order-write settings; secrets never appear in repr."""
+    """Explicit local-only Limit-order write settings; secrets never appear in repr."""
 
     order_writes_enabled: bool = False
     api_key: str | None = field(default=None, repr=False)
     private_key: str | None = field(default=None, repr=False)
     owner_acknowledgement: str | None = field(default=None, repr=False)
-    max_market_slippage_bps: Decimal = Decimal("50")
 
     def __post_init__(self) -> None:
         if type(self.order_writes_enabled) is not bool:
             raise ValueError("order_writes_enabled must be an explicit boolean.")
-        if (
-            not self.max_market_slippage_bps.is_finite()
-            or self.max_market_slippage_bps <= 0
-            or self.max_market_slippage_bps > _HARD_MAX_MARKET_SLIPPAGE_BPS
-        ):
-            raise ValueError("Market slippage must be positive and no greater than 100 bps.")
         if self.order_writes_enabled:
             if self.owner_acknowledgement != _LIVE_ACKNOWLEDGEMENT:
                 raise TradingDisabledError(
@@ -98,7 +90,8 @@ class LiveSpotExecutionSettings:
                 )
             if not self.api_key or not self.private_key:
                 raise AuthenticationError(
-                    "Nobitex Spot write credentials must be supplied through the local secret store."
+                    "Nobitex Spot write credentials must be supplied "
+                    "through the local secret store."
                 )
 
     @classmethod
@@ -108,33 +101,25 @@ class LiveSpotExecutionSettings:
         if enabled and (
             _env_true(values.get("CI"))
             or _env_true(values.get("GITHUB_ACTIONS"))
-            or (values.get("EVORYN_ENV", "").strip().casefold() in {"ci", "test"})
+            or values.get("EVORYN_ENV", "").strip().casefold() in {"ci", "test"}
         ):
-            raise TradingDisabledError("Spot order writes are forbidden in CI and test environments.")
-        raw_slippage = values.get("EVORYN_MAX_MARKET_SLIPPAGE_BPS", "50")
-        try:
-            slippage = Decimal(raw_slippage.strip())
-        except (AttributeError, InvalidOperation, ValueError) as exc:
-            raise ValueError("EVORYN_MAX_MARKET_SLIPPAGE_BPS must be decimal.") from exc
+            raise TradingDisabledError(
+                "Spot order writes are forbidden in CI and test environments."
+            )
         if not enabled:
             # Do not even retain unused secrets when the write gate is off.
-            return cls(
-                order_writes_enabled=False,
-                max_market_slippage_bps=slippage,
-            )
+            return cls(order_writes_enabled=False)
         return cls(
             order_writes_enabled=True,
             api_key=values.get("NOBITEX_SPOT_API_KEY"),
             private_key=values.get("NOBITEX_SPOT_PRIVATE_KEY"),
             owner_acknowledgement=values.get("EVORYN_LIVE_TRADING_ACK"),
-            max_market_slippage_bps=slippage,
         )
 
     @classmethod
     def from_environment(cls) -> LiveSpotExecutionSettings:
         """Read settings from the local process environment without network I/O."""
         return cls.from_mapping(os.environ)
-
 
 class SpotTradingPort(Protocol):
     """Narrow write gateway used by the execution service and replaced by mocks in tests."""
@@ -261,6 +246,8 @@ class SQLiteExecutionJournal:
             )
             """
         )
+        if rendered_path != ":memory:" and os.name == "posix":
+            os.chmod(rendered_path, 0o600)
 
     def close(self) -> None:
         """Close the SQLite connection explicitly at process shutdown."""
@@ -273,13 +260,17 @@ class SQLiteExecutionJournal:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                active = self._connection.execute(
-                    "SELECT client_order_id FROM live_spot_orders "
-                    "WHERE state IN ({}) LIMIT 1".format(
-                        ",".join("?" for _ in _BLOCKING_STATES)
+                existing_rows = self._connection.execute(
+                    "SELECT client_order_id, state FROM live_spot_orders"
+                ).fetchall()
+                active = next(
+                    (
+                        row
+                        for row in existing_rows
+                        if str(row["state"]) in _BLOCKING_STATES
                     ),
-                    tuple(sorted(_BLOCKING_STATES)),
-                ).fetchone()
+                    None,
+                )
                 if active is not None:
                     raise OrderOutcomeUnknown(
                         "A prior order is active or unresolved; reconcile before another submit."
@@ -376,13 +367,17 @@ class SQLiteExecutionJournal:
 
     def blocking_order(self) -> JournalRecord | None:
         with self._lock:
-            row = self._connection.execute(
-                "SELECT * FROM live_spot_orders WHERE state IN ({}) "
-                "ORDER BY created_at LIMIT 1".format(
-                    ",".join("?" for _ in _BLOCKING_STATES)
+            rows = self._connection.execute(
+                "SELECT * FROM live_spot_orders ORDER BY created_at"
+            ).fetchall()
+            row = next(
+                (
+                    item
+                    for item in rows
+                    if str(item["state"]) in _BLOCKING_STATES
                 ),
-                tuple(sorted(_BLOCKING_STATES)),
-            ).fetchone()
+                None,
+            )
         return None if row is None else self._to_record(row)
 
     @staticmethod
@@ -452,7 +447,7 @@ class LiveSpotExecutionService:
         now: datetime,
     ) -> LiveSpotExecutionResult:
         """Risk-check and submit once. Ambiguous submission is journaled and never retried."""
-        self._require_enabled()
+        transport = self._require_enabled()
         if not isinstance(request, OrderRequest):
             raise InvalidExchangeRequest("Live Spot execution requires a validated OrderRequest.")
         if self.risk_engine.is_halted:
@@ -466,7 +461,10 @@ class LiveSpotExecutionService:
                 ExecutionDisposition.BLOCKED,
                 "account_state_unverified",
             )
-        if market_data.market != request.market or "nobitex" not in market_data.source.casefold():
+        if (
+            market_data.market != request.market
+            or "nobitex" not in market_data.source.casefold()
+        ):
             return LiveSpotExecutionResult(
                 ExecutionDisposition.REJECTED,
                 "market_data_identity_or_source_invalid",
@@ -475,6 +473,11 @@ class LiveSpotExecutionService:
             return LiveSpotExecutionResult(
                 ExecutionDisposition.REJECTED,
                 "market_not_allowed",
+            )
+        if request.order_type is not OrderType.LIMIT:
+            return LiveSpotExecutionResult(
+                ExecutionDisposition.REJECTED,
+                "market_order_semantics_not_verified",
             )
         _require_aware(now)
 
@@ -499,13 +502,16 @@ class LiveSpotExecutionService:
                     ExecutionDisposition.REJECTED,
                     "amount_precision_invalid",
                 )
-            if request.order_type is OrderType.LIMIT:
-                assert request.price is not None
-                if request.price % rules.price_tick != 0:
-                    return LiveSpotExecutionResult(
-                        ExecutionDisposition.REJECTED,
-                        "price_precision_invalid",
-                    )
+            if request.price is None:
+                return LiveSpotExecutionResult(
+                    ExecutionDisposition.REJECTED,
+                    "limit_price_missing",
+                )
+            if request.price % rules.price_tick != 0:
+                return LiveSpotExecutionResult(
+                    ExecutionDisposition.REJECTED,
+                    "price_precision_invalid",
+                )
             guarded_values = dict(market_data.values)
             guarded_values["ask" if request.side is Side.BUY else "bid"] = price_guard
             guarded_market_data = replace(market_data, values=guarded_values)
@@ -564,7 +570,11 @@ class LiveSpotExecutionService:
                 self.risk_engine.emergency_halt("order_outcome_unknown")
             return LiveSpotExecutionResult(
                 ExecutionDisposition.BLOCKED if known_active else ExecutionDisposition.UNKNOWN,
-                "prior_order_still_active" if known_active else "prior_order_requires_reconciliation",
+                (
+                    "prior_order_still_active"
+                    if known_active
+                    else "prior_order_requires_reconciliation"
+                ),
                 reconciliation_required=not known_active,
             )
 
@@ -585,9 +595,8 @@ class LiveSpotExecutionService:
                 "client_order_id_reuse_or_journal_conflict",
                 risk=risk,
             )
-        assert self.transport is not None
         try:
-            order = self.transport.submit_order(approved_request, price_guard=price_guard)
+            order = transport.submit_order(approved_request, price_guard=price_guard)
         except (OrderOutcomeUnknown, ExchangeTransportError) as exc:
             self._mark_unknown(approved_request.client_order_id, type(exc).__name__)
             return LiveSpotExecutionResult(
@@ -596,7 +605,12 @@ class LiveSpotExecutionService:
                 risk=risk,
                 reconciliation_required=True,
             )
-        except (AuthenticationError, AuthorizationError, InvalidExchangeRequest, RateLimitExceeded) as exc:
+        except (
+            AuthenticationError,
+            AuthorizationError,
+            InvalidExchangeRequest,
+            RateLimitExceeded,
+        ) as exc:
             self.journal.update(
                 approved_request.client_order_id,
                 state=OrderStatus.REJECTED.value,
@@ -668,7 +682,11 @@ class LiveSpotExecutionService:
                 "journal_order_not_found",
             )
         if record.state not in {"submitting", "unknown", "cancel_submitting"}:
-            order = record.to_order() if record.exchange_order_id and record.exchange_status else None
+            order = (
+                record.to_order()
+                if record.exchange_order_id and record.exchange_status
+                else None
+            )
             return LiveSpotExecutionResult(
                 ExecutionDisposition.RECONCILED,
                 "journal_state_already_known",
@@ -758,9 +776,8 @@ class LiveSpotExecutionService:
             now=now,
             reason_code=None,
         )
-        assert self.transport is not None
         try:
-            cancelled = self.transport.cancel_order(
+            cancelled = transport.cancel_order(
                 requested_market=record.market,
                 known_order=known_order,
             )
@@ -772,7 +789,12 @@ class LiveSpotExecutionService:
                 order=known_order,
                 reconciliation_required=True,
             )
-        except (AuthenticationError, AuthorizationError, InvalidExchangeRequest, RateLimitExceeded) as exc:
+        except (
+            AuthenticationError,
+            AuthorizationError,
+            InvalidExchangeRequest,
+            RateLimitExceeded,
+        ) as exc:
             # A conclusive rejection preserves the previously acknowledged order state.
             self.journal.update(
                 client_order_id,
@@ -812,43 +834,30 @@ class LiveSpotExecutionService:
         market_data: MarketSnapshot,
         rules: SpotInstrumentRules,
     ) -> Decimal:
-        if request.order_type is OrderType.LIMIT:
-            if request.price is None:
-                raise InvalidExchangeRequest("Limit order price is required.")
-            if request.price % rules.price_tick != 0:
-                raise InvalidExchangeRequest("Limit price does not match the official price tick.")
-            return request.price
+        """Return the explicit Limit price; market-order execution is not yet enabled."""
+        del market_data
+        if request.order_type is not OrderType.LIMIT or request.price is None:
+            raise InvalidExchangeRequest(
+                "Only Limit orders with an explicit price are currently supported."
+            )
+        if request.price % rules.price_tick != 0:
+            raise InvalidExchangeRequest(
+                "Limit price does not match the official price tick."
+            )
+        if not request.price.is_finite() or request.price <= 0:
+            raise InvalidExchangeRequest("Limit price must be finite and positive.")
+        return request.price
 
-        key = "ask" if request.side is Side.BUY else "bid"
-        reference = market_data.values.get(key)
-        if not isinstance(reference, Decimal) or not reference.is_finite() or reference <= 0:
-            raise InvalidExchangeRequest("Fresh top-of-book price is required for a guarded market order.")
-        slippage_ratio = self.settings.max_market_slippage_bps / Decimal("10000")
-        unrounded = (
-            reference * (Decimal("1") + slippage_ratio)
-            if request.side is Side.BUY
-            else reference * (Decimal("1") - slippage_ratio)
-        )
-        rounding = ROUND_CEILING if request.side is Side.BUY else ROUND_FLOOR
-        guard = (unrounded / rules.price_tick).to_integral_value(rounding=rounding) * rules.price_tick
-        if guard <= 0:
-            raise InvalidExchangeRequest("Market price guard is not positive.")
-        actual_bps = (
-            (guard / reference - Decimal("1")) * Decimal("10000")
-            if request.side is Side.BUY
-            else (Decimal("1") - guard / reference) * Decimal("10000")
-        )
-        if actual_bps > self.settings.max_market_slippage_bps:
-            raise InvalidExchangeRequest("Rounded market price guard exceeds the slippage policy.")
-        return guard
-
-    def _require_enabled(self) -> None:
+    def _require_enabled(self) -> SpotTradingPort:
         if not self.settings.order_writes_enabled:
             raise TradingDisabledError(
-                "Spot order writes are disabled. Set the local feature flag and explicit owner acknowledgement."
+                "Spot order writes are disabled. Set the local feature flag "
+                "and explicit owner acknowledgement."
             )
-        if self.transport is None:
+        transport = self.transport
+        if transport is None:
             raise TradingDisabledError("No Spot trading transport is configured.")
+        return transport
 
     def _mark_unknown(self, client_order_id: str, reason_code: str) -> None:
         try:

@@ -1,11 +1,11 @@
 """Official Nobitex Spot instrument rules from the public /v2/options endpoint."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Callable, Protocol
+from typing import Protocol
 
 from evoryn.config import MarketPolicy
 from evoryn.domain.models import Market

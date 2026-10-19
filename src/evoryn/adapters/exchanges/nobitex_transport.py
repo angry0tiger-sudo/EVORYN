@@ -191,11 +191,14 @@ class NobitexHTTPTransport:
                     "Nobitex trade-data reads are restricted to USDT-quoted markets."
                 )
 
-        if normalized_method == "GET" and path == "/v2/options":
-            if params is not None or payload is not None:
-                raise InvalidExchangeRequest(
-                    "Nobitex options reads do not accept query parameters or a payload."
-                )
+        if (
+            normalized_method == "GET"
+            and path == "/v2/options"
+            and (params is not None or payload is not None)
+        ):
+            raise InvalidExchangeRequest(
+                "Nobitex options reads do not accept query parameters or a payload."
+            )
 
         if normalized_method == "GET" and payload is not None:
             raise InvalidExchangeRequest("GET requests must not contain a JSON payload.")

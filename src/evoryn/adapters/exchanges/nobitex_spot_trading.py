@@ -187,7 +187,9 @@ def normalize_nobitex_order(
         and remote_client_id is not None
         and remote_client_id != expected_client_order_id
     ):
-        raise OrderOutcomeUnknown("Nobitex response clientOrderId does not match the submitted intent.")
+        raise OrderOutcomeUnknown(
+            "Nobitex response clientOrderId does not match the submitted intent."
+        )
 
     remote_market = raw.get("market")
     if isinstance(remote_market, str) and remote_market.strip():
@@ -196,7 +198,9 @@ def normalize_nobitex_order(
         )
         base, quote = split_usdt_symbol(requested_market, MarketPolicy())
         if normalized_remote != f"{base}{quote}".upper():
-            raise OrderOutcomeUnknown("Nobitex response market does not match the requested market.")
+            raise OrderOutcomeUnknown(
+                "Nobitex response market does not match the requested market."
+            )
 
     quantity = _decimal(raw.get("amount"), label="amount")
     if quantity <= 0:
@@ -288,29 +292,33 @@ class NobitexSpotTradingTransport:
     def submit_order(self, request: OrderRequest, *, price_guard: Decimal) -> Order:
         """Submit exactly one validated Spot order; network outcomes are never retried."""
         if not isinstance(request, OrderRequest):
-            raise InvalidExchangeRequest("Nobitex Spot submission requires a validated OrderRequest.")
+            raise InvalidExchangeRequest(
+                "Nobitex Spot submission requires a validated OrderRequest."
+            )
         base, quote = split_usdt_symbol(request.market, self._market_policy)
         if len(request.client_order_id) > 32 or not request.client_order_id.strip():
             raise InvalidExchangeRequest("Nobitex clientOrderId must contain 1 to 32 characters.")
         if not all(char.isalnum() or char in "._-" for char in request.client_order_id):
             raise InvalidExchangeRequest("Nobitex clientOrderId contains unsupported characters.")
+        if request.order_type is not OrderType.LIMIT:
+            raise InvalidExchangeRequest(
+                "Only Limit orders are enabled until Market-order semantics are verified."
+            )
+        if request.price is None or request.price != price_guard:
+            raise InvalidExchangeRequest("Limit order price and approved price must match.")
         if not price_guard.is_finite() or price_guard <= 0:
-            raise InvalidExchangeRequest("An explicit positive price guard is required.")
+            raise InvalidExchangeRequest("An explicit positive limit price is required.")
 
         payload: dict[str, object] = {
             "type": request.side.value,
-            "execution": request.order_type.value,
+            "execution": "limit",
+            "tradeType": "spot",
             "srcCurrency": base,
             "dstCurrency": quote,
             "amount": format(request.quantity, "f"),
             "clientOrderId": request.client_order_id,
             "price": format(price_guard, "f"),
         }
-        if request.order_type is OrderType.LIMIT:
-            if request.price is None or request.price != price_guard:
-                raise InvalidExchangeRequest("Limit order price and approved price guard must match.")
-        elif request.order_type is not OrderType.MARKET:
-            raise InvalidExchangeRequest("Only Spot limit and guarded market orders are supported.")
 
         response = self._post_json(self._ORDER_ADD, payload)
         if response.get("status") == "failed":
@@ -353,9 +361,10 @@ class NobitexSpotTradingTransport:
                 raise InvalidExchangeRequest("Nobitex order_id must be numeric.")
             payload = {"id": int(normalized_id)}
         else:
-            assert client_order_id is not None
-            if not client_order_id or len(client_order_id) > 32:
-                raise InvalidExchangeRequest("Nobitex clientOrderId must contain 1 to 32 characters.")
+            if client_order_id is None or not client_order_id or len(client_order_id) > 32:
+                raise InvalidExchangeRequest(
+                    "Nobitex clientOrderId must contain 1 to 32 characters."
+                )
             payload = {"clientOrderId": client_order_id}
 
         response = self._post_json(self._ORDER_STATUS, payload)
@@ -434,7 +443,9 @@ class NobitexSpotTradingTransport:
             if exc.code == 401:
                 raise AuthenticationError("Nobitex rejected API-key authentication.") from exc
             if exc.code == 403:
-                raise AuthorizationError("Nobitex denied the requested API-key permission.") from exc
+                raise AuthorizationError(
+                    "Nobitex denied the requested API-key permission."
+                ) from exc
             if is_write and (exc.code in {408, 425} or exc.code >= 500 or 300 <= exc.code < 400):
                 raise OrderOutcomeUnknown(
                     "Nobitex order-write response is uncertain; reconcile before any further write."
@@ -455,7 +466,9 @@ class NobitexSpotTradingTransport:
                 raise OrderOutcomeUnknown(
                     "Nobitex order-write outcome is unknown; reconcile before any further write."
                 ) from exc
-            raise ExchangeTransportError("Nobitex status request failed at the transport boundary.") from exc
+            raise ExchangeTransportError(
+                "Nobitex status request failed at the transport boundary."
+            ) from exc
 
         if len(raw) > self._MAX_RESPONSE_BYTES:
             if is_write:
@@ -468,13 +481,17 @@ class NobitexSpotTradingTransport:
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             if is_write:
                 raise OrderOutcomeUnknown(
-                    "Nobitex order-write response could not be parsed; reconcile before another write."
+                    "Nobitex order-write response could not be parsed; "
+                    "reconcile before another write."
                 ) from exc
-            raise MalformedExchangeResponse("Nobitex returned invalid JSON for order status.") from exc
+            raise MalformedExchangeResponse(
+                "Nobitex returned invalid JSON for order status."
+            ) from exc
         if not isinstance(decoded, dict):
             if is_write:
                 raise OrderOutcomeUnknown(
-                    "Nobitex order-write response was not an object; reconcile before another write."
+                    "Nobitex order-write response was not an object; "
+                    "reconcile before another write."
                 )
             raise MalformedExchangeResponse("Nobitex order-status response must be an object.")
         return decoded
@@ -484,23 +501,37 @@ class NobitexSpotTradingTransport:
         """Enforce exact endpoint schemas so this transport cannot become a generic API tunnel."""
         keys = set(payload)
         if path == cls._ORDER_ADD:
-            required = {"type", "execution", "srcCurrency", "dstCurrency", "amount", "clientOrderId", "price"}
+            required = {
+                "type",
+                "execution",
+                "tradeType",
+                "srcCurrency",
+                "dstCurrency",
+                "amount",
+                "clientOrderId",
+                "price",
+            }
             if keys != required:
                 raise InvalidExchangeRequest("Spot order payload has an unexpected field set.")
             if payload["type"] not in {"buy", "sell"}:
                 raise InvalidExchangeRequest("Spot order side is unsupported.")
-            if payload["execution"] not in {"limit", "market"}:
-                raise InvalidExchangeRequest("Only limit and market Spot orders are allowed.")
+            if payload["execution"] != "limit" or payload["tradeType"] != "spot":
+                raise InvalidExchangeRequest("Only Spot Limit orders are allowlisted.")
             if str(payload["dstCurrency"]).lower() != "usdt":
                 raise InvalidExchangeRequest("Only USDT-quoted Spot orders are allowed.")
             amount = _decimal(payload["amount"], label="amount")
             price = _decimal(payload["price"], label="price")
             if amount <= 0 or price <= 0:
-                raise InvalidExchangeRequest("Spot order amount and price guard must be positive.")
+                raise InvalidExchangeRequest(
+                "Spot order amount and price must be positive."
+            )
             client_id = payload["clientOrderId"]
             if not isinstance(client_id, str) or not client_id or len(client_id) > 32:
                 raise InvalidExchangeRequest("Spot clientOrderId must contain 1 to 32 characters.")
-            if not isinstance(payload["srcCurrency"], str) or not payload["srcCurrency"].isalnum():
+            if (
+                not isinstance(payload["srcCurrency"], str)
+                or not payload["srcCurrency"].isalnum()
+            ):
                 raise InvalidExchangeRequest("Spot base currency is invalid.")
         elif path == cls._ORDER_STATUS:
             if keys == {"id"}:

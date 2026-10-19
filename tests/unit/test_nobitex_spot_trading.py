@@ -9,9 +9,15 @@ from decimal import Decimal
 from urllib.error import URLError
 from urllib.request import Request
 
-import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    PublicFormat,
+)
+
+import pytest
 
 from evoryn.adapters.exchanges.nobitex_instrument_rules import (
     NobitexSpotInstrumentRulesProvider,
@@ -72,7 +78,7 @@ def _credentials() -> tuple[str, str, Ed25519PrivateKey]:
 
 class FakeResponse:
     def __init__(self, payload: Mapping[str, object]) -> None:
-        self._body = json.dumps(dict(payload), separators=(",", ":")).encode("utf-8")
+        self._body = json.dumps(dict(payload), separators=(",", ":")).encode()
 
     def __enter__(self) -> FakeResponse:
         return self
@@ -82,9 +88,8 @@ class FakeResponse:
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         traceback: object | None,
-    ) -> bool:
+    ) -> None:
         del exc_type, exc, traceback
-        return False
 
     def read(self, size: int = -1) -> bytes:
         return self._body if size < 0 else self._body[:size]
@@ -166,11 +171,14 @@ def test_signed_submission_uses_official_headers_and_one_fixed_route() -> None:
     result = gateway.submit_order(order_request(), price_guard=Decimal("100"))
     request, timeout = opener.calls[0]
     headers = {name.casefold(): value for name, value in request.header_items()}
-    body = request.data.decode("utf-8") if request.data is not None else ""
+    raw_body = request.data
+    if not isinstance(raw_body, bytes):
+        raise TypeError("Fake transport expected a serialized request body.")
+    body = raw_body.decode()
     signature = base64.urlsafe_b64decode(headers["nobitex-signature"].encode("ascii"))
     signing_text = (
         f"{headers['nobitex-timestamp']}POST/market/orders/add{body}"
-    ).encode("utf-8")
+    ).encode()
     signer.public_key().verify(signature, signing_text)
 
     assert result.order_id == "12345"
@@ -317,7 +325,6 @@ def settings(*, enabled: bool = True) -> LiveSpotExecutionSettings:
         api_key="dummy-public-key",
         private_key="dummy-private-key",
         owner_acknowledgement=ACK,
-        max_market_slippage_bps=Decimal("50"),
     )
 
 
@@ -455,12 +462,31 @@ def test_disabled_feature_flag_stops_before_rules_or_transport() -> None:
 
     with pytest.raises(TradingDisabledError):
         runner.submit_order(
-            order_request(order_type=OrderType.MARKET, price=None),
+            order_request(order_type=OrderType.LIMIT, price="100"),
             portfolio(),
             snapshot(),
             now=NOW,
         )
 
+    assert rules.calls == 0
+    assert gateway.submissions == []
+    assert journal.blocking_order() is None
+
+
+def test_market_orders_are_rejected_until_official_market_semantics_are_verified() -> None:
+    gateway = FakeTradingGateway()
+    journal = SQLiteExecutionJournal(":memory:")
+    runner, rules, _risk = service(gateway, journal)
+
+    result = runner.submit_order(
+        order_request(order_type=OrderType.MARKET, price=None),
+        portfolio(),
+        snapshot(),
+        now=NOW,
+    )
+
+    assert result.disposition is ExecutionDisposition.REJECTED
+    assert result.reason_code == "market_order_semantics_not_verified"
     assert rules.calls == 0
     assert gateway.submissions == []
     assert journal.blocking_order() is None
@@ -501,7 +527,7 @@ def test_gated_service_submits_once_after_risk_and_instrument_validation() -> No
     gateway = FakeTradingGateway()
     journal = SQLiteExecutionJournal(":memory:")
     runner, rules, risk = service(gateway, journal)
-    request = order_request(order_type=OrderType.MARKET, price=None)
+    request = order_request(order_type=OrderType.LIMIT, price="100")
 
     result = runner.submit_order(request, portfolio(), snapshot(), now=NOW)
 
@@ -509,7 +535,7 @@ def test_gated_service_submits_once_after_risk_and_instrument_validation() -> No
     assert result.order is not None and result.order.order_id == "9001"
     assert len(gateway.submissions) == 1
     assert gateway.submissions[0][0].quantity == Decimal("1")
-    assert gateway.submissions[0][1] == Decimal("100.50")
+    assert gateway.submissions[0][1] == Decimal("100")
     assert rules.calls == 1
     record = journal.get(request.client_order_id)
     assert record is not None and record.state == OrderStatus.OPEN.value
@@ -521,7 +547,7 @@ def test_active_order_blocks_a_second_submission_until_lifecycle_is_resolved() -
     journal = SQLiteExecutionJournal(":memory:")
     runner, _rules, _risk = service(gateway, journal)
     first = runner.submit_order(
-        order_request(order_type=OrderType.MARKET, price=None),
+        order_request(order_type=OrderType.LIMIT, price="100"),
         portfolio(),
         snapshot(),
         now=NOW,
@@ -531,8 +557,8 @@ def test_active_order_blocks_a_second_submission_until_lifecycle_is_resolved() -
     second = runner.submit_order(
         order_request(
             client_order_id="evoryn-test-002",
-            order_type=OrderType.MARKET,
-            price=None,
+            order_type=OrderType.LIMIT,
+            price="100",
         ),
         portfolio(),
         snapshot(),
@@ -549,7 +575,7 @@ def test_unknown_submit_is_journaled_and_latches_risk_halt() -> None:
     gateway.submit_error = OrderOutcomeUnknown("synthetic network timeout")
     journal = SQLiteExecutionJournal(":memory:")
     runner, _rules, risk = service(gateway, journal)
-    request = order_request(order_type=OrderType.MARKET, price=None)
+    request = order_request(order_type=OrderType.LIMIT, price="100")
 
     result = runner.submit_order(request, portfolio(), snapshot(), now=NOW)
 
@@ -566,7 +592,7 @@ def test_not_found_reconciliation_stays_unknown_and_does_not_resubmit() -> None:
     gateway.submit_error = OrderOutcomeUnknown("synthetic timeout")
     journal = SQLiteExecutionJournal(":memory:")
     runner, _rules, risk = service(gateway, journal)
-    request = order_request(order_type=OrderType.MARKET, price=None)
+    request = order_request(order_type=OrderType.LIMIT, price="100")
     first = runner.submit_order(request, portfolio(), snapshot(), now=NOW)
     assert first.disposition is ExecutionDisposition.UNKNOWN
 
@@ -583,7 +609,7 @@ def test_known_order_can_be_cancelled_without_exposing_arbitrary_order_ids() -> 
     gateway = FakeTradingGateway()
     journal = SQLiteExecutionJournal(":memory:")
     runner, _rules, _risk = service(gateway, journal)
-    request = order_request(order_type=OrderType.MARKET, price=None)
+    request = order_request(order_type=OrderType.LIMIT, price="100")
     submitted = runner.submit_order(request, portfolio(), snapshot(), now=NOW)
     assert submitted.disposition is ExecutionDisposition.SUBMITTED
 
