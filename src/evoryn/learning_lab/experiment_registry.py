@@ -573,37 +573,63 @@ class ExperimentRegistry:
         return self._ledger
 
     def register(self, spec: ExperimentSpec, *, correlation_id: str) -> str:
-        """Persist a spec immutably; the same identity is idempotent, conflicting bytes reject."""
+        """Persist one immutable spec and ensure its registration is present in the ledger."""
+        if not correlation_id.strip():
+            raise ValueError("correlation_id must not be empty.")
         with self._lock:
             existing = self._specs.get(spec.experiment_id)
-            if existing is not None:
-                if existing.to_dict() != spec.to_dict():
-                    raise ExperimentIntegrityError("Existing experiment ID has conflicting metadata.")
-                return spec.experiment_id
+            if existing is not None and existing.to_dict() != spec.to_dict():
+                raise ExperimentIntegrityError("Existing experiment ID has conflicting metadata.")
             stored = self._store_immutable_json(
                 "specs", f"{spec.experiment_id}.json", spec.to_dict()
             )
-            # A pre-existing on-disk ID must match even if this process has not cached it yet.
             if not stored:
                 existing_spec = self.get(spec.experiment_id)
                 if existing_spec.to_dict() != spec.to_dict():
-                    raise ExperimentIntegrityError("Existing experiment file conflicts with registration.")
-                self._specs[spec.experiment_id] = existing_spec
-                return spec.experiment_id
-            self._specs[spec.experiment_id] = spec
-            self._ledger.append(
-                LearningEventType.EXPERIMENT_REGISTERED,
-                experiment_id=spec.experiment_id,
-                correlation_id=correlation_id,
-                occurred_at=spec.created_at,
-                payload={
-                    "experiment_fingerprint": spec.fingerprint,
-                    "mode": spec.mode.value,
-                    "dataset_version": spec.dataset_version,
-                    "code_revision": spec.code_revision,
-                    "model_fingerprint": spec.model_fingerprint,
-                },
+                    raise ExperimentIntegrityError(
+                        "Existing experiment file conflicts with registration."
+                    )
+                spec = existing_spec
+
+            registered_events = tuple(
+                event
+                for event in self._ledger.events
+                if event.experiment_id == spec.experiment_id
+                and event.event_type
+                in {
+                    LearningEventType.EXPERIMENT_REGISTERED,
+                    LearningEventType.EXPERIMENT_REGISTRATION_REUSED,
+                }
             )
+            expected_payload = {
+                "experiment_fingerprint": spec.fingerprint,
+                "mode": spec.mode.value,
+                "dataset_version": spec.dataset_version,
+                "code_revision": spec.code_revision,
+                "model_fingerprint": spec.model_fingerprint,
+            }
+            if registered_events:
+                if not any(
+                    json.loads(event.payload_json) == expected_payload
+                    for event in registered_events
+                ):
+                    raise ExperimentIntegrityError(
+                        "Learning Lab ledger registration differs from the stored experiment."
+                    )
+            else:
+                event_type = (
+                    LearningEventType.EXPERIMENT_REGISTERED
+                    if stored
+                    else LearningEventType.EXPERIMENT_REGISTRATION_REUSED
+                )
+                self._ledger.append(
+                    event_type,
+                    experiment_id=spec.experiment_id,
+                    correlation_id=correlation_id,
+                    occurred_at=spec.created_at,
+                    payload=expected_payload,
+                )
+            self._specs[spec.experiment_id] = spec
             return spec.experiment_id
 
     def get(self, experiment_id: str) -> ExperimentSpec:
@@ -631,8 +657,13 @@ class ExperimentRegistry:
         *,
         correlation_id: str,
     ) -> str:
-        """Persist evidence only when every reproducibility identity matches the registered spec."""
+        """Persist evidence only when registered inputs match and an audit event exists."""
+        if not correlation_id.strip():
+            raise ValueError("correlation_id must not be empty.")
         spec = self.get(evidence.experiment_id)
+        expected_parameters_fingerprint = _sha256(
+            _canonical_json_bytes(dict(spec.parameters))
+        )
         if (
             evidence.dataset_version != spec.dataset_version
             or evidence.code_revision != spec.code_revision
@@ -641,57 +672,87 @@ class ExperimentRegistry:
             or evidence.model_id != spec.model_id
             or evidence.model_version != spec.model_version
             or evidence.model_fingerprint != spec.model_fingerprint
-            or evidence.parameters_fingerprint != _sha256(
-                _canonical_json_bytes(dict(spec.parameters))
-            )
+            or evidence.parameters_fingerprint != expected_parameters_fingerprint
             or evidence.random_seed != spec.random_seed
             or evidence.test_range != spec.test_range
             or evidence.mode is not spec.mode
         ):
             raise ExperimentIntegrityError(
-                "Run evidence differs from the registered code/data/model/feature/parameter/range identity."
+                "Run evidence differs from the registered reproducibility identity."
             )
         with self._lock:
             cached = self._evidence.get(evidence.evidence_id)
-            if cached is not None:
-                if cached.to_dict() != evidence.to_dict():
-                    raise ExperimentIntegrityError("Evidence ID has conflicting content.")
-                return evidence.evidence_id
+            if cached is not None and cached.to_dict() != evidence.to_dict():
+                raise ExperimentIntegrityError("Evidence ID has conflicting content.")
             stored = self._store_immutable_json(
                 "evidence", f"{evidence.evidence_id}.json", evidence.to_dict()
             )
             if not stored:
-                existing_json = self._root / "evidence" / f"{evidence.evidence_id}.json"
-                existing = json.loads(existing_json.read_bytes())
-                if _canonical_json_bytes(existing) != _canonical_json_bytes(evidence.to_dict()):
+                existing_path = self._root / "evidence" / f"{evidence.evidence_id}.json"
+                try:
+                    existing_value = json.loads(existing_path.read_bytes())
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    raise ExperimentIntegrityError("Existing evidence file is invalid.") from exc
+                if _canonical_json_bytes(existing_value) != _canonical_json_bytes(
+                    evidence.to_dict()
+                ):
                     raise ExperimentIntegrityError("Existing evidence file has conflicting bytes.")
-                return evidence.evidence_id
+                evidence = _evidence_from_dict(existing_value)
+
+            self._ensure_evidence_ledger_event(evidence, correlation_id=correlation_id)
             self._evidence[evidence.evidence_id] = evidence
-            self._ledger.append(
-                LearningEventType.EVIDENCE_RECORDED,
-                experiment_id=evidence.experiment_id,
-                correlation_id=correlation_id,
-                occurred_at=evidence.collected_at,
-                payload={
-                    "evidence_id": evidence.evidence_id,
-                    "run_id": evidence.run_id,
-                    "mode": evidence.mode.value,
-                    "observations": evidence.observations,
-                    "closed_trade_count": evidence.closed_trade_count,
-                    "net_return_fraction": str(evidence.net_return_fraction),
-                    "max_drawdown_fraction": str(evidence.max_drawdown_fraction),
-                    "data_quality_pass": evidence.data_quality_pass,
-                    "risk_gate_denial_count": evidence.risk_gate_denial_count,
-                },
-            )
             return evidence.evidence_id
 
+    def _ensure_evidence_ledger_event(
+        self,
+        evidence: ExperimentRunEvidence,
+        *,
+        correlation_id: str,
+    ) -> None:
+        """Reconcile an orphaned evidence file with the append-only audit ledger."""
+        expected_payload = {
+            "evidence_id": evidence.evidence_id,
+            "run_id": evidence.run_id,
+            "mode": evidence.mode.value,
+            "observations": evidence.observations,
+            "closed_trade_count": evidence.closed_trade_count,
+            "net_return_fraction": str(evidence.net_return_fraction),
+            "max_drawdown_fraction": str(evidence.max_drawdown_fraction),
+            "data_quality_pass": evidence.data_quality_pass,
+            "risk_gate_denial_count": evidence.risk_gate_denial_count,
+        }
+        matches = tuple(
+            event
+            for event in self._ledger.events
+            if event.event_type is LearningEventType.EVIDENCE_RECORDED
+            and json.loads(event.payload_json).get("evidence_id") == evidence.evidence_id
+        )
+        if matches:
+            if not any(
+                event.experiment_id == evidence.experiment_id
+                and json.loads(event.payload_json) == expected_payload
+                for event in matches
+            ):
+                raise ExperimentIntegrityError(
+                    "Learning Lab evidence event differs from the immutable evidence file."
+                )
+            return
+        self._ledger.append(
+            LearningEventType.EVIDENCE_RECORDED,
+            experiment_id=evidence.experiment_id,
+            correlation_id=correlation_id,
+            occurred_at=evidence.collected_at,
+            payload=expected_payload,
+        )
+
     def get_evidence(self, evidence_id: str) -> ExperimentRunEvidence:
-        """Load evidence only after canonical ID and full field validation."""
+        """Load only canonical evidence with a matching append-only ledger record."""
         _require_sha(code=evidence_id, name="evidence_id", length=64)
         with self._lock:
-            if evidence_id in self._evidence:
-                return self._evidence[evidence_id]
+            cached = self._evidence.get(evidence_id)
+            if cached is not None:
+                self._require_evidence_ledger_record(cached)
+                return cached
             path = self._root / "evidence" / f"{evidence_id}.json"
             try:
                 value = json.loads(path.read_bytes())
@@ -702,8 +763,32 @@ class ExperimentRegistry:
             evidence = _evidence_from_dict(value)
             if evidence.evidence_id != evidence_id:
                 raise ExperimentIntegrityError("Evidence content hash differs from file identity.")
+            self._require_evidence_ledger_record(evidence)
             self._evidence[evidence_id] = evidence
             return evidence
+
+    def _require_evidence_ledger_record(self, evidence: ExperimentRunEvidence) -> None:
+        """Fail closed when a result artifact is missing its audit event or the event differs."""
+        expected_payload = {
+            "evidence_id": evidence.evidence_id,
+            "run_id": evidence.run_id,
+            "mode": evidence.mode.value,
+            "observations": evidence.observations,
+            "closed_trade_count": evidence.closed_trade_count,
+            "net_return_fraction": str(evidence.net_return_fraction),
+            "max_drawdown_fraction": str(evidence.max_drawdown_fraction),
+            "data_quality_pass": evidence.data_quality_pass,
+            "risk_gate_denial_count": evidence.risk_gate_denial_count,
+        }
+        if not any(
+            event.event_type is LearningEventType.EVIDENCE_RECORDED
+            and event.experiment_id == evidence.experiment_id
+            and json.loads(event.payload_json) == expected_payload
+            for event in self._ledger.events
+        ):
+            raise ExperimentIntegrityError(
+                "Experiment evidence is not backed by a matching Learning Lab Ledger event."
+            )
 
     def _store_immutable_json(self, folder: str, filename: str, value: dict[str, Any]) -> bool:
         directory = self._root / folder
