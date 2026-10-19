@@ -174,7 +174,11 @@ def build_baseline_registry() -> StrategyPluginRegistry:
                 description="Always-flat control for bear, high-volatility or defensive regimes.",
                 strategy=flat,
                 supported_regimes=frozenset(
-                    {RegimeLabel.BEAR_TREND, RegimeLabel.HIGH_VOLATILITY}
+                    {
+                        RegimeLabel.BEAR_TREND,
+                        RegimeLabel.RANGE_BOUND,
+                        RegimeLabel.HIGH_VOLATILITY,
+                    }
                 ),
             ),
         )
