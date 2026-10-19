@@ -52,6 +52,7 @@ class LearningEventType(StrEnum):
     SHADOW_RUN_STARTED = "shadow_run_started"
     SHADOW_DECISION_RECORDED = "shadow_decision_recorded"
     SHADOW_INPUT_REJECTED = "shadow_input_rejected"
+    SHADOW_RISK_REJECTED = "shadow_risk_rejected"
     SHADOW_FEED_FAILURE = "shadow_feed_failure"
     SHADOW_RECONCILIATION = "shadow_reconciliation"
 
