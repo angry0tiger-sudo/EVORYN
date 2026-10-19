@@ -372,7 +372,6 @@ def evaluate_strategy_selector_out_of_sample(
         "routing_fingerprint": selector.routing_fingerprint,
         "model_metadata": dict(metadata),
         "selection_policy": selection_policy.as_dict(),
-        "selector_engine_version": STRATEGY_SELECTOR_VERSION,
         "model_training_manifest": json.loads(manifest_json),
     }
     report_id = hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
