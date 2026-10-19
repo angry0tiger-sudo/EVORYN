@@ -120,6 +120,10 @@ def auth(
         license_uri=(
             "https://www.apache.org/licenses/LICENSE-2.0"
             if source_id.startswith("model-")
+            else "https://pro.coinmarketcap.com/user-agreement-commercial/"
+            if source_id == "coinmarketcap"
+            else "https://support.coingecko.com/articles/1043089972-what-are-the-differences-between-commercial-and-custom-licenses"
+            if source_id == "coingecko"
             else NEWS_API_URL
         ),
         terms_uri=NEWS_API_URL,
@@ -396,6 +400,46 @@ def test_no_registered_permission_means_no_external_request() -> None:
         connector.fetch_candidates(now=NOW)
 
     assert transport.calls == []
+
+
+def test_news_connector_derives_and_labels_missing_provider_article_id() -> None:
+    transport = FakeJsonTransport(
+        {
+            "articles": [
+                {
+                    "source": {"name": "Licensed Publisher"},
+                    "url": "https://publisher.example/story/no-id",
+                    "publishedAt": "2026-10-19T11:30:00Z",
+                    "language": "en",
+                    "title": "Bitcoin market outlook after macro news",
+                    "description": "A licensed story summary on Bitcoin spot markets.",
+                }
+            ]
+        }
+    )
+    connector = LicensedNewsJsonConnector(
+        source_id="licensed-news",
+        endpoint_path="everything",
+        field_mapping=NewsFieldMapping(
+            items_path="articles",
+            article_id_path=None,
+            source_name_path="source.name",
+            article_url_path="url",
+            published_at_path="publishedAt",
+            language_path="language",
+            title_path="title",
+            summary_path="description",
+        ),
+        transport=transport,
+        license_registry=news_registry(),
+        base_params={"language": "en"},
+    )
+
+    record = connector.fetch_candidates(now=NOW)[0]
+
+    assert record.provider_id_evidence == "url_sha256"
+    assert record.provider_article_id.startswith("url-sha256:")
+    assert len(record.provider_article_id.removeprefix("url-sha256:")) == 64
 
 
 def test_licensed_news_json_connector_records_provider_and_retrieval_provenance() -> None:
