@@ -111,7 +111,9 @@ class ExperimentSpec:
             self.train_range.end <= self.validation_range.start
             and self.validation_range.end <= self.test_range.start
         ):
-            raise ValueError("Train, validation and test ranges must be chronological and disjoint.")
+            raise ValueError(
+                "Train, validation and test ranges must be chronological and disjoint."
+            )
 
     def identity_material(self) -> dict[str, Any]:
         """Return every experiment input except created_at, which is registration metadata."""
@@ -218,8 +220,8 @@ class ExperimentRunEvidence:
     collected_at: datetime
 
     def __post_init__(self) -> None:
+        _require_sha(code=self.experiment_id, name="experiment_id", length=64)
         for name in (
-            "experiment_id",
             "feature_schema_version",
             "model_id",
             "model_version",
@@ -323,14 +325,22 @@ class ExperimentRunEvidence:
     ) -> ExperimentRunEvidence:
         """Capture a backtest result under a spec; it remains BACKTEST-only evidence."""
         if spec.mode is not ExperimentMode.BACKTEST:
-            raise ValueError("Backtest replay evidence requires an experiment registered in BACKTEST mode.")
+            raise ValueError(
+                "Backtest replay evidence requires an experiment registered in BACKTEST mode."
+            )
         if result.dataset_version != spec.dataset_version:
             raise ValueError("Backtest result dataset differs from experiment specification.")
         if result.evaluation_range != spec.test_range:
             raise ValueError("Backtest result range differs from the registered test window.")
+        expected_config_fingerprint = _sha256(
+            _canonical_json_bytes(result.config.as_dict())
+        )
+        if expected_config_fingerprint != spec.evaluation_config_fingerprint:
+            raise ValueError("Backtest configuration differs from the registered fingerprint.")
         if result.strategy_parameters != tuple(spec.parameters):
-            # The Phase 13 result stores strategy params as sorted pairs, never a mutable dict.
-            raise ValueError("Backtest strategy parameters differ from the experiment specification.")
+            raise ValueError(
+                "Backtest strategy parameters differ from the experiment specification."
+            )
         return cls(
             experiment_id=spec.experiment_id,
             mode=ExperimentMode.BACKTEST,
@@ -386,7 +396,10 @@ class LearningLabLedgerEvent:
         for name in ("event_id", "payload_sha256", "previous_event_hash", "event_hash"):
             _require_sha(code=getattr(self, name), name=name, length=64)
         parsed = json.loads(self.payload_json)
-        if not isinstance(parsed, dict) or _canonical_json_bytes(parsed).decode("utf-8") != self.payload_json:
+        if (
+            not isinstance(parsed, dict)
+            or _canonical_json_bytes(parsed).decode("utf-8") != self.payload_json
+        ):
             raise ValueError("Ledger payload must be a canonical JSON object.")
         if _sha256(self.payload_json.encode("utf-8")) != self.payload_sha256:
             raise ValueError("Ledger payload hash is invalid.")
@@ -520,8 +533,13 @@ class LearningLabLedger:
         with self._lock:
             previous_hash = "0" * 64
             for expected_sequence, event in enumerate(self._events, start=1):
-                if event.sequence != expected_sequence or event.previous_event_hash != previous_hash:
-                    raise ExperimentIntegrityError("Learning Lab hash-chain sequence/link mismatch.")
+                if (
+                    event.sequence != expected_sequence
+                    or event.previous_event_hash != previous_hash
+                ):
+                    raise ExperimentIntegrityError(
+                        "Learning Lab hash-chain sequence/link mismatch."
+                    )
                 if _sha256(_canonical_json_bytes(event.hash_material())) != event.event_hash:
                     raise ExperimentIntegrityError("Learning Lab event hash mismatch.")
                 previous_hash = event.event_hash
@@ -533,9 +551,12 @@ class LearningLabLedger:
         line = _canonical_json_bytes(event.to_dict()) + b"\n"
         descriptor = os.open(self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
-            written = os.write(descriptor, line)
-            if written != len(line):
-                raise OSError("Short write while appending Learning Lab Ledger event.")
+            view = memoryview(line)
+            while view:
+                written = os.write(descriptor, view)
+                if written <= 0:
+                    raise OSError("Short write while appending Learning Lab Ledger event.")
+                view = view[written:]
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
@@ -647,7 +668,9 @@ class ExperimentRegistry:
                 raise ExperimentIntegrityError("Experiment file must be a JSON object.")
             spec = ExperimentSpec.from_dict(value)
             if spec.experiment_id != experiment_id:
-                raise ExperimentIntegrityError("Experiment ID differs from the requested file name.")
+                raise ExperimentIntegrityError(
+                    "Experiment ID differs from the requested file name."
+                )
             self._specs[experiment_id] = spec
             return spec
 
@@ -810,7 +833,9 @@ class ExperimentRegistry:
                 os.link(staged, destination)
             except FileExistsError:
                 if destination.read_bytes() != payload:
-                    raise ExperimentIntegrityError("Concurrent immutable write produced conflicting bytes.")
+                    raise ExperimentIntegrityError(
+                        "Concurrent immutable write produced conflicting bytes."
+                    )
                 return False
         finally:
             if staged.exists():
@@ -894,7 +919,13 @@ def _require_finite_decimal(value: Decimal, name: str) -> None:
 
 def _canonical_json_bytes(value: object) -> bytes:
     return (
-        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
         + "\n"
     ).encode("utf-8")
 
