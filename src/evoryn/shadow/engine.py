@@ -125,7 +125,7 @@ class ShadowConfig:
         )
 
     @property
-    def evaluation_config_fingerprint(self) -> str:
+    def projection_config_fingerprint(self) -> str:
         return configuration_fingerprint(
             {
                 "schema": "shadow-evaluation/v1",
@@ -267,6 +267,10 @@ class ShadowDecisionSnapshot:
     event_id: str
     correlation_id: str
     experiment_id: str
+    run_id: str
+    evaluation_config_fingerprint: str
+    projection_config_fingerprint: str
+    feed_manifest_fingerprint: str
     mode: ExperimentMode
     recorded_at: datetime
     observed_at: datetime
@@ -320,6 +324,10 @@ class ShadowDecisionSnapshot:
             "event_id",
             "correlation_id",
             "experiment_id",
+            "run_id",
+            "evaluation_config_fingerprint",
+            "projection_config_fingerprint",
+            "feed_manifest_fingerprint",
             "market_symbol",
             "venue",
             "market_type",
@@ -402,6 +410,10 @@ class ShadowDecisionSnapshot:
             "event_id": self.event_id,
             "correlation_id": self.correlation_id,
             "experiment_id": self.experiment_id,
+            "run_id": self.run_id,
+            "evaluation_config_fingerprint": self.evaluation_config_fingerprint,
+            "projection_config_fingerprint": self.projection_config_fingerprint,
+            "feed_manifest_fingerprint": self.feed_manifest_fingerprint,
             "mode": self.mode.value,
             "recorded_at": _iso(self.recorded_at),
             "observed_at": _iso(self.observed_at),
@@ -575,10 +587,6 @@ class ShadowRunner:
             raise ShadowSafetyError(
                 "Strategy identity/parameters do not match the registered experiment."
             )
-        if experiment_spec.evaluation_config_fingerprint != config.evaluation_config_fingerprint:
-            raise ShadowSafetyError(
-                "Shadow configuration does not match the registered fingerprint."
-            )
         if baseline_experiment_spec.mode is not ExperimentMode.PAPER:
             raise ShadowSafetyError("The baseline experiment must be mode=PAPER.")
         if (
@@ -595,17 +603,17 @@ class ShadowRunner:
         if registry.get(baseline_experiment_spec.experiment_id) != baseline_experiment_spec:
             raise ShadowSafetyError("Paper baseline experiment is not identically registered.")
         if (
-            baseline_experiment_spec.evaluation_config_fingerprint
-            != config.evaluation_config_fingerprint
-        ):
-            raise ShadowSafetyError(
-                "Paper baseline and Shadow evaluation configurations differ."
-            )
-        if (
             baseline_experiment_spec.feature_schema_version
             != experiment_spec.feature_schema_version
         ):
             raise ShadowSafetyError("Paper baseline and Shadow feature schemas differ.")
+        if (
+            baseline_experiment_spec.evaluation_config_fingerprint
+            != experiment_spec.evaluation_config_fingerprint
+        ):
+            raise ShadowSafetyError(
+                "Paper baseline and Shadow experiment evaluation fingerprints differ."
+            )
         if (
             baseline_experiment_spec.dataset_version != experiment_spec.dataset_version
             or baseline_experiment_spec.random_seed != experiment_spec.random_seed
@@ -1312,6 +1320,10 @@ class ShadowRunner:
             event_id=uuid.uuid4().hex,
             correlation_id=correlation_id,
             experiment_id=self._spec.experiment_id,
+            run_id=self._run_id,
+            evaluation_config_fingerprint=self._spec.evaluation_config_fingerprint,
+            projection_config_fingerprint=self._config.projection_config_fingerprint,
+            feed_manifest_fingerprint=self._config.feed_manifest_fingerprint,
             mode=ExperimentMode.SHADOW,
             recorded_at=_require_utc(self._utcnow(), "utcnow"),
             observed_at=_safe_audit_timestamp(candle.timestamp + candle.interval, received_at),
