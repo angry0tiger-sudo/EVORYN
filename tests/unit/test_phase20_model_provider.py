@@ -358,7 +358,7 @@ def test_input_schema_and_size_gates_fail_closed() -> None:
                 "suggestion": "ok",
                 "metadata": {"clear_auto_halt": True},
             },
-            "Output contains fields outside the declared schema.",
+            "OUTPUT_SCHEMA_INVALID",
         ),
     ],
 )
