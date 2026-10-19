@@ -148,7 +148,9 @@ class PromotionDecision:
         _require_finite_decimal(self.net_return_delta, "net_return_delta")
         _require_finite_decimal(self.max_drawdown_delta, "max_drawdown_delta")
         if not self.reasons:
-            raise ValueError("Every promotion decision must state its acceptance/rejection reasons.")
+            raise ValueError(
+                "Every promotion decision must state its acceptance/rejection reasons."
+            )
 
 
 class ChampionChallengerGate:
@@ -183,7 +185,11 @@ class ChampionChallengerGate:
         hard_mismatches: list[str] = []
         pairs = (
             ("dataset version", champion_spec.dataset_version, challenger_spec.dataset_version),
-            ("dataset version", champion_evidence.dataset_version, challenger_evidence.dataset_version),
+            (
+                "dataset version",
+                champion_evidence.dataset_version,
+                challenger_evidence.dataset_version,
+            ),
             (
                 "feature schema",
                 champion_spec.feature_schema_version,
@@ -449,14 +455,18 @@ class ChampionChallengerController:
         if target_mode not in {ExperimentMode.SHADOW, ExperimentMode.PAPER}:
             raise PermissionError("Phase 17 cannot promote any candidate to Live.")
         if self._active_champion_id is None:
-            raise RuntimeError("No active Paper champion exists; establish a reviewed fallback first.")
+            raise RuntimeError(
+                "No active Paper champion exists; establish a reviewed fallback first."
+            )
 
         paper_champion_spec = self._registry.get(self._active_champion_id)
         challenger_spec = self._registry.get(challenger_experiment_id)
         if target_mode is ExperimentMode.PAPER:
             champion_spec = paper_champion_spec
             if shadow_champion_experiment_id is not None:
-                raise ValueError("A Shadow champion reference is valid only for Shadow comparisons.")
+                raise ValueError(
+                    "A Shadow champion reference is valid only for Shadow comparisons."
+                )
         else:
             if not shadow_champion_experiment_id:
                 raise ValueError(
@@ -570,7 +580,9 @@ class ChampionChallengerController:
                 previous_champion_id=self._previous_champion_id,
                 active_champion_id=self._active_champion_id,
                 evidence_id=evidence_id,
-                reason="Insufficient monitoring window; no promotion/rollback conclusion is inferred.",
+                reason=(
+                    "Insufficient monitoring window; no promotion/rollback conclusion is inferred."
+                ),
                 checked_at=checked_at,
             )
         elif evidence.max_drawdown_fraction > self._rollback_policy.maximum_drawdown_fraction:
@@ -593,7 +605,10 @@ class ChampionChallengerController:
             self._active_champion_id = self._previous_champion_id
             self._previous_champion_id = None
             status = RollbackStatus.ROLLED_BACK
-            reason = f"Rolled Paper champion {failed} back to last known-good {self._active_champion_id}."
+            reason = (
+                f"Rolled Paper champion {failed} back to last known-good "
+                f"{self._active_champion_id}."
+            )
         else:
             self._active_champion_id = None
             status = RollbackStatus.SAFE_HOLD_NO_CHAMPION
@@ -738,7 +753,9 @@ class ReleasePipelineGate:
                 "Release candidate requires a matching passing Champion/Challenger decision."
             )
         if risk_policy_sha256 != self._approved_risk_policy_sha256:
-            raise PermissionError("Risk policy fingerprint differs from the approved immutable policy.")
+            raise PermissionError(
+                "Risk policy fingerprint differs from the approved immutable policy."
+            )
         expected_mode = ExperimentMode(target.value)
         if spec.mode is not expected_mode:
             raise ValueError("Experiment mode must match the proposed non-Live release target.")
