@@ -26,6 +26,7 @@ from evoryn.runtime.paper import (
     PaperStrategyRuntime,
     ProtectiveExitPolicy,
     RuntimeLedgerIntegrityError,
+    PaperRuntimeResult,
     RuntimeStatus,
     SQLitePaperRuntimeLedger,
 )
@@ -293,7 +294,7 @@ def advance(
     bid: str = "99",
     ask: str = "101",
     close: str = "100",
-):
+) -> PaperRuntimeResult:
     candle_start = runtime.history[-1].timestamp + INTERVAL
     next_now = candle_start + INTERVAL
     clock.set(next_now)

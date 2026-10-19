@@ -9,7 +9,7 @@ from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 from pathlib import Path
 from threading import RLock
@@ -492,7 +492,8 @@ class PaperStrategyRuntime:
         self.protective_exit_policy = protective_exit_policy or ProtectiveExitPolicy()
         self._clock_source = clock or (lambda: datetime.now(UTC))
         self._effective_now = _require_utc(self._clock_source(), "runtime clock")
-        component_clock = lambda: self._effective_now
+        def component_clock() -> datetime:
+            return self._effective_now
 
         self.risk_engine = RiskEngine(risk_limits)
         self.broker = PaperBroker(
@@ -615,13 +616,16 @@ class PaperStrategyRuntime:
                     correlation_id,
                     observed_at,
                 )
-            if unseen and self._last_candle_at is not None:
-                if unseen[0].timestamp != self._last_candle_at + self.interval:
-                    return self._latch_halt(
-                        "candle_gap_requires_reconciliation",
-                        correlation_id,
-                        observed_at,
-                    )
+            if (
+                unseen
+                and self._last_candle_at is not None
+                and unseen[0].timestamp != self._last_candle_at + self.interval
+            ):
+                return self._latch_halt(
+                    "candle_gap_requires_reconciliation",
+                    correlation_id,
+                    observed_at,
+                )
 
             self.journal.append(
                 "MARKET_UPDATE_STARTED",
@@ -667,16 +671,17 @@ class PaperStrategyRuntime:
             if new_candle is not None:
                 self._history.append(new_candle)
                 self._last_candle_at = new_candle.timestamp
-                prediction = self.regime_classifier.classify(
+                raw_prediction: object = self.regime_classifier.classify(
                     tuple(self._history),
                     now=observed_at,
                 )
-                if not isinstance(prediction, RegimePrediction):
+                if not isinstance(raw_prediction, RegimePrediction):
                     return self._latch_halt(
                         "invalid_regime_prediction",
                         correlation_id,
                         observed_at,
                     )
+                prediction = raw_prediction
                 decision = self.selector.select(
                     prediction,
                     now=observed_at,
@@ -686,17 +691,18 @@ class PaperStrategyRuntime:
                 if decision.allow_new_signals and decision.selected_strategy_id is not None:
                     selected_strategy_id = decision.selected_strategy_id
                     strategy = self.registry.get(selected_strategy_id).strategy
-                    target_exposure = strategy.target_exposure(tuple(self._history))
+                    raw_target: object = strategy.target_exposure(tuple(self._history))
                     if (
-                        not isinstance(target_exposure, Decimal)
-                        or not target_exposure.is_finite()
-                        or target_exposure not in (ZERO, ONE)
+                        not isinstance(raw_target, Decimal)
+                        or not raw_target.is_finite()
+                        or raw_target not in (ZERO, ONE)
                     ):
                         return self._latch_halt(
                             "invalid_strategy_target_exposure",
                             correlation_id,
                             observed_at,
                         )
+                    target_exposure = raw_target
                     reason_code = "STRATEGY_TARGET_READY"
                 else:
                     reason_code = decision.reason_code
@@ -923,7 +929,7 @@ class PaperStrategyRuntime:
         side = Side.BUY if delta > ZERO else Side.SELL
         candle_key = self._last_candle_at.isoformat() if self._last_candle_at else "no-candle"
         suffix = hashlib.sha256(
-            f"{self.market.symbol}|{candle_key}|{side.value}".encode("utf-8")
+            f"{self.market.symbol}|{candle_key}|{side.value}".encode()
         ).hexdigest()[:28]
         return OrderRequest(
             client_order_id=f"paper-{suffix}",
@@ -1060,9 +1066,11 @@ class PaperStrategyRuntime:
                     occurred_at=occurred_at,
                     payload={"reason_code": reason, "manual_clear_required": True},
                 )
-            except Exception:
-                # The in-memory stop still applies if its durable journal is unavailable.
-                pass
+            except Exception as exc:
+                # The in-memory stop remains latched even if durable halt evidence fails.
+                self._halt_reason = (
+                    f"{reason}:halt_journal_write_failed:{type(exc).__name__}"
+                )
         return self._halted_result(correlation_id)
 
     def _halted_result(self, correlation_id: str) -> PaperRuntimeResult:
