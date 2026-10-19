@@ -362,7 +362,7 @@ def test_gap_latches_continuity_until_explicit_reconciliation(tmp_path: Path) ->
 
     assert rejected.outcome is ShadowOutcome.ABSTAIN
     assert rejected.reason_code == "CANDLE_GAP"
-    assert fixture.runner.continuity_blocked is True
+    assert _continuity_is_blocked(fixture.runner) is True
     fixture.now += fixture.interval
     next_candle = fixture.candle(minutes_before_now=1)
     blocked = fixture.runner.process_candle(next_candle, received_at=fixture.now)
@@ -382,7 +382,7 @@ def test_gap_latches_continuity_until_explicit_reconciliation(tmp_path: Path) ->
         evidence_ref="incident:gap-reconciled",
         received_at=fixture.now,
     )
-    assert fixture.runner.continuity_blocked is False
+    assert _continuity_is_blocked(fixture.runner) is False
     reconciled_last_candle_at = fixture.runner.last_candle_at
     assert reconciled_last_candle_at is not None
     assert reconciled_last_candle_at == history[-1].timestamp
@@ -764,6 +764,11 @@ def test_non_persistent_learning_ledger_is_rejected(tmp_path: Path) -> None:
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
         )
+
+
+def _continuity_is_blocked(runner: ShadowRunner) -> bool:
+    """Read mutable reconciliation state without stale test-flow narrowing."""
+    return runner.continuity_blocked
 
 
 def _historical_candle(
