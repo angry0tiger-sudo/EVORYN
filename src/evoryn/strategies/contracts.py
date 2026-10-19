@@ -16,8 +16,15 @@ class CausalTargetStrategy(Protocol):
     The backtest engine passes only bars completed before the current simulated open.
     """
 
-    strategy_id: str
-    strategy_version: str
+    @property
+    def strategy_id(self) -> str:
+        """Stable strategy identifier."""
+        ...
+
+    @property
+    def strategy_version(self) -> str:
+        """Immutable implementation version."""
+        ...
 
     def parameters(self) -> dict[str, str]:
         """Return deterministic, serializable parameters included in a run fingerprint."""
