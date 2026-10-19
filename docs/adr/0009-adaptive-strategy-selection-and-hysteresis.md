@@ -31,22 +31,22 @@
    do not count; an observation gap exceeding the configured 2-hour maximum resets candidate
    evidence. UTC-only, stale/future, invalid, unknown, low-confidence, or identity-changing inputs
    abstain and do not issue new strategy signals.
-6. During a switch candidate, retain the incumbent strategy until the new candidate satisfies all
+7. During a switch candidate, retain the incumbent strategy until the new candidate satisfies all
    guards. On abstention, selection marks `allow_new_signals=false`; backtest adapter returns flat
    rather than forcing uncertain predictions into the incumbent strategy.
-7. Extend Phase 10's existing in-memory append-only `ExecutionLedger` with
+8. Extend Phase 10's existing in-memory append-only `ExecutionLedger` with
    `StrategySelectionLedgerEntry`, modeled in the domain layer. Every selection/hold/abstention
    records market and correlation IDs, regime/model identity and confidence semantics, selected
    and candidate plugin, options considered, reason, consecutive evidence, stability/hold limits,
    registry fingerprint, invalidation conditions, and whether new signals are allowed.
-8. Keep the selector decoupled from broker and risk code. Its output is a long/flat target exposure
+9. Keep the selector decoupled from broker and risk code. Its output is a long/flat target exposure
    through the Phase 13 `CausalTargetStrategy` contract; it cannot create an `OrderRequest`, alter
    RiskLimits, clear Auto-Halt, or access exchange adapters.
-9. Add an OOS evaluation gate that requires a matching Phase 13 dataset version and a model training
+10. Add an OOS evaluation gate that requires a matching Phase 13 dataset version and a model training
    manifest fully contained inside that version's train partition. It evaluates the adaptive
    selector only on the held-out test range and compares it with one fixed strategy over the exact
    same range, cost assumptions and data. The model/registry identity may not change mid-run.
-10. Report adaptive/fixed return, PnL, drawdown, expectancy where defined, selection events,
+11. Report adaptive/fixed return, PnL, drawdown, expectancy where defined, selection events,
     model manifest, registry fingerprint and the exact test range. Results are diagnostics, not a
     license to retune on the test split or to claim future profitability.
 
