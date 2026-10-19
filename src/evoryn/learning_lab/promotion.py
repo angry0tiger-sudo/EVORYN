@@ -16,6 +16,8 @@ from typing import Any
 
 from evoryn.learning_lab.experiment_registry import (
     ExperimentMode,
+    ExperimentRunEvidence,
+    ExperimentSpec,
     ExperimentRegistry,
     LearningEventType,
     LearningLabLedger,
@@ -40,6 +42,7 @@ class RollbackStatus(StrEnum):
     """Outcome of a paper-champion health check."""
 
     HEALTHY = "healthy"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     ROLLED_BACK = "rolled_back"
     SAFE_HOLD_NO_CHAMPION = "safe_hold_no_champion"
 
@@ -160,10 +163,10 @@ class ChampionChallengerGate:
 
     def evaluate(
         self,
-        champion_spec,
-        challenger_spec,
-        champion_evidence,
-        challenger_evidence,
+        champion_spec: ExperimentSpec,
+        challenger_spec: ExperimentSpec,
+        champion_evidence: ExperimentRunEvidence,
+        challenger_evidence: ExperimentRunEvidence,
         *,
         mode: ExperimentMode,
         evaluated_at: datetime,
@@ -285,10 +288,10 @@ class ChampionChallengerGate:
 
     def _decision(
         self,
-        champion_spec,
-        challenger_spec,
-        champion_evidence,
-        challenger_evidence,
+        champion_spec: ExperimentSpec,
+        challenger_spec: ExperimentSpec,
+        champion_evidence: ExperimentRunEvidence,
+        challenger_evidence: ExperimentRunEvidence,
         *,
         mode: ExperimentMode,
         status: PromotionStatus,
@@ -420,12 +423,13 @@ class ChampionChallengerController:
     def compare_and_promote(
         self,
         *,
-        champion_evidence_id: str,
         challenger_experiment_id: str,
         challenger_evidence_id: str,
         target_mode: ExperimentMode,
         evaluated_at: datetime,
         correlation_id: str,
+        champion_evidence_id: str | None = None,
+        shadow_champion_experiment_id: str | None = None,
     ) -> PromotionDecision:
         """Record a comparison; only a gate-passing PAPER candidate changes Paper champion."""
         _require_aware_utc(evaluated_at, "evaluated_at")
@@ -436,8 +440,24 @@ class ChampionChallengerController:
         if self._active_champion_id is None:
             raise RuntimeError("No active Paper champion exists; establish a reviewed fallback first.")
 
-        champion_spec = self._registry.get(self._active_champion_id)
+        paper_champion_spec = self._registry.get(self._active_champion_id)
         challenger_spec = self._registry.get(challenger_experiment_id)
+        if target_mode is ExperimentMode.PAPER:
+            champion_spec = paper_champion_spec
+            if shadow_champion_experiment_id is not None:
+                raise ValueError("A Shadow champion reference is valid only for Shadow comparisons.")
+        else:
+            if not shadow_champion_experiment_id:
+                raise ValueError(
+                    "Shadow comparison requires a Shadow-mode copy of the current champion."
+                )
+            champion_spec = self._registry.get(shadow_champion_experiment_id)
+            if not _same_experiment_except_mode(paper_champion_spec, champion_spec):
+                raise ValueError(
+                    "Shadow champion reference does not match the current Paper champion identity."
+                )
+        if champion_evidence_id is None:
+            raise ValueError("Champion evaluation evidence is required.")
         champion_evidence = self._registry.get_evidence(champion_evidence_id)
         challenger_evidence = self._registry.get_evidence(challenger_evidence_id)
         decision = self._gate.evaluate(
@@ -534,7 +554,7 @@ class ChampionChallengerController:
             trigger = RollbackTrigger.RISK_GATE_DENIAL
         elif evidence.observations < self._rollback_policy.minimum_observations:
             return RollbackDecision(
-                status=RollbackStatus.HEALTHY,
+                status=RollbackStatus.INSUFFICIENT_EVIDENCE,
                 trigger=None,
                 previous_champion_id=self._previous_champion_id,
                 active_champion_id=self._active_champion_id,
@@ -784,6 +804,15 @@ class ReleasePipelineGate:
             },
         )
         return approved
+
+
+def _same_experiment_except_mode(left: ExperimentSpec, right: ExperimentSpec) -> bool:
+    """Check that a Shadow copy is the exact same model/data/config as the Paper champion."""
+    left_material = left.identity_material()
+    right_material = right.identity_material()
+    left_material.pop("mode", None)
+    right_material.pop("mode", None)
+    return left_material == right_material
 
 
 def _sha256(value: bytes) -> str:
