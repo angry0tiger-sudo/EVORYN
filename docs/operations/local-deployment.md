@@ -9,11 +9,19 @@ The current repository has no integrated production strategy loop, account/portf
 ## Windows setup
 
 1. Install Git and Python 3.12.x from their trusted official distributions.
-2. Clone the EVORYN repository and open PowerShell or Command Prompt in the repository root.
-3. Run:
+2. Clone the EVORYN repository and open a terminal in the repository root.
+3. Run the matching command:
+
+   **Command Prompt (`cmd.exe`):**
 
    ```bat
    scripts\setup.bat
+   ```
+
+   **PowerShell:**
+
+   ```powershell
+   .\scripts\setup.bat
    ```
 
 4. The script creates `.venv\` when absent and verifies that an existing environment already uses Python 3.12.x rather than replacing it. It preserves an existing `.env`, copies `.env.example` only when no `.env` exists, creates `data\`, installs `.[dev]` using the project-local interpreter, compiles source/test modules and runs the offline test suite.
