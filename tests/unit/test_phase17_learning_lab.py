@@ -956,7 +956,7 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
         ledger=restarted_ledger,
         champion_experiment_id=spec.experiment_id,
     )
-    assert restarted__current_champion_id(controller) is None
+    assert restarted_controller.active_champion_id is None
 
 
 def test_orphaned_spec_and_evidence_files_require_audit_reconciliation(
