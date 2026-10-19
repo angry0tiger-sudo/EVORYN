@@ -17,6 +17,40 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  runner-preflight:
+    name: Runner and dependency preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Validate runner, install package, and compile sources
+        run: |
+          set -o pipefail
+          python --version 2>&1 | tee runner-python.log
+          python -m pip --version 2>&1 | tee runner-pip.log
+          python -m pip install --upgrade pip 2>&1 | tee pip-install.log
+          python -m pip install -e ".[dev]" 2>&1 | tee package-install.log
+          python -m compileall -q src tests 2>&1 | tee compileall.log
+      - name: Upload runner-preflight diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            runner-python.log
+            runner-pip.log
+            pip-install.log
+            package-install.log
+            compileall.log
+          if-no-files-found: warn
+          retention-days: 14
+
   unit-tests:
     name: Unit tests (pytest)
     runs-on: ubuntu-latest
@@ -27,7 +61,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: "3.12"
           cache: pip
       - name: Install package and development tools
         run: |
