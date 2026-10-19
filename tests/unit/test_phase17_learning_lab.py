@@ -896,6 +896,11 @@ def test_paper_health_without_trusted_attestation_fails_closed_to_safe_hold(
     )
 
 
+def _current_champion_id(controller: ChampionChallengerController) -> str | None:
+    """Re-read mutable champion state after a monitor operation."""
+    return controller.active_champion_id
+
+
 def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Path) -> None:
     registry, ledger = make_registry(tmp_path)
     spec = make_spec(model_id="single-champion", model_fingerprint="7" * 64)
@@ -930,7 +935,7 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
         correlation_id="rollback:insufficient",
     )
     assert short_result.status is RollbackStatus.INSUFFICIENT_EVIDENCE
-    assert controller.active_champion_id == spec.experiment_id
+    assert _current_champion_id(controller) == spec.experiment_id
 
     result = controller.monitor_paper_champion(
         bad_evidence.evidence_id,
@@ -940,7 +945,7 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
     assert result.status is RollbackStatus.SAFE_HOLD_NO_CHAMPION
     assert result.trigger is RollbackTrigger.MAX_DRAWDOWN_EXCEEDED
     assert result.active_champion_id is None
-    assert controller.active_champion_id is None
+    assert _current_champion_id(controller) is None
     assert ledger.events[-2].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
     assert ledger.events[-1].event_type is LearningEventType.CHAMPION_HEALTH_CHECKED
 
@@ -951,7 +956,7 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
         ledger=restarted_ledger,
         champion_experiment_id=spec.experiment_id,
     )
-    assert restarted_controller.active_champion_id is None
+    assert restarted__current_champion_id(controller) is None
 
 
 def test_orphaned_spec_and_evidence_files_require_audit_reconciliation(
