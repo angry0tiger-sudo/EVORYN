@@ -25,6 +25,7 @@ from evoryn.learning_lab.experiment_registry import (
 from evoryn.learning_lab.promotion import (
     ChampionChallengerController,
     ChampionChallengerGate,
+    PromotionDecision,
     PromotionPolicy,
     PromotionStatus,
     ReleasePipelineGate,
@@ -443,7 +444,8 @@ def test_automatic_rollback_restores_last_known_good_paper_champion(tmp_path: Pa
     assert rollback.status is RollbackStatus.ROLLED_BACK
     assert rollback.trigger is RollbackTrigger.MAX_DRAWDOWN_EXCEEDED
     assert controller.active_champion_id == champion_spec.experiment_id
-    assert ledger.events[-1].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
+    assert ledger.events[-2].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
+    assert ledger.events[-1].event_type is LearningEventType.CHAMPION_HEALTH_CHECKED
 
 
 def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_paper(
@@ -507,7 +509,7 @@ def passing_paper_promotion(
     ledger: LearningLabLedger,
     *,
     suffix: str,
-):
+) -> tuple[ExperimentSpec, PromotionDecision]:
     """Build a real gate-passing Paper comparison for release-candidate tests."""
     champion_spec = make_spec(
         model_id=f"{suffix}-champion",
@@ -623,6 +625,7 @@ def test_release_gate_rejects_risk_policy_drift_at_creation_and_approval(
             created_at=NOW + timedelta(hours=3),
             correlation_id="release:bad-policy",
         )
+    assert ledger.events[-1].event_type is LearningEventType.RELEASE_REJECTED
 
     candidate = release_gate.create_candidate(
         spec.experiment_id,
@@ -643,6 +646,7 @@ def test_release_gate_rejects_risk_policy_drift_at_creation_and_approval(
             current_risk_policy_sha256="8" * 64,
             correlation_id="release:risk-drift",
         )
+    assert ledger.events[-1].event_type is LearningEventType.RELEASE_REJECTED
 
 
 def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Path) -> None:
@@ -689,7 +693,8 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
     assert result.trigger is RollbackTrigger.MAX_DRAWDOWN_EXCEEDED
     assert result.active_champion_id is None
     assert controller.active_champion_id is None
-    assert ledger.events[-1].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
+    assert ledger.events[-2].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
+    assert ledger.events[-1].event_type is LearningEventType.CHAMPION_HEALTH_CHECKED
 
 
 def test_orphaned_spec_and_evidence_files_require_audit_reconciliation(
