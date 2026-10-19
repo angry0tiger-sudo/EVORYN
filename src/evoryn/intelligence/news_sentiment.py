@@ -8,6 +8,7 @@ for the intended use before inference is permitted.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Protocol
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -281,6 +282,8 @@ class HuggingFaceNewsSentimentAdapter:
         authorization = self._licenses.require(
             article.source_id, DataUse.NEWS_TEXT_PROCESSING, now=now
         )
+        authorization.authorize(DataUse.INTERNAL_RESEARCH, now=now)
+        authorization.authorize(DataUse.LOCAL_CONTENT_STORAGE, now=now)
         if (
             article.source_license_id != authorization.license_id
             or article.source_terms_revision != authorization.terms_revision
@@ -298,6 +301,26 @@ class HuggingFaceNewsSentimentAdapter:
                 explanation="This model review does not include the article language.",
             )
         text = f"{article.title}\n{article.summary}".strip()
+        expected_content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        if (
+            article.integrity_evidence != "RECEIVED_JSON_SHA256_AND_NORMALIZED_TEXT_SHA256"
+            or article.content_sha256 != expected_content_hash
+        ):
+            return NewsSentimentOutcome(
+                record=None,
+                abstained=True,
+                reason_code="ARTICLE_INTEGRITY_NOT_VERIFIED",
+                explanation=(
+                    "The article does not carry expected quality-gate integrity evidence."
+                ),
+            )
+        if article.source_trust_score < Decimal("0.60"):
+            return NewsSentimentOutcome(
+                record=None,
+                abstained=True,
+                reason_code="SOURCE_TRUST_TOO_LOW",
+                explanation="The source trust score is below the NLP processing minimum.",
+            )
         if not text or len(text) > self._review.max_input_chars:
             return NewsSentimentOutcome(
                 record=None,
