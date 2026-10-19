@@ -5,11 +5,11 @@ network access, authorize orders, or calculate an exchange's liquidation formula
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+import re
 from urllib.parse import urlsplit
 
 
@@ -154,11 +154,12 @@ class VenueCapability:
             _require_https_url(self.evidence_url)
         if self.observed_at is not None:
             _require_aware(self.observed_at, field_name="observed_at")
-        if self.status in {CapabilityStatus.SUPPORTED, CapabilityStatus.UNSUPPORTED}:
-            if self.evidence_url is None or self.observed_at is None:
-                raise ValueError(
-                    "Supported/unsupported claims require HTTPS evidence and observed_at."
-                )
+        if self.status in {CapabilityStatus.SUPPORTED, CapabilityStatus.UNSUPPORTED} and (
+            self.evidence_url is None or self.observed_at is None
+        ):
+            raise ValueError(
+                "Supported/unsupported claims require HTTPS evidence and observed_at."
+            )
         if self.status is CapabilityStatus.RESTRICTED and not (
             self.rationale and self.rationale.strip()
         ):
@@ -278,7 +279,8 @@ class InstrumentIdentity:
                     "Futures identity requires settlement asset, contract kind, "
                     "settlement type, and contract size."
                 )
-            assert self.contract_size is not None
+            if self.contract_size is None:
+                raise ValueError("Futures contract_size must not be missing.")
             _require_positive(self.contract_size, field_name="contract_size")
             if self.settlement_type is FuturesSettlementType.EXPIRING:
                 if self.expiry_at is None:
