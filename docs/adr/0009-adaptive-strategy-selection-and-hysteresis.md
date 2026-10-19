@@ -21,7 +21,9 @@
 4. Accept only non-abstained regime outputs whose confidence semantics are
    `hmm_posterior` or `calibrated_probability`. Reject heuristic scores. The default selector
    threshold is 0.65; this threshold filters model output but does not prove calibration.
-5. Require a new plugin selection to satisfy all three guards:
+5. Version the selector implementation and include that version, the full registry fingerprint,
+   and the immutable regime-to-plugin routing fingerprint in each report and ledger event.
+6. Require a new plugin selection to satisfy all three guards:
    - at least 3 distinct, increasing regime timestamps for the same candidate plugin;
    - at least 2 hours of candidate stability from the first candidate observation;
    - at least 6 hours since the prior switch.
