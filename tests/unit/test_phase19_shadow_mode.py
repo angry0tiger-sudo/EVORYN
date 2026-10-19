@@ -105,7 +105,7 @@ class FakeRegimeClassifier:
 class FakeRiskAssessor:
     def __init__(
         self,
-        status: ShadowRiskAssessmentStatus = ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS,
+        status: ShadowRiskAssessmentStatus = ShadowRiskAssessmentStatus.OBSERVATIONAL_ACCEPTED,
         *,
         fail: bool = False,
     ) -> None:
@@ -186,7 +186,7 @@ class Fixture:
         unknown_regime: bool = False,
         identity_drift_at: int | None = None,
         halted: bool = False,
-        risk_status: ShadowRiskAssessmentStatus = ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS,
+        risk_status: ShadowRiskAssessmentStatus = ShadowRiskAssessmentStatus.OBSERVATIONAL_ACCEPTED,
         risk_failure: bool = False,
     ) -> None:
         self.now = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
@@ -313,7 +313,7 @@ def test_shadow_runner_records_hypothetical_entry_to_persistent_learning_ledger(
     assert snapshot.baseline_target_exposure == Decimal("0")
     assert snapshot.baseline_target_quantity == Decimal("0.000")
     assert snapshot.baseline_quantity_delta == Decimal("0.000")
-    assert snapshot.risk_assessment_status == "observational_pass"
+    assert snapshot.risk_assessment_status == "observational_accepted"
     assert snapshot.execution_authorized is False
     assert fixture.ledger.events[-1].event_type is LearningEventType.SHADOW_DECISION_RECORDED
     assert fixture.ledger.verify() is True
