@@ -9,7 +9,8 @@ EVORYN is an independently governed trading-intelligence platform. The currently
 - PR #26 added the supervised read-only Nobitex USDT wallet check. No live API test is performed in GitHub Actions.
 - The generic `ExchangePort` and read-only Nobitex transport remain write-disabled.
 - A separate local Spot execution candidate contains an Ed25519-signed, fixed-route gateway, official instrument-rule reader, deterministic Risk Engine preconditions, a durable SQLite idempotency journal and an explicit default-off owner gate. It is **not a production trading runtime**.
-- Phase 23 adds a bounded end-to-end Mock/Paper runtime connecting the regime-classifier port, hysteretic strategy selection, target intent, Risk Engine, Paper Broker, separate Mock Spot ledger, portfolio view, protective exits and SQLite checkpoint/recovery. It is a simulation runtime, not a production Live service. Production account/portfolio integration, live venue fill reconciliation, OS-level supervision and independent release review remain open. There is no supported command to start an autonomous live-trading bot. Do not enable Spot writes or interpret passing CI as trading authorization.
+- Phase 23 adds a bounded end-to-end Mock/Paper runtime connecting regime classification, strategy selection, intents, deterministic risk, Paper fills/reconciliation, portfolio state, protective exits and SQLite recovery.
+- Phase 24 adds an explicitly bounded public-historical-data research workflow, a versioned regime-model training/holdout backtest pipeline, and a cooperative process-local Paper scheduler. These are research and simulation components, not an autonomous production service. Provider-backed production account state, live venue reconciliation, OS-level service installation, data-use rights review, independent risk/security review and host acceptance remain open. There is no supported command to start an autonomous live-trading bot. Do not enable Spot writes or interpret passing CI as trading authorization.
 
 ## Engineering principles
 
@@ -17,7 +18,7 @@ EVORYN is an independently governed trading-intelligence platform. The currently
 - Deterministic risk controls stay independent from AI recommendations.
 - Secrets stay local and never enter GitHub, test fixtures, agent prompts or logs.
 - A timeout during an order write is an **unknown outcome**, not permission to submit again.
-- Tests and CI use mocks only. Live account validation is deferred to the owner's local machine.
+- The six-gate CI uses mocks/fixtures only. A separate research workflow reads unauthenticated public Nobitex OHLCV history through a fixed GET-only route; it does not access accounts or order endpoints. Live account validation is deferred to the owner's local machine.
 
 ## Requirements
 
@@ -141,4 +142,5 @@ This is a safety-oriented implementation candidate, not a launchable automated t
 - [Local deployment guide](docs/operations/local-deployment.md)
 - [Read-only Nobitex USDT smoke-test runbook](docs/operations/live-readonly-nobitex-usdt-smoke-test.md)
 - [Phase 23: End-to-End Mock/Paper Runtime](docs/operations/phase-23-paper-runtime.md)
+- [Phase 24: Historical Regime Research and Process-Local Scheduler](docs/operations/phase-24-regime-training-supervisor.md)
 - [Technical debt and release gates](TECHNICAL_DEBT.md)
