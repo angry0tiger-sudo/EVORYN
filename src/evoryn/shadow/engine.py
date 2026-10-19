@@ -711,11 +711,31 @@ class ShadowRunner:
         """Evaluate one completed candle. Invalid, repeated, late, or uncertain input abstains."""
         received = _require_utc(received_at, "received_at")
         cid = _safe_correlation(correlation_id)
-        reason = self._validate_candle(
-            candle,
-            received,
-            compare_sequence=not (self._continuity_blocked or self._identity_blocked),
+        if not isinstance(candle, MarketCandle):
+            self._append_event(
+                LearningEventType.SHADOW_INPUT_REJECTED,
+                correlation_id=cid,
+                occurred_at=received,
+                payload={
+                    "schema": "shadow-input-rejection/v1",
+                    "run_id": self._run_id,
+                    "experiment_id": self._spec.experiment_id,
+                    "mode": ExperimentMode.SHADOW.value,
+                    "reason_code": "INVALID_CANDLE_TYPE",
+                    "action": "ABSTAIN",
+                    "execution_authorized": False,
+                },
+            )
+            raise ShadowSafetyError("Shadow input was not a canonical MarketCandle.")
+        base_input_reason = self._validate_candle(
+            candle, received, compare_sequence=False
         )
+        reason = base_input_reason
+        if (
+            reason is None
+            and not (self._continuity_blocked or self._identity_blocked)
+        ):
+            reason = self._validate_candle(candle, received, compare_sequence=True)
         if reason is None:
             reason = self._strategy_identity_failure()
         if (
@@ -834,7 +854,7 @@ class ShadowRunner:
             outcome=outcome,
             reason_code=reason_code,
             reason=explanation,
-            reference_price=candle.close,
+            reference_price=candle.close if base_input_reason is None else None,
             target_exposure=proposed_exposure,
             target_quantity=proposed_quantity,
             quantity_delta=quantity_delta,
@@ -1154,7 +1174,7 @@ class ShadowRunner:
             experiment_id=self._spec.experiment_id,
             mode=ExperimentMode.SHADOW,
             recorded_at=_require_utc(self._utcnow(), "utcnow"),
-            observed_at=candle.timestamp + candle.interval,
+            observed_at=_safe_audit_timestamp(candle.timestamp + candle.interval, received_at),
             received_at=received_at,
             market_symbol=candle.market.symbol,
             venue=candle.market.venue,
@@ -1181,7 +1201,11 @@ class ShadowRunner:
             baseline_quantity_delta=baseline_quantity_delta,
             regime_label=regime.label.value if regime is not None else RegimeLabel.UNKNOWN.value,
             regime_confidence=regime.confidence if regime is not None else None,
-            regime_as_of=regime.as_of if regime is not None else None,
+            regime_as_of=(
+                _safe_audit_timestamp(regime.as_of, received_at)
+                if regime is not None
+                else None
+            ),
             regime_model_id=regime.model_id if regime is not None else None,
             regime_model_version=regime.model_version if regime is not None else None,
             regime_model_fingerprint=regime.model_fingerprint if regime is not None else None,
@@ -1335,6 +1359,19 @@ def _require_utc(value: datetime, name: str) -> datetime:
     offset = value.utcoffset()
     if value.tzinfo is None or offset is None or offset != timedelta(0):
         raise ValueError(f"{name} must be timezone-aware canonical UTC.")
+    return value.astimezone(UTC)
+
+
+def _safe_audit_timestamp(value: datetime, fallback: datetime) -> datetime:
+    """Normalize an aware source timestamp for rejection telemetry; never trust a naive clock."""
+    if not isinstance(value, datetime):
+        return _require_utc(fallback, "fallback")
+    try:
+        offset = value.utcoffset()
+    except (OverflowError, ValueError):
+        return _require_utc(fallback, "fallback")
+    if value.tzinfo is None or offset is None:
+        return _require_utc(fallback, "fallback")
     return value.astimezone(UTC)
 
 
