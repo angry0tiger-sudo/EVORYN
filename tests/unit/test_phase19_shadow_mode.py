@@ -277,15 +277,16 @@ def test_duplicate_candle_is_rejected_without_advancing_state(tmp_path: Path) ->
 
 def test_gap_latches_continuity_until_explicit_reconciliation(tmp_path: Path) -> None:
     fixture = Fixture(tmp_path)
-    first = fixture.candle(minutes_before_now=5)
+    first = fixture.candle(minutes_before_now=3)
     fixture.runner.process_candle(first, received_at=fixture.now)
-    gap = fixture.candle(minutes_before_now=3)
+    gap = fixture.candle(minutes_before_now=1)
     rejected = fixture.runner.process_candle(gap, received_at=fixture.now)
 
     assert rejected.outcome is ShadowOutcome.ABSTAIN
     assert rejected.reason_code == "CANDLE_GAP"
     assert fixture.runner.continuity_blocked is True
-    next_candle = fixture.candle(minutes_before_now=2)
+    fixture.now += fixture.interval
+    next_candle = fixture.candle(minutes_before_now=1)
     blocked = fixture.runner.process_candle(next_candle, received_at=fixture.now)
     assert blocked.reason_code == "CONTINUITY_RECONCILIATION_REQUIRED"
 
@@ -345,8 +346,9 @@ def test_regime_model_identity_drift_latches_fail_closed(tmp_path: Path) -> None
 
     assert drift.outcome is ShadowOutcome.ABSTAIN
     assert drift.reason_code == "REGIME_MODEL_IDENTITY_CHANGED"
+    fixture.now += fixture.interval
     next_snapshot = fixture.runner.process_candle(
-        fixture.candle(minutes_before_now=0), received_at=fixture.now
+        fixture.candle(minutes_before_now=1), received_at=fixture.now
     )
     assert next_snapshot.reason_code == "MODEL_IDENTITY_REVIEW_REQUIRED"
 
