@@ -16,7 +16,6 @@ from cryptography.hazmat.primitives.serialization import (
     PrivateFormat,
     PublicFormat,
 )
-
 import pytest
 
 from evoryn.adapters.exchanges.nobitex_instrument_rules import (

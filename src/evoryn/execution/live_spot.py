@@ -9,10 +9,10 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol

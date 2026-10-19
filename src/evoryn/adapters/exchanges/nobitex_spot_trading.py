@@ -26,7 +26,6 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from evoryn.config import (
     MarketPolicy,
-    NobitexReadOnlyConfig,
     OFFICIAL_NOBITEX_BASE_URL,
 )
 from evoryn.domain.models import Market, Order, OrderRequest, OrderStatus, OrderType, Side
@@ -419,12 +418,12 @@ class NobitexSpotTradingTransport:
             raise ValueError("Nobitex signing clock must return a timezone-aware datetime.")
         timestamp = str(int(now.astimezone(UTC).timestamp()))
         body_text = json.dumps(dict(payload), separators=(",", ":"), ensure_ascii=False)
-        signature_input = f"{timestamp}POST{path}{body_text}".encode("utf-8")
+        signature_input = f"{timestamp}POST{path}{body_text}".encode()
         signature = base64.urlsafe_b64encode(self._signer.sign(signature_input)).decode("ascii")
         url = f"{self._base_url}{path}"
         request = Request(
             url,
-            data=body_text.encode("utf-8"),
+            data=body_text.encode(),
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/json",
