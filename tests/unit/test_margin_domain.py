@@ -341,10 +341,12 @@ def test_buy_order_uses_quote_limit_and_sell_order_uses_base_limit() -> None:
     )
 
     buy_ok = policy.evaluate_open_intent(
-        intent(side=MarginSide.BUY, amount="2", price="100"), settings(), limits, liquidity_pool(), now=NOW
+        intent(side=MarginSide.BUY, amount="2", price="100"),
+        settings(), limits, liquidity_pool(), now=NOW
     )
     buy_rejected = policy.evaluate_open_intent(
-        intent(side=MarginSide.BUY, amount="3", price="100"), settings(), limits, liquidity_pool(), now=NOW
+        intent(side=MarginSide.BUY, amount="3", price="100"),
+        settings(), limits, liquidity_pool(), now=NOW
     )
     sell_ok = policy.evaluate_open_intent(
         intent(side=MarginSide.SELL, amount="0.04"), settings(), limits, liquidity_pool(), now=NOW
@@ -378,7 +380,9 @@ def test_disabled_direction_stale_settings_and_unknown_limit_fail_closed() -> No
         liquidity_pool(),
         now=NOW,
     )
-    missing = policy.evaluate_open_intent(intent(leverage="1.5"), settings(), buy_limit, liquidity_pool(), now=NOW)
+    missing = policy.evaluate_open_intent(
+        intent(leverage="1.5"), settings(), buy_limit, liquidity_pool(), now=NOW
+    )
 
     assert disabled.reason_code == "margin_side_disabled"
     assert stale.disposition is MarginOrderDisposition.HALT
