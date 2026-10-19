@@ -33,10 +33,18 @@ Run the command from the root of a fresh EVORYN clone.
 
 ### Windows
 
-Open PowerShell or Command Prompt:
+Run from the repository root.
+
+**Command Prompt (`cmd.exe`):**
 
 ```bat
 scripts\setup.bat
+```
+
+**PowerShell:**
+
+```powershell
+.\scripts\setup.bat
 ```
 
 ### Linux

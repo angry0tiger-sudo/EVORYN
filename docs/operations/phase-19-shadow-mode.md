@@ -114,13 +114,15 @@ Never put exchange credentials, URLs with secret query parameters, response bodi
 
 ## Verification and rollout gate
 
-The Phase 19 test source includes mocks; its execution status is **not yet verified**. Before release, run on one identifiable trusted runner:
+The Phase 19 tests have executed in GitHub Actions. Post-merge main CI [Run #883](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39315978544) passed all six configured jobs on exact `main` SHA `ccbff726200dce5c37a21eba54131dfe5cc31299`; the complete suite reported 347 passed in 1.93 seconds. The run uses mocked/offline test fixtures and verifies code behavior only.
+
+For reproduction on another trusted runner, run:
 - `python -m pytest -vv`
 - `ruff check .`
 - `mypy src tests`
 - `bandit -q -r src`
 - `pip-audit`
 
-Record runner identity, Python version, exact commit SHA, commands, exit codes and artifact IDs. Current Phase 18 CI evidence shows jobs failed before starting (`runner_id=0`, no name, no steps); do not interpret that as these commands passing.
+Record runner identity, Python version, exact commit SHA, commands, exit codes and artifact IDs. Historical runs that failed before runner assignment are superseded for current-code CI evidence by Run #883. This evidence does not mean a live Shadow poll, an external scheduler, production Auto-Halt source or production risk assessor has been provisioned or exercised.
 
 Independent review is required for the persistent ledger, Champion pointer binding, data provenance, feed/strategy identity and recovery behavior before the Shadow poller is scheduled against a live endpoint. No production readiness or performance claims are authorized by this library implementation.
