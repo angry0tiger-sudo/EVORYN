@@ -147,6 +147,19 @@ def make_registry(root: Path) -> tuple[ExperimentRegistry, LearningLabLedger]:
     return ExperimentRegistry(root / "experiments", ledger), ledger
 
 
+class SyntheticEvidenceTrustVerifier:
+    """Test-only stand-in for a separately authenticated Paper/Shadow telemetry collector."""
+
+    def verify(self, evidence: ExperimentRunEvidence, spec: ExperimentSpec) -> bool:
+        return (
+            evidence.experiment_id == spec.experiment_id
+            and evidence.mode in {ExperimentMode.PAPER, ExperimentMode.SHADOW}
+            and evidence.evidence_origin
+            in {"paper_telemetry", "shadow_telemetry"}
+            and evidence.data_quality_pass
+        )
+
+
 def register_spec_and_evidence(
     registry: ExperimentRegistry,
     spec: ExperimentSpec,
@@ -362,6 +375,7 @@ def test_champion_challenger_promotes_only_after_predeclared_gates(tmp_path: Pat
         registry=registry,
         ledger=ledger,
         champion_experiment_id=champion_spec.experiment_id,
+        evidence_trust_verifier=SyntheticEvidenceTrustVerifier(),
         gate=ChampionChallengerGate(
             PromotionPolicy(
                 minimum_observations=100,
@@ -422,6 +436,7 @@ def test_repeated_challengers_on_the_same_holdout_hit_the_predeclared_trial_cap(
         registry=registry,
         ledger=ledger,
         champion_experiment_id=champion_spec.experiment_id,
+        evidence_trust_verifier=SyntheticEvidenceTrustVerifier(),
         gate=ChampionChallengerGate(
             PromotionPolicy(
                 minimum_observations=100,
@@ -452,6 +467,45 @@ def test_repeated_challengers_on_the_same_holdout_hit_the_predeclared_trial_cap(
     assert second_decision.status is PromotionStatus.INSUFFICIENT_EVIDENCE
     assert "MAX_HOLDOUT_COMPARISONS_REACHED" in second_decision.reasons
     assert controller.active_champion_id == first_spec.experiment_id
+
+
+def test_promotion_fails_closed_without_trusted_telemetry_verifier(
+    tmp_path: Path,
+) -> None:
+    registry, ledger = make_registry(tmp_path)
+    champion_spec = make_spec(model_id="untrusted-champion", model_fingerprint="1" * 64)
+    challenger_spec = make_spec(
+        model_id="untrusted-challenger",
+        model_fingerprint="2" * 64,
+        created_minutes=1,
+        parameters=(("fast_window", "4"), ("slow_window", "18")),
+    )
+    champion = make_evidence(champion_spec, run_suffix="untrusted-champion")
+    challenger = make_evidence(challenger_spec, run_suffix="untrusted-challenger")
+    register_spec_and_evidence(registry, champion_spec, champion)
+    register_spec_and_evidence(registry, challenger_spec, challenger)
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=champion_spec.experiment_id,
+    )
+
+    with pytest.raises(PermissionError, match="trusted Paper/Shadow evidence verifier"):
+        controller.compare_and_promote(
+            champion_evidence_id=champion.evidence_id,
+            challenger_experiment_id=challenger_spec.experiment_id,
+            challenger_evidence_id=challenger.evidence_id,
+            target_mode=ExperimentMode.PAPER,
+            evaluated_at=NOW + timedelta(hours=2),
+            correlation_id="untrusted:promote",
+        )
+
+    assert controller.active_champion_id == champion_spec.experiment_id
+    assert ledger.events[-1].event_type is LearningEventType.PROMOTION_REJECTED
+    assert (
+        json.loads(ledger.events[-1].payload_json)["reason_code"]
+        == "TRUSTED_TELEMETRY_VERIFIER_NOT_CONFIGURED"
+    )
 
 
 def test_champion_challenger_rejects_changed_cost_configuration(tmp_path: Path) -> None:
@@ -500,6 +554,7 @@ def test_automatic_rollback_restores_last_known_good_paper_champion(tmp_path: Pa
         registry=registry,
         ledger=ledger,
         champion_experiment_id=champion_spec.experiment_id,
+        evidence_trust_verifier=SyntheticEvidenceTrustVerifier(),
         gate=ChampionChallengerGate(
             PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
         ),
@@ -525,6 +580,7 @@ def test_automatic_rollback_restores_last_known_good_paper_champion(tmp_path: Pa
         registry=reloaded_registry,
         ledger=reloaded_ledger,
         champion_experiment_id=champion_spec.experiment_id,
+        evidence_trust_verifier=SyntheticEvidenceTrustVerifier(),
         gate=ChampionChallengerGate(
             PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
         ),
@@ -602,6 +658,7 @@ def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_pa
         registry=registry,
         ledger=ledger,
         champion_experiment_id=paper_champion.experiment_id,
+        evidence_trust_verifier=SyntheticEvidenceTrustVerifier(),
         gate=ChampionChallengerGate(
             PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
         ),
