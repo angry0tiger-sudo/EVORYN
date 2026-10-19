@@ -60,6 +60,7 @@ class ExperimentSpec:
     code_revision: str
     dataset_version: str
     feature_schema_version: str
+    evaluation_config_fingerprint: str
     model_id: str
     model_version: str
     model_fingerprint: str
@@ -75,6 +76,11 @@ class ExperimentSpec:
         _require_sha(code=self.code_revision, name="code_revision", length=40)
         _require_sha(code=self.dataset_version, name="dataset_version", length=64)
         _require_sha(code=self.model_fingerprint, name="model_fingerprint", length=64)
+        _require_sha(
+            code=self.evaluation_config_fingerprint,
+            name="evaluation_config_fingerprint",
+            length=64,
+        )
         for name in ("feature_schema_version", "model_id", "model_version"):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty.")
@@ -114,6 +120,7 @@ class ExperimentSpec:
             "code_revision": self.code_revision,
             "dataset_version": self.dataset_version,
             "feature_schema_version": self.feature_schema_version,
+            "evaluation_config_fingerprint": self.evaluation_config_fingerprint,
             "model_id": self.model_id,
             "model_version": self.model_version,
             "model_fingerprint": self.model_fingerprint,
@@ -157,6 +164,7 @@ class ExperimentSpec:
                 code_revision=value["code_revision"],
                 dataset_version=value["dataset_version"],
                 feature_schema_version=value["feature_schema_version"],
+                evaluation_config_fingerprint=value["evaluation_config_fingerprint"],
                 model_id=value["model_id"],
                 model_version=value["model_version"],
                 model_fingerprint=value["model_fingerprint"],
@@ -190,6 +198,7 @@ class ExperimentRunEvidence:
     test_range: IndexRange
     code_revision: str
     feature_schema_version: str
+    evaluation_config_fingerprint: str
     model_id: str
     model_version: str
     model_fingerprint: str
@@ -223,6 +232,7 @@ class ExperimentRunEvidence:
             "dataset_version",
             "model_fingerprint",
             "parameters_fingerprint",
+            "evaluation_config_fingerprint",
             "run_id",
         ):
             _require_sha(code=getattr(self, name), name=name, length=64)
@@ -276,6 +286,7 @@ class ExperimentRunEvidence:
             "test_range": _range_dict(self.test_range),
             "code_revision": self.code_revision,
             "feature_schema_version": self.feature_schema_version,
+            "evaluation_config_fingerprint": self.evaluation_config_fingerprint,
             "model_id": self.model_id,
             "model_version": self.model_version,
             "model_fingerprint": self.model_fingerprint,
@@ -327,6 +338,7 @@ class ExperimentRunEvidence:
             test_range=result.evaluation_range,
             code_revision=spec.code_revision,
             feature_schema_version=spec.feature_schema_version,
+            evaluation_config_fingerprint=spec.evaluation_config_fingerprint,
             model_id=spec.model_id,
             model_version=spec.model_version,
             model_fingerprint=spec.model_fingerprint,
@@ -625,6 +637,7 @@ class ExperimentRegistry:
             evidence.dataset_version != spec.dataset_version
             or evidence.code_revision != spec.code_revision
             or evidence.feature_schema_version != spec.feature_schema_version
+            or evidence.evaluation_config_fingerprint != spec.evaluation_config_fingerprint
             or evidence.model_id != spec.model_id
             or evidence.model_version != spec.model_version
             or evidence.model_fingerprint != spec.model_fingerprint
@@ -729,6 +742,7 @@ def _evidence_from_dict(value: dict[str, Any]) -> ExperimentRunEvidence:
             test_range=_range_from_dict(value["test_range"]),
             code_revision=value["code_revision"],
             feature_schema_version=value["feature_schema_version"],
+            evaluation_config_fingerprint=value["evaluation_config_fingerprint"],
             model_id=value["model_id"],
             model_version=value["model_version"],
             model_fingerprint=value["model_fingerprint"],
