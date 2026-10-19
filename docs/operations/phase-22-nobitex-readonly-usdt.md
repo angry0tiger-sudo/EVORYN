@@ -45,7 +45,9 @@ using `dstCurrency=usdt` and filters results locally.
 ## Safety status
 
 This is a read-only capability and normalization foundation. CI uses mock transports and does not
-contact Nobitex. No live token is available in this engineering session, so live API connectivity
-and real account data have not been claimed or tested. Before operational use, verify provider-side
-token scope, secret injection, route policy and audit behavior. No order-write, withdrawal,
+contact Nobitex. The supervised tool `scripts/live_readonly_nobitex_usdt.py` is documented in
+[`live-readonly-nobitex-usdt-smoke-test.md`](live-readonly-nobitex-usdt-smoke-test.md); its wrapper
+permits only the two required USDT wallet GETs and rejects all other methods/routes before network
+I/O. No live token is available in this session, so live connectivity and real account data are not
+claimed or tested. Provider-side token scope must be confirmed before use. No order-write, withdrawal,
 transfer or collateral-write path exists in this phase.
