@@ -574,7 +574,8 @@ class LearningLabLedger:
             return True
 
     def _append_persisted(self, event: LearningLabLedgerEvent) -> None:
-        assert self._path is not None
+        if self._path is None:
+            raise ExperimentIntegrityError("Persistent ledger path is not configured.")
         self._path.parent.mkdir(parents=True, exist_ok=True)
         line = _canonical_json_bytes(event.to_dict())
         descriptor = os.open(self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -590,7 +591,8 @@ class LearningLabLedger:
             os.close(descriptor)
 
     def _load_and_verify(self) -> None:
-        assert self._path is not None
+        if self._path is None:
+            raise ExperimentIntegrityError("Persistent ledger path is not configured.")
         try:
             raw_lines = self._path.read_bytes().splitlines()
             if self._path.stat().st_size and not self._path.read_bytes().endswith(b"\n"):
