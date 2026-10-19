@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 from evoryn.domain.models import MarketCandle
 
@@ -373,6 +373,11 @@ class AbstainingRegimeDetector:
         self._model = model
         self._features = feature_extractor or RegimeFeatureExtractor()
         self._thresholds = thresholds or RegimeThresholds()
+
+    @property
+    def training_manifest(self) -> Any | None:
+        """Expose optional, versioned training evidence for out-of-sample evaluation gates."""
+        return getattr(self._model, "training_manifest", None)
 
     def classify(
         self, completed_history: Sequence[MarketCandle], *, now: datetime
