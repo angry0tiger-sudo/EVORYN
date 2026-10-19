@@ -734,25 +734,7 @@ class ExperimentRegistry:
         if not correlation_id.strip():
             raise ValueError("correlation_id must not be empty.")
         spec = self.get(evidence.experiment_id)
-        expected_parameters_fingerprint = _sha256(
-            _canonical_json_bytes(dict(spec.parameters))
-        )
-        if (
-            evidence.dataset_version != spec.dataset_version
-            or evidence.code_revision != spec.code_revision
-            or evidence.feature_schema_version != spec.feature_schema_version
-            or evidence.evaluation_config_fingerprint != spec.evaluation_config_fingerprint
-            or evidence.model_id != spec.model_id
-            or evidence.model_version != spec.model_version
-            or evidence.model_fingerprint != spec.model_fingerprint
-            or evidence.parameters_fingerprint != expected_parameters_fingerprint
-            or evidence.random_seed != spec.random_seed
-            or evidence.test_range != spec.test_range
-            or evidence.mode is not spec.mode
-        ):
-            raise ExperimentIntegrityError(
-                "Run evidence differs from the registered reproducibility identity."
-            )
+        self._validate_evidence_matches_spec(evidence, spec)
         with self._lock:
             cached = self._evidence.get(evidence.evidence_id)
             if cached is not None and cached.to_dict() != evidence.to_dict():
@@ -775,6 +757,32 @@ class ExperimentRegistry:
             self._ensure_evidence_ledger_event(evidence, correlation_id=correlation_id)
             self._evidence[evidence.evidence_id] = evidence
             return evidence.evidence_id
+
+    @staticmethod
+    def _validate_evidence_matches_spec(
+        evidence: ExperimentRunEvidence,
+        spec: ExperimentSpec,
+    ) -> None:
+        """Bind metrics to the exact registered model, data, feature, config, and test window."""
+        expected_parameters_fingerprint = _sha256(
+            _canonical_json_bytes(dict(spec.parameters))
+        )
+        if (
+            evidence.dataset_version != spec.dataset_version
+            or evidence.code_revision != spec.code_revision
+            or evidence.feature_schema_version != spec.feature_schema_version
+            or evidence.evaluation_config_fingerprint != spec.evaluation_config_fingerprint
+            or evidence.model_id != spec.model_id
+            or evidence.model_version != spec.model_version
+            or evidence.model_fingerprint != spec.model_fingerprint
+            or evidence.parameters_fingerprint != expected_parameters_fingerprint
+            or evidence.random_seed != spec.random_seed
+            or evidence.test_range != spec.test_range
+            or evidence.mode is not spec.mode
+        ):
+            raise ExperimentIntegrityError(
+                "Run evidence differs from the registered reproducibility identity."
+            )
 
     def _ensure_evidence_ledger_event(
         self,
@@ -824,6 +832,8 @@ class ExperimentRegistry:
         with self._lock:
             cached = self._evidence.get(evidence_id)
             if cached is not None:
+                spec = self.get(cached.experiment_id)
+                self._validate_evidence_matches_spec(cached, spec)
                 self._require_evidence_ledger_record(cached)
                 return cached
             path = self._root / "evidence" / f"{evidence_id}.json"
@@ -836,6 +846,8 @@ class ExperimentRegistry:
             evidence = _evidence_from_dict(value)
             if evidence.evidence_id != evidence_id:
                 raise ExperimentIntegrityError("Evidence content hash differs from file identity.")
+            spec = self.get(evidence.experiment_id)
+            self._validate_evidence_matches_spec(evidence, spec)
             self._require_evidence_ledger_record(evidence)
             self._evidence[evidence_id] = evidence
             return evidence
