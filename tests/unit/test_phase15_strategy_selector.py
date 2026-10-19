@@ -279,6 +279,7 @@ def test_hysteresis_requires_distinct_evidence_stability_and_minimum_hold() -> N
     assert ledger.strategy_selections[-1].regime_as_of == selection_time(9)
     assert ledger.strategy_selections[-1].maximum_prediction_age_seconds == 7200
     assert ledger.strategy_selections[-1].routing_fingerprint == selector.routing_fingerprint
+    assert ledger.strategy_selections[-1].selector_version == "1.0.0"
     assert ledger.strategy_selections[-1].evidence_count == 6
     assert all(
         entry.market_symbol == MARKET.symbol
@@ -514,6 +515,7 @@ def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy() -> None:
     assert report.adaptive_result.run_id != report.fixed_baseline_result.run_id
     assert len(report.decision_ledger_entries) == partitions.test.size
     assert report.decision_ledger_entries[0].correlation_id.startswith("backtest:BTC-USDT:")
+    assert report.decision_ledger_entries[0].selector_version == "1.0.0"
     assert report.to_report_dict()["test_range"]["note"].startswith("Out-of-sample")
     assert report.to_json_bytes()
 
