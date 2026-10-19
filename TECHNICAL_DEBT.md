@@ -71,6 +71,15 @@ This ledger records open verification and runtime-integration obligations. Close
 - [ ] **Live API smoke test remains unrun.** PR #26 prepares `scripts/live_readonly_nobitex_usdt.py`, whose dedicated transport permits only the exact USDT wallet GET requests. No read-only token is available in this session. Do not claim live connectivity until a supervised test uses a provider-confirmed restricted token; never ask for that token in chat or source-control it.
 - [ ] **No trade/write route is enabled.** Live order submission/cancel, withdrawal, transfer and collateral mutation remain unavailable.
 
+## Phase 23 — End-to-End Mock/Paper Runtime
+
+- [x] **Mock-only strategy runtime wired.** A bounded cycle connects completed candle input, the actual abstention/freshness classifier interface, regime-driven hysteretic selector, long/flat strategy target, deterministic Risk Engine, Paper Broker, separate Mock Spot order/balance ledger, and order reconciliation.
+- [x] **Account/portfolio and protective exit path.** Same-cycle snapshots report cash, base inventory, marked equity/exposure, reserved funds, active orders and unknown orders. Adverse-regime and drawdown exits become ordinary intents that still pass through Risk Engine.
+- [x] **Durable Paper checkpoint and fail-closed recovery.** SQLite writes transactional, sequence-checked/hash-chained events. Clean restart restores the committed broker/order/fill state, rebuilds the separate mock ledger and reconciles it; interrupted intents and prior halts stop without automatic resubmission.
+- [x] **Offline integration coverage added.** Synthetic fixtures cover regime detector → selector → fill, active-order reservations, protective exit, clean restart, supervisor restart into halt, interrupted-intent no-resubmit, the mock-only feed boundary and ledger-tamper detection. The fixture probability model is not evidence of a trained or profitable strategy model.
+- [ ] **Independent architecture/risk/security review and restart/fault drills remain open.** The runtime has no network route and no production exchange transport, OS service manager, actual Nobitex order/fill reconciliation, production account source or production risk assessor. This phase does not authorize Live, and must not enable any Spot write flag.
+- [ ] **Exact-head CI evidence to retain after the final PR head.** Record all six CI jobs and the pytest count from the exact final branch SHA; earlier CI failures are retained as development history and are not acceptance evidence.
+
 ## Local deployment bundle
 
 - [x] **Bootstrap behavior reviewed and hardened on PR #27 candidate.** The scripts require Python 3.12, preserve an existing `.env`, use the project-local interpreter for dependency install/compile/tests, and fail on setup/test errors. Linux setup strictly applies permissions to a newly created `.env` and the `data` directory. The exact code/test candidate `787bc5186628389f23c43809ba6eb00cd25e3091` passed all six CI gates in Runs #879/#880, including shell syntax validation; no setup script performs an exchange request or starts a trading process.

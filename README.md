@@ -9,7 +9,7 @@ EVORYN is an independently governed trading-intelligence platform. The currently
 - PR #26 added the supervised read-only Nobitex USDT wallet check. No live API test is performed in GitHub Actions.
 - The generic `ExchangePort` and read-only Nobitex transport remain write-disabled.
 - A separate local Spot execution candidate contains an Ed25519-signed, fixed-route gateway, official instrument-rule reader, deterministic Risk Engine preconditions, a durable SQLite idempotency journal and an explicit default-off owner gate. It is **not a production trading runtime**.
-- The repository does not yet provide a complete live strategy loop, production account/portfolio snapshot builder, exposure/fill reconciliation service, protective-exit policy, process supervisor or production recovery runbook. Consequently, there is no supported command to start an autonomous live-trading bot. Do not enable Spot writes or interpret a passing CI run as trading authorization.
+- Phase 23 adds a bounded end-to-end Mock/Paper runtime connecting the regime-classifier port, hysteretic strategy selection, target intent, Risk Engine, Paper Broker, separate Mock Spot ledger, portfolio view, protective exits and SQLite checkpoint/recovery. It is a simulation runtime, not a production Live service. Production account/portfolio integration, live venue fill reconciliation, OS-level supervision and independent release review remain open. There is no supported command to start an autonomous live-trading bot. Do not enable Spot writes or interpret passing CI as trading authorization.
 
 ## Engineering principles
 
@@ -140,4 +140,5 @@ This is a safety-oriented implementation candidate, not a launchable automated t
 - [Gated Spot execution candidate and local validation](docs/operations/gated-nobitex-spot-execution.md)
 - [Local deployment guide](docs/operations/local-deployment.md)
 - [Read-only Nobitex USDT smoke-test runbook](docs/operations/live-readonly-nobitex-usdt-smoke-test.md)
+- [Phase 23: End-to-End Mock/Paper Runtime](docs/operations/phase-23-paper-runtime.md)
 - [Technical debt and release gates](TECHNICAL_DEBT.md)
