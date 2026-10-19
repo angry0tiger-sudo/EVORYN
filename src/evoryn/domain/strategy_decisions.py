@@ -14,6 +14,7 @@ class StrategySelectionLedgerEntry:
     event_id: str
     correlation_id: str
     recorded_at: datetime
+    regime_as_of: datetime
     market_symbol: str
     regime_label: str
     regime_confidence: Decimal
@@ -22,6 +23,7 @@ class StrategySelectionLedgerEntry:
     model_version: str
     model_fingerprint: str
     feature_schema_version: str
+    previous_strategy_id: str | None
     candidate_strategy_id: str | None
     active_strategy_id: str | None
     alternative_strategy_ids: tuple[str, ...]
@@ -34,6 +36,7 @@ class StrategySelectionLedgerEntry:
     last_switch_at: datetime | None
     required_stability_seconds: int
     minimum_hold_seconds: int
+    maximum_prediction_age_seconds: int
     confidence_threshold: Decimal
     allow_new_signals: bool
     invalidation_conditions: tuple[str, ...]
@@ -42,6 +45,7 @@ class StrategySelectionLedgerEntry:
 
     def __post_init__(self) -> None:
         _require_aware(self.recorded_at, "Strategy-decision timestamp")
+        _require_aware(self.regime_as_of, "Regime prediction timestamp")
         for name in (
             "event_id",
             "correlation_id",
@@ -88,8 +92,9 @@ class StrategySelectionLedgerEntry:
             or type(self.minimum_hold_seconds) is not int
             or self.required_stability_seconds <= 0
             or self.minimum_hold_seconds <= 0
+            or self.maximum_prediction_age_seconds <= 0
         ):
-            raise ValueError("Strategy-selection dwell times must be positive integers.")
+            raise ValueError("Strategy-selection dwell/freshness times must be positive integers.")
         if type(self.allow_new_signals) is not bool:
             raise ValueError("allow_new_signals must be an explicit boolean.")
         if len(set(self.alternative_strategy_ids)) != len(self.alternative_strategy_ids):
