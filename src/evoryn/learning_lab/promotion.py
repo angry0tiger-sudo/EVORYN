@@ -596,13 +596,13 @@ class ChampionChallengerController:
         checked_at: datetime,
         correlation_id: str,
     ) -> RollbackDecision:
-        """Check current Paper telemetry and revert to last known-good or enter safe hold."""
+        """Check Paper telemetry, ledger every assessment, and fail closed on hard triggers."""
         _require_aware_utc(checked_at, "checked_at")
         if not correlation_id.strip():
             raise ValueError("correlation_id must not be empty.")
         evidence = self._registry.get_evidence(evidence_id)
         if self._active_champion_id is None:
-            return RollbackDecision(
+            decision = RollbackDecision(
                 status=RollbackStatus.SAFE_HOLD_NO_CHAMPION,
                 trigger=None,
                 previous_champion_id=self._previous_champion_id,
@@ -611,16 +611,23 @@ class ChampionChallengerController:
                 reason="No Paper champion is active; no candidate is auto-enabled.",
                 checked_at=checked_at,
             )
+            return self._record_health_assessment(
+                decision, experiment_id=evidence.experiment_id, correlation_id=correlation_id
+            )
+
         if evidence.experiment_id != self._active_champion_id:
             trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
         elif evidence.mode is not ExperimentMode.PAPER:
             trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
         elif not evidence.data_quality_pass:
             trigger = RollbackTrigger.DATA_QUALITY_FAILED
-        elif evidence.risk_gate_denial_count > self._rollback_policy.maximum_risk_gate_denials:
+        elif (
+            evidence.risk_gate_denial_count
+            > self._rollback_policy.maximum_risk_gate_denials
+        ):
             trigger = RollbackTrigger.RISK_GATE_DENIAL
         elif evidence.observations < self._rollback_policy.minimum_observations:
-            return RollbackDecision(
+            decision = RollbackDecision(
                 status=RollbackStatus.INSUFFICIENT_EVIDENCE,
                 trigger=None,
                 previous_champion_id=self._previous_champion_id,
@@ -631,12 +638,18 @@ class ChampionChallengerController:
                 ),
                 checked_at=checked_at,
             )
-        elif evidence.max_drawdown_fraction > self._rollback_policy.maximum_drawdown_fraction:
+            return self._record_health_assessment(
+                decision, experiment_id=evidence.experiment_id, correlation_id=correlation_id
+            )
+        elif (
+            evidence.max_drawdown_fraction
+            > self._rollback_policy.maximum_drawdown_fraction
+        ):
             trigger = RollbackTrigger.MAX_DRAWDOWN_EXCEEDED
         elif evidence.net_return_fraction < -self._rollback_policy.maximum_net_loss_fraction:
             trigger = RollbackTrigger.NET_LOSS_EXCEEDED
         else:
-            return RollbackDecision(
+            decision = RollbackDecision(
                 status=RollbackStatus.HEALTHY,
                 trigger=None,
                 previous_champion_id=self._previous_champion_id,
@@ -644,6 +657,9 @@ class ChampionChallengerController:
                 evidence_id=evidence_id,
                 reason="Paper champion remains inside all configured health bounds.",
                 checked_at=checked_at,
+            )
+            return self._record_health_assessment(
+                decision, experiment_id=evidence.experiment_id, correlation_id=correlation_id
             )
 
         failed = self._active_champion_id
@@ -676,7 +692,7 @@ class ChampionChallengerController:
                 "net_return_fraction": str(evidence.net_return_fraction),
             },
         )
-        return RollbackDecision(
+        decision = RollbackDecision(
             status=status,
             trigger=trigger,
             previous_champion_id=failed,
@@ -685,6 +701,33 @@ class ChampionChallengerController:
             reason=reason,
             checked_at=checked_at,
         )
+        return self._record_health_assessment(
+            decision, experiment_id=evidence.experiment_id, correlation_id=correlation_id
+        )
+
+    def _record_health_assessment(
+        self,
+        decision: RollbackDecision,
+        *,
+        experiment_id: str,
+        correlation_id: str,
+    ) -> RollbackDecision:
+        """Append healthy, insufficient, rollback and safe-hold assessments to the ledger."""
+        self._ledger.append(
+            LearningEventType.CHAMPION_HEALTH_CHECKED,
+            experiment_id=experiment_id,
+            correlation_id=correlation_id,
+            occurred_at=decision.checked_at,
+            payload={
+                "status": decision.status.value,
+                "trigger": decision.trigger.value if decision.trigger is not None else None,
+                "previous_champion_id": decision.previous_champion_id,
+                "active_champion_id": decision.active_champion_id,
+                "evidence_id": decision.evidence_id,
+                "reason": decision.reason,
+            },
+        )
+        return decision
 
 
 @dataclass(frozen=True, slots=True)
