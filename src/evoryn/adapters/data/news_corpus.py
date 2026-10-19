@@ -17,6 +17,10 @@ from evoryn.domain.external_data import (
 )
 
 
+ArticleKey = tuple[str, str, str, str | None]
+SentimentKey = tuple[ArticleKey, str, str]
+
+
 @dataclass(frozen=True, slots=True)
 class _StoredArticle:
     record: NewsArticleRecord
@@ -50,8 +54,8 @@ class NewsEventCorpus:
     def __init__(self, license_registry: SourceLicenseRegistry) -> None:
         self._licenses = license_registry
         self._lock = RLock()
-        self._articles: dict[tuple[str, str, str, str | None], _StoredArticle] = {}
-        self._sentiments: dict[tuple[tuple[str, str, str, str | None], str, str], NewsSentimentRecord] = {}
+        self._articles: dict[ArticleKey, _StoredArticle] = {}
+        self._sentiments: dict[SentimentKey, NewsSentimentRecord] = {}
 
     def append_article(self, article: NewsArticleRecord, *, now: datetime) -> None:
         """Store an accepted article only when active source terms permit bounded retention."""
@@ -64,8 +68,13 @@ class NewsEventCorpus:
             article.source_license_id != authorization.license_id
             or article.source_terms_revision != authorization.terms_revision
             or article.attribution_text != authorization.attribution_text
+            or article.source_trust_score != authorization.trust_score
         ):
-            raise PermissionError("Article license provenance differs from the current authorization.")
+            raise PermissionError(
+                "Article license provenance differs from the current authorization."
+            )
+        if article.integrity_evidence != "RECEIVED_JSON_SHA256_AND_NORMALIZED_TEXT_SHA256":
+            raise PermissionError("Article did not pass the required news quality/integrity gate.")
         if article.ingested_at > now:
             raise ValueError("An article cannot be stored before its ingestion timestamp.")
         expiry = min(
@@ -220,7 +229,7 @@ class NewsEventCorpus:
         )
 
 
-def _article_key(article: NewsArticleRecord) -> tuple[str, str, str, str | None]:
+def _article_key(article: NewsArticleRecord) -> ArticleKey:
     return (
         article.source_id,
         article.provider_article_id,
