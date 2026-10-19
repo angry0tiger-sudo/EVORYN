@@ -323,7 +323,9 @@ def evaluate_strategy_selector_out_of_sample(
         if adaptive_expectancy is not None and fixed_expectancy is not None
         else None
     )
-    metadata = tuple(sorted((str(key), str(value)) for key, value in detector.model_metadata.items()))
+    metadata = tuple(
+        sorted((str(key), str(value)) for key, value in detector.model_metadata.items())
+    )
     manifest_json = _canonical_json_bytes(manifest.to_dict()).decode("utf-8")
     decision_entries = ledger.strategy_selections[initial_ledger_length:]
     run_material = {
