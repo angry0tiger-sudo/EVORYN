@@ -558,6 +558,14 @@ class RegimeStrategySelector:
                 f"minimum hold {int(hold_elapsed.total_seconds())}/"
                 f"{int(self._policy.minimum_hold_duration.total_seconds())} seconds"
             )
+        incumbent_compatible = False
+        if self._current_strategy_id is not None:
+            incumbent = self._registry.get(self._current_strategy_id)
+            incumbent_compatible = prediction.label in incumbent.supported_regimes
+        if self._current_strategy_id is not None and not incumbent_compatible:
+            reasons.append(
+                "incumbent does not support the current regime; new signals are paused"
+            )
         return self._make_decision(
             prediction,
             now=now,
@@ -568,7 +576,7 @@ class RegimeStrategySelector:
             reason="Strategy switch withheld: " + "; ".join(reasons) + ".",
             candidate_id=desired,
             alternatives=alternative_ids,
-            allow_new_signals=self._current_strategy_id is not None,
+            allow_new_signals=incumbent_compatible,
         )
 
     def _validate_preferences(self) -> None:
