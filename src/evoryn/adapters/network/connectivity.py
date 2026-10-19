@@ -125,7 +125,9 @@ class NetworkRouteAuthorization:
         if not self.active:
             raise PermissionError("The configured network route authorization is inactive.")
         if now < self.approved_at:
-            raise PermissionError("The configured network route authorization is not yet effective.")
+            raise PermissionError(
+                "The configured network route authorization is not yet effective."
+            )
         if now >= self.review_due_at:
             raise PermissionError("The configured network route authorization has expired.")
 
@@ -508,10 +510,14 @@ class ConnectivityManager:
             error = last_error
             if error is None:
                 raise RuntimeError("Internal invariant violated: transport error was not captured.")
-            delay = self._retry_delay(error, attempt)
+            retryable = self._is_retryable(error)
+            delay = (
+                self._retry_delay(error, attempt)
+                if retryable or error.status_code == 429
+                else 0.0
+            )
             if error.status_code == 429:
                 self._set_rate_limit_cooldown(delay)
-            retryable = self._is_retryable(error)
             retry_after_too_long = (
                 error.retry_after_seconds is not None
                 and error.retry_after_seconds > self._retry_policy.max_retry_after_seconds
@@ -704,8 +710,11 @@ def _allowed_request_host(url: str, allowed_hosts: frozenset[str]) -> str | None
 
 
 def _require_utc(value: datetime, name: str) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+    if not isinstance(value, datetime):
+        raise ValueError(f"{name} must be a datetime.")
+    offset = value.utcoffset()
+    if value.tzinfo is None or offset is None:
         raise ValueError(f"{name} must be timezone-aware.")
-    if value.utcoffset().total_seconds() != 0:
+    if offset.total_seconds() != 0:
         raise ValueError(f"{name} must use canonical UTC.")
     return value.astimezone(UTC)
