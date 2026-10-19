@@ -18,7 +18,7 @@ from evoryn.learning_lab.backtest import (
 )
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.learning_lab.strategy_selection import evaluate_strategy_selector_out_of_sample
-from evoryn.strategies.baseline import SmaCrossoverBaseline
+from evoryn.strategies.baseline import FlatBaseline, SmaCrossoverBaseline
 from evoryn.strategies.plugins import (
     StrategyPluginRegistration,
     StrategyPluginRegistry,
@@ -149,6 +149,82 @@ def test_plugin_registration_rejects_unknown_regime_as_a_route() -> None:
             strategy=flat.strategy,
             supported_regimes=frozenset({RegimeLabel.UNKNOWN}),
         )
+
+
+def test_hysteresis_configuration_requires_positive_time_guards() -> None:
+    with pytest.raises(ValueError, match="positive timedelta"):
+        StrategySelectionPolicy(required_stability_duration=timedelta(0))
+    with pytest.raises(ValueError, match="positive timedelta"):
+        StrategySelectionPolicy(minimum_hold_duration=timedelta(0))
+
+
+def test_routing_preferences_have_an_explicit_fingerprint() -> None:
+    registry = build_baseline_registry()
+    defaults = RegimeStrategySelector(registry)
+    alternate = RegimeStrategySelector(
+        registry,
+        preferred_strategy_by_regime={
+            RegimeLabel.BULL_TREND: ("sma-trend-long-flat", "sma-crossover-long-flat"),
+            RegimeLabel.BEAR_TREND: ("flat-no-position",),
+            RegimeLabel.RANGE_BOUND: ("sma-trend-long-flat", "flat-no-position"),
+            RegimeLabel.HIGH_VOLATILITY: ("flat-no-position",),
+        },
+    )
+
+    assert defaults.routing_fingerprint != alternate.routing_fingerprint
+    with pytest.raises(ValueError, match="preference list is required"):
+        RegimeStrategySelector(registry, preferred_strategy_by_regime={})
+
+
+def test_candidate_evidence_resets_after_large_observation_gaps() -> None:
+    selector = RegimeStrategySelector(
+        build_baseline_registry(),
+        policy=StrategySelectionPolicy(
+            required_evidence_count=3,
+            required_stability_duration=timedelta(hours=2),
+            minimum_hold_duration=timedelta(hours=2),
+            maximum_prediction_age=timedelta(hours=1),
+        ),
+    )
+
+    first = select_at(selector, RegimeLabel.BULL_TREND, 1)
+    after_gap = select_at(selector, RegimeLabel.BULL_TREND, 4)
+
+    assert first.evidence_count == 1
+    assert after_gap.status is SelectionStatus.CANDIDATE_PENDING
+    assert after_gap.evidence_count == 1
+    assert after_gap.candidate_since == selection_time(4)
+
+
+def test_registry_change_clears_active_selection_and_requires_fresh_evidence() -> None:
+    registry = build_baseline_registry()
+    selector = RegimeStrategySelector(
+        registry,
+        policy=StrategySelectionPolicy(
+            required_evidence_count=2,
+            required_stability_duration=timedelta(hours=1),
+            minimum_hold_duration=timedelta(hours=1),
+        ),
+    )
+    select_at(selector, RegimeLabel.BULL_TREND, 1)
+    active = select_at(selector, RegimeLabel.BULL_TREND, 2)
+    assert active.status is SelectionStatus.SWITCHED
+
+    flat = FlatBaseline(strategy_id="flat-bull-control")
+    registry.register(
+        StrategyPluginRegistration(
+            plugin_id=flat.strategy_id,
+            plugin_version=flat.strategy_version,
+            description="New registry member forces revalidation.",
+            strategy=flat,
+            supported_regimes=frozenset({RegimeLabel.BULL_TREND}),
+        )
+    )
+    changed = select_at(selector, RegimeLabel.BULL_TREND, 3)
+
+    assert changed.status is SelectionStatus.REGISTRY_CHANGED
+    assert changed.selected_strategy_id is None
+    assert not changed.allow_new_signals
 
 
 def test_hysteresis_requires_distinct_evidence_stability_and_minimum_hold() -> None:
@@ -429,7 +505,7 @@ def test_oos_evaluation_rejects_training_leakage_from_validation_or_test() -> No
         evaluate_strategy_selector_out_of_sample(
             dataset,
             partitions=partitions,
-            detector=detector,  # type: ignore[arg-type]
+            detector=detector,
             registry=build_baseline_registry(),
             selection_policy=StrategySelectionPolicy(),
             fixed_baseline=SmaCrossoverBaseline(),
