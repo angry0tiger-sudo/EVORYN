@@ -181,9 +181,10 @@ class LicensedNewsJsonConnector:
                         "related_asset_ids_path must resolve to a string array."
                     )
                 related_ids = tuple(sorted({item.strip().upper() for item in raw_related}))
-            declared_hash = _string_at(
+            declared_hash_value = _string_at(
                 row, self._mapping.declared_content_sha256_path, required=False
             )
+            declared_hash = declared_hash_value or None
             provider_id = _string_at(
                 row, self._mapping.article_id_path, required=False
             )
