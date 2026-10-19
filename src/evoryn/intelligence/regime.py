@@ -283,6 +283,18 @@ class RegimePrediction:
                 - Decimal("1")
             ) > Decimal("0.000001"):
                 raise ValueError("Regime probabilities must sum to one.")
+            if self.label is not RegimeLabel.UNKNOWN:
+                probability_by_label = dict(self.probabilities)
+                if probability_by_label[self.label] != self.confidence:
+                    raise ValueError(
+                        "Classified confidence must equal the selected label's probability."
+                    )
+                if any(
+                    probability > self.confidence
+                    for label, probability in self.probabilities
+                    if label is not self.label
+                ):
+                    raise ValueError("Selected regime must have the maximum reported probability.")
 
 
 class RegimeProbabilityModel(Protocol):
