@@ -9,6 +9,7 @@ from decimal import Decimal
 from urllib.error import URLError
 from urllib.request import Request
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
@@ -16,7 +17,6 @@ from cryptography.hazmat.primitives.serialization import (
     PrivateFormat,
     PublicFormat,
 )
-import pytest
 
 from evoryn.adapters.exchanges.nobitex_instrument_rules import (
     NobitexSpotInstrumentRulesProvider,
