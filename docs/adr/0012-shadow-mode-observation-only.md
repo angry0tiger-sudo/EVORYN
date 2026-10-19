@@ -39,7 +39,9 @@ Every processed completed candle creates an immutable `ShadowDecisionSnapshot` c
 - registered candidate experiment and model identity, strategy identity/fingerprint, regime label/confidence/as-of and regime-model identity;
 - active Paper Champion experiment and model identity, strategy identity/fingerprint, baseline target exposure/quantity/delta;
 - candidate target exposure/quantity/delta and estimated notional delta;
-- outcome, reason code, Auto-Halt state, risk-assessment status and the invariant `execution_authorized=false`.
+- outcome, reason code, Auto-Halt state, observational risk-assessment status and the invariant `execution_authorized=false`.
+
+A separate injected `ShadowRiskAssessmentPort` is mandatory. It must be read-only and return a sanitized `OBSERVATIONAL_PASS`, `REJECT`, `HALT`, or `ABSTAIN` outcome for a hypothetical target. An exception, invalid result, rejection, halt or abstention cannot advance virtual state. A pass is only an observational check and never grants execution authority. No concrete production assessor or live account/risk context was provided in this continuation, so the poller is not yet production-activatable.
 
 The current causal strategy contract exposes target exposure, not a calibrated strategy-confidence field; `strategy_confidence` is therefore recorded as unavailable rather than invented. Candidate and baseline targets are analytical projections from the same explicit virtual budget, allocation fraction, quantity step, completed history and reference close. They are not order sizes approved by RiskEngine, and no fill/transaction-cost model is applied. This phase does not emit counterfactual fills or assert performance/profitability.
 
@@ -51,6 +53,7 @@ The observer abstains and records the reason on:
 - a missing/invalid/active Auto-Halt status;
 - regime-model exception, unknown/abstaining regime, stale/future regime timestamp, insufficient confidence or changed regime model identity;
 - candidate/baseline strategy failure, invalid exposure, strategy identity drift, baseline mismatch or active Paper Champion pointer drift;
+- risk assessor failure/invalid result, risk rejection, halt or abstention;
 - Learning Lab ledger failure, missing persistent ledger, or invalid registry/ledger provenance.
 
 Rejected observations do not advance the candidate or baseline virtual position state. Learning Lab append failure raises a blocking error rather than treating the event as recorded.
@@ -60,11 +63,11 @@ Rejected observations do not advance the candidate or baseline virtual position 
 - The run, decisions, rejected input, feed failure, startup bootstrap and reconciliation are appended using the existing hash-chained `LearningLabLedger`.
 - Shadow run initialization requires a path-backed JSONL ledger with the existing fsync-backed append and startup integrity verification. In-memory-only ledgers are not accepted.
 - SHADOW, PAPER and LIVE remain distinct `ExperimentMode` values. Shadow events are not relabeled as PAPER evidence and are not automatically promotion eligible through this runner.
-- No order-submit/cancel API, execution port, account mutation, RiskEngine mutation, auto-halt reset, or Live-mode switch exists in this package. `risk_assessment_status=NOT_EVALUATED` is explicit; a hypothetical target is not a risk gate ALLOW.
+- No order-submit/cancel API, execution port, account mutation, RiskEngine mutation, auto-halt reset, or Live-mode switch exists in this package. `NOT_EVALUATED` is used only when an earlier input gate prevents risk assessment and no eligible target is emitted. A successful target requires an injected observational risk-assessment pass; that pass is not a RiskEngine/live-order approval.
 
 ### 6. Operational activation
 
-The code provides a single poll operation but does not claim an already-running service. Before activation, an operator must supply a real registered SHADOW candidate, the current registered Paper Champion and controller, reviewed deterministic strategy/regime implementations, a durable access-controlled Learning Lab directory, a read-only Auto-Halt-state provider, an approved market and interval, and an externally managed polling cadence. These production identities and schedule were not supplied in this continuation; no live market request has been issued here.
+The code provides a single poll operation but does not claim an already-running service. Before activation, an operator must supply a real registered SHADOW candidate, the current registered Paper Champion and controller, reviewed deterministic candidate/baseline strategies, a regime classifier, a read-only risk assessor, a durable access-controlled Learning Lab directory, a read-only Auto-Halt-state provider, an approved market and interval, and an externally managed polling cadence. These production identities and schedule were not supplied in this continuation; no live market request has been issued here.
 
 ## Validation and known limits
 
