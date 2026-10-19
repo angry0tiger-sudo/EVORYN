@@ -693,6 +693,7 @@ def test_unregistered_experiment_is_rejected(tmp_path: Path) -> None:
             baseline_strategy=fixture.baseline_strategy,
             champion_controller=fixture.champion_controller,
             regime_classifier=fixture.regime,
+            risk_assessor=fixture.risk_assessor,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
         )
@@ -713,6 +714,7 @@ def test_non_persistent_learning_ledger_is_rejected(tmp_path: Path) -> None:
             baseline_strategy=fixture.baseline_strategy,
             champion_controller=fixture.champion_controller,
             regime_classifier=fixture.regime,
+            risk_assessor=fixture.risk_assessor,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
         )
