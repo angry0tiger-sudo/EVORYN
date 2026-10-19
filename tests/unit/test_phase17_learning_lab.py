@@ -715,6 +715,7 @@ def passing_paper_promotion(
         registry=registry,
         ledger=ledger,
         champion_experiment_id=champion_spec.experiment_id,
+        evidence_trust_verifier=SyntheticEvidenceTrustVerifier(),
         gate=ChampionChallengerGate(
             PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
         ),
