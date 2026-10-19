@@ -127,6 +127,7 @@ def test_registry_exposes_only_explicitly_compatible_plugins_and_is_fingerprinte
 
     assert tuple(p.plugin_id for p in registry.options_for(RegimeLabel.BULL_TREND)) == (
         "sma-crossover-long-flat",
+        "sma-trend-long-flat",
     )
     assert tuple(p.plugin_id for p in registry.options_for(RegimeLabel.BEAR_TREND)) == (
         "flat-no-position",
