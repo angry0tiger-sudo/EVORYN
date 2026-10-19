@@ -378,7 +378,9 @@ def test_automatic_rollback_restores_last_known_good_paper_champion(tmp_path: Pa
     assert ledger.events[-1].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
 
 
-def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_paper(tmp_path: Path) -> None:
+def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_paper(
+    tmp_path: Path,
+) -> None:
     registry, ledger = make_registry(tmp_path)
     paper_champion = make_spec(model_id="champion", model_fingerprint="1" * 64)
     shadow_champion = replace(paper_champion, mode=ExperimentMode.SHADOW)
@@ -412,7 +414,9 @@ def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_pa
         registry=registry,
         ledger=ledger,
         champion_experiment_id=paper_champion.experiment_id,
-        gate=ChampionChallengerGate(PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)),
+        gate=ChampionChallengerGate(
+            PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
+        ),
     )
 
     decision = controller.compare_and_promote(
@@ -430,10 +434,61 @@ def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_pa
     assert controller.approved_shadow_candidate_id == shadow_challenger.experiment_id
 
 
+def passing_paper_promotion(
+    registry: ExperimentRegistry,
+    ledger: LearningLabLedger,
+    *,
+    suffix: str,
+):
+    """Build a real gate-passing Paper comparison for release-candidate tests."""
+    champion_spec = make_spec(
+        model_id=f"{suffix}-champion",
+        model_fingerprint="3" * 64,
+        created_minutes=20,
+    )
+    challenger_spec = make_spec(
+        model_id=f"{suffix}-challenger",
+        model_fingerprint="4" * 64,
+        created_minutes=21,
+        parameters=(("fast_window", "4"), ("slow_window", "18")),
+    )
+    champion_evidence = make_evidence(
+        champion_spec,
+        net_return="0.02",
+        max_drawdown="0.10",
+        run_suffix=f"{suffix}-champion-evidence",
+    )
+    challenger_evidence = make_evidence(
+        challenger_spec,
+        net_return="0.03",
+        max_drawdown="0.08",
+        run_suffix=f"{suffix}-challenger-evidence",
+    )
+    register_spec_and_evidence(registry, champion_spec, champion_evidence)
+    register_spec_and_evidence(registry, challenger_spec, challenger_evidence)
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=champion_spec.experiment_id,
+        gate=ChampionChallengerGate(
+            PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
+        ),
+    )
+    decision = controller.compare_and_promote(
+        champion_evidence_id=champion_evidence.evidence_id,
+        challenger_experiment_id=challenger_spec.experiment_id,
+        challenger_evidence_id=challenger_evidence.evidence_id,
+        target_mode=ExperimentMode.PAPER,
+        evaluated_at=NOW + timedelta(hours=2),
+        correlation_id=f"{suffix}:promotion",
+    )
+    assert decision.status is PromotionStatus.PROMOTED_TO_PAPER
+    return challenger_spec, decision
+
+
 def test_release_gate_requires_approved_risk_fingerprint_and_blocks_live(tmp_path: Path) -> None:
     registry, ledger = make_registry(tmp_path)
-    spec = make_spec(mode=ExperimentMode.PAPER)
-    registry.register(spec, correlation_id="release:register")
+    spec, decision = passing_paper_promotion(registry, ledger, suffix="release-live-block")
     risk_fingerprint = "9" * 64
     release_gate = ReleasePipelineGate(
         registry=registry,
@@ -445,10 +500,11 @@ def test_release_gate_requires_approved_risk_fingerprint_and_blocks_live(tmp_pat
         release_gate.create_candidate(
             spec.experiment_id,
             target=ReleaseTarget.LIVE,
+            promotion_decision_id=decision.decision_id,
             test_report_sha256="1" * 64,
             security_report_sha256="2" * 64,
             risk_policy_sha256=risk_fingerprint,
-            created_at=NOW + timedelta(hours=1),
+            created_at=NOW + timedelta(hours=3),
             correlation_id="release:attempt-live",
         )
     assert ledger.events[-1].event_type is LearningEventType.LIVE_RELEASE_BLOCKED
@@ -456,43 +512,68 @@ def test_release_gate_requires_approved_risk_fingerprint_and_blocks_live(tmp_pat
     candidate = release_gate.create_candidate(
         spec.experiment_id,
         target=ReleaseTarget.PAPER,
+        promotion_decision_id=decision.decision_id,
         test_report_sha256="1" * 64,
         security_report_sha256="2" * 64,
         risk_policy_sha256=risk_fingerprint,
-        created_at=NOW + timedelta(hours=1),
+        created_at=NOW + timedelta(hours=3),
         correlation_id="release:paper-candidate",
     )
     approved = release_gate.approve_candidate(
         candidate.candidate_id,
         approved_by="human-reviewer",
         approval_reference="approval-ticket-123",
-        approved_at=NOW + timedelta(hours=2),
+        approved_at=NOW + timedelta(hours=4),
         current_risk_policy_sha256=risk_fingerprint,
         correlation_id="release:paper-approved",
     )
 
     assert approved.is_approved
+    assert approved.promotion_decision_id == decision.decision_id
     assert ledger.events[-1].event_type is LearningEventType.RELEASE_APPROVED
 
 
-def test_release_gate_rejects_risk_policy_drift_and_changed_approval(tmp_path: Path) -> None:
+def test_release_gate_rejects_risk_policy_drift_at_creation_and_approval(
+    tmp_path: Path,
+) -> None:
     registry, ledger = make_registry(tmp_path)
-    spec = make_spec(mode=ExperimentMode.PAPER)
-    registry.register(spec, correlation_id="release:register")
+    spec, decision = passing_paper_promotion(registry, ledger, suffix="release-policy-drift")
+    approved_policy = "9" * 64
     release_gate = ReleasePipelineGate(
         registry=registry,
         ledger=ledger,
-        approved_risk_policy_sha256="9" * 64,
+        approved_risk_policy_sha256=approved_policy,
     )
     with pytest.raises(PermissionError, match="Risk policy fingerprint"):
         release_gate.create_candidate(
             spec.experiment_id,
             target=ReleaseTarget.PAPER,
+            promotion_decision_id=decision.decision_id,
             test_report_sha256="1" * 64,
             security_report_sha256="2" * 64,
             risk_policy_sha256="8" * 64,
-            created_at=NOW + timedelta(hours=1),
+            created_at=NOW + timedelta(hours=3),
             correlation_id="release:bad-policy",
+        )
+
+    candidate = release_gate.create_candidate(
+        spec.experiment_id,
+        target=ReleaseTarget.PAPER,
+        promotion_decision_id=decision.decision_id,
+        test_report_sha256="1" * 64,
+        security_report_sha256="2" * 64,
+        risk_policy_sha256=approved_policy,
+        created_at=NOW + timedelta(hours=3),
+        correlation_id="release:policy-approved-candidate",
+    )
+    with pytest.raises(PermissionError, match="Risk policy changed"):
+        release_gate.approve_candidate(
+            candidate.candidate_id,
+            approved_by="human-reviewer",
+            approval_reference="approval-ticket-risk-drift",
+            approved_at=NOW + timedelta(hours=4),
+            current_risk_policy_sha256="8" * 64,
+            correlation_id="release:risk-drift",
         )
 
 
