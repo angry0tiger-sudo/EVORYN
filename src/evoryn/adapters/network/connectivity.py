@@ -201,6 +201,16 @@ class CircuitBreaker:
                 self._opened_at = now
                 self._probe_in_flight = False
 
+    def abandon_probe(self) -> None:
+        """Reopen rather than strand a half-open circuit if the audit path itself fails."""
+        now = self._monotonic()
+        with self._lock:
+            if self._state is CircuitState.HALF_OPEN and self._probe_in_flight:
+                self._state = CircuitState.OPEN
+                self._opened_at = now
+                self._probe_in_flight = False
+                self._failures = self._policy.failure_threshold
+
 
 @dataclass(frozen=True, slots=True)
 class FeedFreshnessPolicy:
@@ -572,24 +582,28 @@ class ConnectivityManager:
         retry_delay_seconds: float | None = None,
         reason: str | None = None,
     ) -> None:
-        _record_event(
-            self._audit_sink,
-            ConnectionEvent(
-                event_id=uuid.uuid4().hex,
-                correlation_id=correlation_id,
-                event_type=event_type,
-                timestamp_utc=_require_utc(self._utcnow(), "utcnow"),
-                route_id=self._route_id,
-                target_id=target_id,
-                attempt=attempt,
-                latency_ms=latency_ms,
-                circuit_state=circuit_state,
-                error_kind=error_kind,
-                status_code=status_code,
-                retry_delay_seconds=retry_delay_seconds,
-                reason=reason,
-            ),
-        )
+        try:
+            _record_event(
+                self._audit_sink,
+                ConnectionEvent(
+                    event_id=uuid.uuid4().hex,
+                    correlation_id=correlation_id,
+                    event_type=event_type,
+                    timestamp_utc=_require_utc(self._utcnow(), "utcnow"),
+                    route_id=self._route_id,
+                    target_id=target_id,
+                    attempt=attempt,
+                    latency_ms=latency_ms,
+                    circuit_state=circuit_state,
+                    error_kind=error_kind,
+                    status_code=status_code,
+                    retry_delay_seconds=retry_delay_seconds,
+                    reason=reason,
+                ),
+            )
+        except ConnectivityAuditError:
+            self._breaker.abandon_probe()
+            raise
 
 
 def _record_event(sink: ConnectionAuditSink, event: ConnectionEvent) -> None:
