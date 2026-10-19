@@ -813,6 +813,41 @@ def test_news_ablation_respects_available_at_and_uses_the_same_test_range(
         store.load(report.report_id)
 
 
+def test_news_available_exactly_at_bar_open_is_not_used_for_that_open() -> None:
+    dataset = ablation_dataset()
+    partitions = chronological_split(dataset)
+    final_test_open = dataset.candles[partitions.test.end - 1].timestamp
+    registry, article = accepted_article(
+        published_at=final_test_open,
+        article_id="news-exactly-at-open",
+        title="Publication timestamp exactly coincides with bar open",
+    )
+    news = sentiment_record(article, analyzed_at=final_test_open)
+    report = evaluate_news_ablation(
+        dataset,
+        partitions=partitions,
+        price_only_strategy=SmaTrendBaseline(window=3),
+        sentiment_records=(news,),
+        license_registry=registry,
+        config=BacktestConfig(
+            initial_cash=Decimal("10000"),
+            commission_bps=Decimal("10"),
+            spread_bps=Decimal("5"),
+            slippage_bps=Decimal("5"),
+            max_bar_participation=Decimal("0.5"),
+            allocation_fraction=Decimal("0.9"),
+            quantity_step=Decimal("0.001"),
+        ),
+        evaluated_at=NOW,
+        policy=NewsAblationPolicy(minimum_effective_news_events=1),
+    )
+
+    assert report.news_articles_actually_vetoed == 0
+    assert report.veto_decision_count == 0
+    assert report.news_result.metrics == report.baseline_result.metrics
+    assert report.conclusion is AblationConclusion.INCONCLUSIVE
+
+
 def test_news_ablation_never_uses_news_before_its_actual_availability() -> None:
     dataset = ablation_dataset()
     partitions = chronological_split(dataset)
