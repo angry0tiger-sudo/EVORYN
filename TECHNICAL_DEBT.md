@@ -36,7 +36,7 @@ This ledger records open verification and runtime-integration obligations. Close
 
 ## Phase 20 — Intelligence Core / Model Provider Interface
 
-- [ ] **Review and accept ADR 0013 before implementation:** `docs/adr/0013-intelligence-core-model-provider-interface.md`, tracked on [PR #20](https://github.com/angry0tiger-sudo/EVORYN/pull/20). The proposal is provider-neutral and defines typed request/response, model identity/provenance, budgets, audit, abstention, privacy controls, and advisory-only boundaries.
+- [ ] **Review and accept ADR 0013 before implementation:** `docs/adr/0013-intelligence-core-model-provider-interface.md`, proposed in [PR #21](https://github.com/angry0tiger-sudo/EVORYN/pull/21). The proposal is provider-neutral and defines typed request/response, model identity/provenance, budgets, audit, abstention, privacy controls, and advisory-only boundaries.
 - [ ] **Keep OpenRouter and all other hosted LLM providers disabled until a separate review approves one.** Record data classification/transfer permission, retention/training terms, region, structured-output behavior, model immutability, costs, latency, quotas and failure tests.
 - [ ] **Verify open-source model and training-data rights independently.** Pin immutable model/code revisions, artifact digests, dataset revisions and license terms. The Phase 16 financial-news candidate's training-data-rights flag remains false unless explicit review evidence is recorded.
 - [ ] **Implement provider-neutral interfaces and fake/offline adapters first.** Core imports must not require model frameworks or cloud SDKs; tests must not call real inference endpoints by default.
