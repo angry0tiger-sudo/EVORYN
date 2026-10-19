@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Any
 
 from evoryn.learning_lab.experiment_registry import (
+    ExperimentIntegrityError,
     ExperimentMode,
     ExperimentRegistry,
     ExperimentRunEvidence,
@@ -795,6 +796,72 @@ class ReleasePipelineGate:
         self._ledger = ledger
         self._approved_risk_policy_sha256 = approved_risk_policy_sha256
         self._candidates: dict[str, ReleaseCandidate] = {}
+        self._load_candidates_from_ledger()
+
+    def _load_candidates_from_ledger(self) -> None:
+        """Rehydrate immutable manifests and approvals from the verified ledger after restart."""
+        for event in self._ledger.events:
+            payload = json.loads(event.payload_json)
+            if event.event_type is LearningEventType.RELEASE_CANDIDATE_CREATED:
+                try:
+                    material = {
+                        "experiment_id": event.experiment_id,
+                        "target": payload["target"],
+                        "promotion_decision_id": payload["promotion_decision_id"],
+                        "test_report_sha256": payload["test_report_sha256"],
+                        "security_report_sha256": payload["security_report_sha256"],
+                        "risk_policy_sha256": payload["risk_policy_sha256"],
+                        "created_at": _iso_utc(event.occurred_at),
+                    }
+                    candidate = ReleaseCandidate(
+                        candidate_id=payload["candidate_id"],
+                        experiment_id=event.experiment_id,
+                        target=ReleaseTarget(payload["target"]),
+                        promotion_decision_id=payload["promotion_decision_id"],
+                        test_report_sha256=payload["test_report_sha256"],
+                        security_report_sha256=payload["security_report_sha256"],
+                        risk_policy_sha256=payload["risk_policy_sha256"],
+                        created_at=event.occurred_at,
+                    )
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ExperimentIntegrityError(
+                        "Release-candidate ledger event is malformed."
+                    ) from exc
+                if _sha256(_canonical_json_bytes(material)) != candidate.candidate_id:
+                    raise ExperimentIntegrityError(
+                        "Release-candidate ID does not match its recorded manifest."
+                    )
+                previous = self._candidates.get(candidate.candidate_id)
+                if previous is not None and previous != candidate:
+                    raise ExperimentIntegrityError(
+                        "Release-candidate ID has conflicting ledger manifests."
+                    )
+                self._candidates[candidate.candidate_id] = candidate
+            elif event.event_type is LearningEventType.RELEASE_APPROVED:
+                try:
+                    candidate_id = payload["candidate_id"]
+                    candidate = self._candidates[candidate_id]
+                    if payload["risk_policy_sha256"] != candidate.risk_policy_sha256:
+                        raise ExperimentIntegrityError(
+                            "Release approval risk-policy hash differs from candidate manifest."
+                        )
+                    approved = replace(
+                        candidate,
+                        approved_by=payload["approved_by"],
+                        approval_reference=payload["approval_reference"],
+                        approved_at=event.occurred_at,
+                    )
+                except (KeyError, TypeError, ValueError) as exc:
+                    if isinstance(exc, ExperimentIntegrityError):
+                        raise
+                    raise ExperimentIntegrityError(
+                        "Release approval event does not match an existing candidate."
+                    ) from exc
+                if candidate.is_approved and candidate != approved:
+                    raise ExperimentIntegrityError(
+                        "Release candidate has conflicting approval events."
+                    )
+                self._candidates[candidate_id] = approved
 
     def create_candidate(
         self,
@@ -909,7 +976,6 @@ class ReleasePipelineGate:
         existing = self._candidates.get(candidate.candidate_id)
         if existing is not None:
             return existing
-        self._candidates[candidate.candidate_id] = candidate
         self._ledger.append(
             LearningEventType.RELEASE_CANDIDATE_CREATED,
             experiment_id=experiment_id,
@@ -926,6 +992,7 @@ class ReleasePipelineGate:
                 "auto_deploy": False,
             },
         )
+        self._candidates[candidate.candidate_id] = candidate
         return candidate
 
     def _record_rejection(
@@ -994,7 +1061,6 @@ class ReleasePipelineGate:
             approval_reference=approval_reference,
             approved_at=approved_at,
         )
-        self._candidates[candidate_id] = approved
         self._ledger.append(
             LearningEventType.RELEASE_APPROVED,
             experiment_id=candidate.experiment_id,
@@ -1008,6 +1074,7 @@ class ReleasePipelineGate:
                 "deploy_action": "none_external_release_pipeline_required",
             },
         )
+        self._candidates[candidate_id] = approved
         return approved
 
 
