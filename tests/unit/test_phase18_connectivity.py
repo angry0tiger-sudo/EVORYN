@@ -22,7 +22,11 @@ from evoryn.adapters.network.connectivity import (
     RateLimitDeferredError,
     RetryPolicy,
 )
-from evoryn.adapters.network.json_http import JsonApiError, parse_retry_after_seconds
+from evoryn.adapters.network.json_http import (
+    HttpsJsonTransport,
+    JsonApiError,
+    parse_retry_after_seconds,
+)
 
 
 class MemoryAuditSink:
@@ -101,6 +105,40 @@ def make_manager(
         random_value=lambda: 0.5,
     )
 
+
+
+def test_https_json_transport_passes_timeout_and_does_not_retry_socket_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class TimeoutOpener:
+        def __init__(self) -> None:
+            self.calls: list[tuple[Any, float]] = []
+
+        def open(self, request: Any, *, timeout: float) -> Any:
+            self.calls.append((request, timeout))
+            raise URLError(TimeoutError("synthetic socket timeout"))
+
+    opener = TimeoutOpener()
+    monkeypatch.setattr(
+        "evoryn.adapters.network.json_http.build_opener",
+        lambda *handlers: opener,
+    )
+    transport = HttpsJsonTransport(
+        allowed_hosts=frozenset({"api.example.test"}),
+        timeout_seconds=2.5,
+    )
+
+    with pytest.raises(JsonApiError) as error:
+        transport.get_json(
+            "https://api.example.test/v1/quote",
+            headers={},
+            params={},
+        )
+
+    assert error.value.kind == "timeout"
+    assert "synthetic socket timeout" not in str(error.value)
+    assert len(opener.calls) == 1
+    assert opener.calls[0][1] == 2.5
 
 def test_success_records_latency_and_never_logs_query_or_headers() -> None:
     sink = MemoryAuditSink()
