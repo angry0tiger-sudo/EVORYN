@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol
 
 from evoryn.domain.strategy_decisions import StrategySelectionLedgerEntry
@@ -98,6 +100,7 @@ class StrategySelectionDecision:
     model_fingerprint: str
     feature_schema_version: str
     registry_fingerprint: str
+    routing_fingerprint: str
     previous_strategy_id: str | None
     candidate_strategy_id: str | None
     selected_strategy_id: str | None
@@ -181,6 +184,7 @@ class StrategySelectionDecision:
             allow_new_signals=self.allow_new_signals,
             invalidation_conditions=self.invalidation_conditions,
             registry_fingerprint=self.registry_fingerprint,
+            routing_fingerprint=self.routing_fingerprint,
         )
 
 
@@ -198,12 +202,12 @@ class RegimeStrategySelector:
         registry: StrategyPluginRegistry,
         *,
         policy: StrategySelectionPolicy | None = None,
-        preferred_strategy_by_regime: dict[RegimeLabel, tuple[str, ...]] | None = None,
+        preferred_strategy_by_regime: Mapping[RegimeLabel, tuple[str, ...]] | None = None,
         decision_ledger: StrategySelectionLedgerSink | None = None,
     ) -> None:
         self._registry = registry
         self._policy = policy or StrategySelectionPolicy()
-        self._preferences = (
+        preferences = (
             {
                 RegimeLabel.BULL_TREND: (
                     "sma-crossover-long-flat",
@@ -216,7 +220,22 @@ class RegimeStrategySelector:
             if preferred_strategy_by_regime is None
             else preferred_strategy_by_regime
         )
+        self._preferences: Mapping[RegimeLabel, tuple[str, ...]] = MappingProxyType(
+            {label: tuple(choices) for label, choices in preferences.items()}
+        )
         self._validate_preferences()
+        self._routing_fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    label.value: list(choices)
+                    for label, choices in sorted(
+                        self._preferences.items(), key=lambda item: item[0].value
+                    )
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
         self._ledger = decision_ledger
         self._current_strategy_id: str | None = None
         self._candidate_strategy_id: str | None = None
@@ -240,6 +259,11 @@ class RegimeStrategySelector:
     @property
     def policy(self) -> StrategySelectionPolicy:
         return self._policy
+
+    @property
+    def routing_fingerprint(self) -> str:
+        """Return the immutable regime-to-plugin preference fingerprint."""
+        return self._routing_fingerprint
 
     def select(
         self,
@@ -581,6 +605,7 @@ class RegimeStrategySelector:
             model_fingerprint=prediction.model_fingerprint,
             feature_schema_version=prediction.feature_schema_version,
             registry_fingerprint=self._registry_fingerprint,
+            routing_fingerprint=self._routing_fingerprint,
             previous_strategy_id=(
                 previous_strategy_id
                 if status is SelectionStatus.SWITCHED
@@ -603,6 +628,7 @@ class RegimeStrategySelector:
                 "stale_or_future_regime_timestamp",
                 "model_fingerprint_or_feature_schema_changed",
                 "strategy_registry_fingerprint_changed",
+                "strategy_routing_fingerprint_changed",
                 "hard_risk_gate_denies_or_halts_execution",
                 "out_of_sample_evidence_fails_or_is_missing",
             ),
