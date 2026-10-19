@@ -20,6 +20,7 @@ from evoryn.margin.models import (
     MarginOrderDisposition,
     MarginPosition,
     MarginPositionStatus,
+    MarginRiskAssessment,
     MarginSide,
 )
 from evoryn.margin.risk import MarginCalculator, MarginReconciler, MarginRiskPolicy
@@ -552,6 +553,21 @@ def test_pool_source_currency_must_match_margin_market() -> None:
 
     assert result.disposition is MarginOrderDisposition.REJECT
     assert result.reason_code == "margin_pool_currency_mismatch"
+
+
+def test_margin_risk_assessment_cannot_authorize_new_exposure() -> None:
+    with pytest.raises(ValueError, match="cannot authorize additional risk"):
+        MarginRiskAssessment(
+            position_id=128,
+            health=MarginHealth.HEALTHY,
+            assessed_at=NOW,
+            reason_code="healthy",
+            explanation="Only a position-health classification.",
+            new_risk_permitted=True,
+            reported_liquidation_price=Decimal("80"),
+            observed_mark_price=Decimal("100"),
+            observed_margin_ratio=Decimal("2"),
+        )
 
 
 def test_margin_position_reconciliation_reports_every_material_mismatch() -> None:

@@ -358,8 +358,10 @@ class MarginRiskAssessment:
         _require_aware(self.assessed_at, "Risk assessment timestamp")
         _require_nonempty(self.reason_code, "reason_code")
         _require_nonempty(self.explanation, "explanation")
-        if self.new_risk_permitted and self.health is not MarginHealth.HEALTHY:
-            raise ValueError("Only a healthy position assessment may permit new risk.")
+        if self.new_risk_permitted:
+            raise ValueError(
+                "Position health assessments cannot authorize additional risk."
+            )
 
 
 @dataclass(frozen=True, slots=True)
