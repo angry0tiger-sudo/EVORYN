@@ -57,6 +57,10 @@ was tested, where it was tested, which evidence supported a change, and what hap
   model identity, data version, feature schema, evaluation configuration, seed, and test range.
 - Comparisons are allowed only in SHADOW or PAPER. BACKTEST evidence is not accepted as telemetry
   for a Paper/Shadow promotion.
+- Every controller must be explicitly configured with an `EvidenceTrustVerifier` backed by a
+  trusted Paper/Shadow telemetry collector or signed collector attestation. The default is
+  unconfigured, and the controller refuses promotion while recording a rejection. The included
+  synthetic tests use a test-only verifier and are not production telemetry attestation.
 - Default minimum evidence: 100 observations and 10 closed trades for both Champion and Challenger.
 - Default performance gates: Challenger return improvement at least 0.5 percentage points, maximum
   drawdown no greater than 20%, no more than 1 percentage point of drawdown worsening, net loss no
@@ -89,7 +93,8 @@ was tested, where it was tested, which evidence supported a change, and what hap
 - Its manifest records experiment ID, promotion decision ID, test-report hash, security-report hash,
   immutable approved risk-policy hash, creation time and, after independent approval, actor,
   approval reference/ticket and approval timestamp.
-- A changed risk-policy hash rejects candidate creation or approval. Rejected attempts are recorded.
+- A changed risk-policy hash rejects candidate creation or approval, including a candidate created
+  under a prior approved risk hash that is later presented after restart. Rejected attempts are recorded.
 - An attempted LIVE target is recorded as `LIVE_RELEASE_BLOCKED` and raises a permission error. There
   is no deploy operation or Live target approval API in this module.
 - This gate records the hash and approval evidence, but does not fetch/parse test/security reports or
