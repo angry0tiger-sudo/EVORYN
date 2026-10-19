@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from decimal import Decimal
 from typing import Any
 
@@ -17,7 +18,10 @@ from evoryn.learning_lab.backtest import (
     chronological_split,
 )
 from evoryn.learning_lab.historical_data import HistoricalDataset
-from evoryn.learning_lab.strategy_selection import evaluate_strategy_selector_out_of_sample
+from evoryn.learning_lab.strategy_selection import (
+    StrategySelectionOOSReportStore,
+    evaluate_strategy_selector_out_of_sample,
+)
 from evoryn.strategies.baseline import FlatBaseline, SmaCrossoverBaseline
 from evoryn.strategies.plugins import (
     StrategyPluginRegistration,
@@ -477,7 +481,7 @@ class FakeOutOfSampleDetector:
         )
 
 
-def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy() -> None:
+def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy(tmp_path: Path) -> None:
     dataset = make_dataset(100)
     partitions = chronological_split(dataset)
     detector = FakeOutOfSampleDetector(
@@ -525,7 +529,21 @@ def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy() -> None:
     assert report.decision_ledger_entries[0].correlation_id.startswith("backtest:BTC-USDT:")
     assert report.decision_ledger_entries[0].selector_version == "1.0.0"
     assert report.to_report_dict()["test_range"]["note"].startswith("Out-of-sample")
-    assert report.to_json_bytes()
+    assert report.to_report_dict()["selector_engine_version"] == "1.0.0"
+
+    store = StrategySelectionOOSReportStore(tmp_path)
+    path = store.save(report)
+    repeated_path = store.save(report)
+    assert path == repeated_path
+    stored = store.load(report.report_id)
+    assert stored["report_id"] == report.report_id
+    assert stored["selection_policy"]["required_evidence_count"] == 2
+    assert stored["selector_engine_version"] == "1.0.0"
+    assert path.with_suffix(".json.sha256").exists()
+
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="checksum"):
+        store.load(report.report_id)
 
 
 def test_oos_evaluation_rejects_training_leakage_from_validation_or_test() -> None:
