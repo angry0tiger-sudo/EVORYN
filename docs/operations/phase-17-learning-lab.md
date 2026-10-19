@@ -24,13 +24,16 @@ Use `ExperimentSpec` with:
 `configuration_fingerprint(mapping)` provides the canonical JSON hash helper. For backtest evidence,
 fingerprint `BacktestConfig.as_dict()`; the recorder checks that the result's exact config agrees with
 the registered fingerprint. Never reuse a fingerprint after changing commission, spread, slippage,
-volume participation, initial capital, allocation, quantity step, feature definition or engine version.
+volume participation, initial capital, allocation, quantity step, feature definition or runtime assumption.
+ The engine's code revision and run identity are captured separately from this config fingerprint.
 
 Example identity setup:
 
 ```python
 from datetime import UTC, datetime
-from evoryn.learning_lab.backtest import IndexRange
+from decimal import Decimal
+
+from evoryn.learning_lab.backtest import BacktestConfig, IndexRange
 from evoryn.learning_lab.experiment_registry import (
     ExperimentMode,
     ExperimentRegistry,
@@ -39,22 +42,23 @@ from evoryn.learning_lab.experiment_registry import (
     configuration_fingerprint,
 )
 
-evaluation_settings = {
-    "commission_bps": "10",
-    "spread_bps": "10",
-    "slippage_bps": "5",
-    "max_bar_participation": "0.05",
-    "allocation_fraction": "0.90",
-    "engine_version": "1.0.0",
-}
+backtest_config = BacktestConfig(
+    initial_cash=Decimal("10000"),
+    commission_bps=Decimal("10"),
+    spread_bps=Decimal("10"),
+    slippage_bps=Decimal("5"),
+    max_bar_participation=Decimal("0.05"),
+    allocation_fraction=Decimal("0.90"),
+    quantity_step=Decimal("0.001"),
+)
 spec = ExperimentSpec(
-    code_revision="the-40-character-git-commit-sha",
-    dataset_version="the-64-character-dataset-version",
+    code_revision="a" * 40,  # Replace with the real lowercase Git commit SHA.
+    dataset_version="b" * 64,  # Replace with the registered historical dataset version.
     feature_schema_version="ohlcv-features/v1",
-    evaluation_config_fingerprint=configuration_fingerprint(evaluation_settings),
+    evaluation_config_fingerprint=configuration_fingerprint(backtest_config.as_dict()),
     model_id="strategy-or-model-id",
     model_version="1.0.0",
-    model_fingerprint="the-64-character-model-sha256",
+    model_fingerprint="c" * 64,  # Replace with the actual model/strategy artifact hash.
     parameters=(("fast_window", "10"), ("slow_window", "30")),
     random_seed=42,
     train_range=IndexRange(0, 600),
