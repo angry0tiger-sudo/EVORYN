@@ -512,9 +512,15 @@ class AdvisoryResult:
             or self.confidence > 1
         ):
             raise ValueError("confidence must be a finite Decimal in [0, 1].")
-        if self.confidence is None and self.confidence_semantics is not ConfidenceSemantics.UNAVAILABLE:
+        if (
+            self.confidence is None
+            and self.confidence_semantics is not ConfidenceSemantics.UNAVAILABLE
+        ):
             raise ValueError("Unavailable confidence must use UNAVAILABLE semantics.")
-        if self.confidence is not None and self.confidence_semantics is ConfidenceSemantics.UNAVAILABLE:
+        if (
+            self.confidence is not None
+            and self.confidence_semantics is ConfidenceSemantics.UNAVAILABLE
+        ):
             raise ValueError("Present confidence must declare its semantics.")
         if not self.abstained and self.output_fingerprint is None:
             raise ValueError("A validated recommendation requires an output fingerprint.")
