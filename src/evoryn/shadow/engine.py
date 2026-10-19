@@ -582,10 +582,11 @@ class ShadowRunner:
         if (
             experiment_spec.model_id != strategy.strategy_id
             or experiment_spec.model_version != strategy.strategy_version
+            or experiment_spec.model_fingerprint != actual_fingerprint
             or experiment_spec.parameters != strategy_parameters
         ):
             raise ShadowSafetyError(
-                "Strategy identity/parameters do not match the registered experiment."
+                "Strategy identity/parameters/fingerprint do not match the registered experiment."
             )
         if baseline_experiment_spec.mode is not ExperimentMode.PAPER:
             raise ShadowSafetyError("The baseline experiment must be mode=PAPER.")
@@ -629,10 +630,11 @@ class ShadowRunner:
         if (
             baseline_experiment_spec.model_id != baseline_strategy.strategy_id
             or baseline_experiment_spec.model_version != baseline_strategy.strategy_version
+            or baseline_experiment_spec.model_fingerprint != baseline_fingerprint
             or baseline_experiment_spec.parameters != baseline_parameters
         ):
             raise ShadowSafetyError(
-                "Paper baseline strategy does not match its registered experiment."
+                "Paper baseline strategy identity/parameters/fingerprint do not match its registered experiment."
             )
         if not callable(getattr(risk_assessor, "assess", None)):
             raise ValueError("A read-only observational risk assessor is required.")
@@ -806,11 +808,15 @@ class ShadowRunner:
             candle, received, compare_sequence=False
         )
         reason = base_input_reason
-        if (
-            reason is None
-            and not (self._continuity_blocked or self._identity_blocked)
-        ):
-            reason = self._validate_candle(candle, received, compare_sequence=True)
+        if reason is None:
+            if self._continuity_blocked:
+                reason = "CONTINUITY_RECONCILIATION_REQUIRED"
+            elif self._identity_blocked:
+                reason = "MODEL_IDENTITY_REVIEW_REQUIRED"
+            else:
+                reason = self._validate_candle(
+                    candle, received, compare_sequence=True
+                )
         if reason is None:
             reason = self._strategy_identity_failure()
         if (
@@ -819,10 +825,6 @@ class ShadowRunner:
             != self._baseline_spec.experiment_id
         ):
             reason = "PAPER_CHAMPION_CHANGED"
-        if reason is None and self._continuity_blocked:
-            reason = "CONTINUITY_RECONCILIATION_REQUIRED"
-        if reason is None and self._identity_blocked:
-            reason = "MODEL_IDENTITY_REVIEW_REQUIRED"
 
         candidate_history = tuple(self._history) + (candle,)
         regime: RegimePrediction | None = None
