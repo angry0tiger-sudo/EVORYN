@@ -411,10 +411,28 @@ def test_strategy_exception_is_abstain_and_not_a_risk_approval(tmp_path: Path) -
     snapshot = fixture.runner.process_candle(fixture.candle(), received_at=fixture.now)
 
     assert snapshot.outcome is ShadowOutcome.ABSTAIN
-    assert snapshot.reason_code == "STRATEGY_OUTPUT_INVALID"
+    assert snapshot.reason_code == "STRATEGY_OR_BASELINE_OUTPUT_INVALID"
     assert snapshot.target_quantity is None
+    assert snapshot.baseline_target_quantity is None
     assert snapshot.risk_assessment_status == "NOT_EVALUATED"
     assert "sensitive diagnostic string" not in fixture.ledger.events[-1].payload_json
+
+
+def test_paper_baseline_failure_abstains_the_whole_comparison(tmp_path: Path) -> None:
+    fixture = Fixture(tmp_path)
+
+    def fail_baseline(history: Sequence[MarketCandle]) -> Decimal:
+        raise RuntimeError("baseline-private-error")
+
+    fixture.baseline_strategy.target_exposure = fail_baseline  # type: ignore[method-assign]
+    snapshot = fixture.runner.process_candle(fixture.candle(), received_at=fixture.now)
+
+    assert snapshot.outcome is ShadowOutcome.ABSTAIN
+    assert snapshot.reason_code == "STRATEGY_OR_BASELINE_OUTPUT_INVALID"
+    assert snapshot.target_quantity is None
+    assert snapshot.baseline_target_quantity is None
+    assert fixture.runner.history == ()
+    assert "baseline-private-error" not in fixture.ledger.events[-1].payload_json
 
 
 def test_wrong_market_and_interval_are_rejected(tmp_path: Path) -> None:
@@ -549,7 +567,6 @@ def test_non_persistent_learning_ledger_is_rejected(tmp_path: Path) -> None:
         ShadowRunner(
             config=fixture.config,
             experiment_spec=fixture.spec,
-            baseline_experiment_spec=fixture.baseline_spec,
             baseline_experiment_spec=fixture.baseline_spec,
             registry=memory_registry,
             strategy=fixture.strategy,
