@@ -127,7 +127,13 @@ The active Champion pointer must reference a PAPER spec:
 
 ## Automatic Paper rollback
 
-The controller monitors a registered PAPER evidence record. The default policy rolls back on any of:
+The controller monitors a registered PAPER evidence record. Before examining metrics, it requires
+an external EvidenceTrustVerifier to accept the attestation. Missing verifier, rejected attestation, or
+a verification exception fails closed with TELEMETRY_ATTESTATION_FAILED. The controller restores a
+previous known-good Paper champion when available; otherwise it clears the internal pointer and enters
+SAFE_HOLD_NO_CHAMPION. Every trigger is recorded in the Learning Lab Ledger.
+
+The default metric policy rolls back on any of:
 
 - Maximum drawdown above 20%.
 - Net return below -5%.
