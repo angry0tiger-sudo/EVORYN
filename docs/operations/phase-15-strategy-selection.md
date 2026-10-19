@@ -65,6 +65,9 @@ proven best for that regime.
 - A gap between distinct regime observations longer than the configured maximum age resets
   candidate evidence.
 - The selector requires canonical UTC prediction timestamps and abstains on future/stale data.
+- One selector instance is bound to the first market it receives; a different market ID invalidates
+  its active state and fails closed. Use an independent selector and hysteresis ledger stream per
+  market rather than sharing evidence across symbols.
 - A model ID/version/fingerprint/schema change or registry fingerprint change clears the active
   choice. Evidence must be re-established.
 - While a new candidate is pending, the incumbent remains active if one exists. If there is no
