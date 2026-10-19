@@ -223,7 +223,7 @@ class RiskEngine:
             return ("missing_market_source", "Market data has no source identifier.")
         if not _runtime_is_instance(market_data.values, dict):
             return ("invalid_market_values", "Market data values must be a mapping.")
-        if not isinstance(market_data.quality_flags, tuple):
+        if not _runtime_is_instance(market_data.quality_flags, tuple):
             return ("invalid_quality_metadata", "Market quality flags must be a validated tuple.")
         if market_data.quality_flags:
             return ("market_quality_failure", "Market data has one or more quality failure flags.")
