@@ -76,6 +76,7 @@ class PromotionPolicy:
     maximum_drawdown_worsening: Decimal = Decimal("0.01")
     maximum_net_loss_fraction: Decimal = Decimal("0.05")
     maximum_risk_gate_denials: int = 0
+    maximum_comparisons_per_dataset_test_range: int = 5
 
     def __post_init__(self) -> None:
         for name in ("minimum_observations", "minimum_closed_trades"):
@@ -97,6 +98,13 @@ class PromotionPolicy:
             or self.maximum_risk_gate_denials < 0
         ):
             raise ValueError("maximum_risk_gate_denials must be a non-negative integer.")
+        if (
+            type(self.maximum_comparisons_per_dataset_test_range) is not int
+            or self.maximum_comparisons_per_dataset_test_range <= 0
+        ):
+            raise ValueError(
+                "maximum_comparisons_per_dataset_test_range must be a positive integer."
+            )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -107,6 +115,9 @@ class PromotionPolicy:
             "maximum_drawdown_worsening": str(self.maximum_drawdown_worsening),
             "maximum_net_loss_fraction": str(self.maximum_net_loss_fraction),
             "maximum_risk_gate_denials": self.maximum_risk_gate_denials,
+            "maximum_comparisons_per_dataset_test_range": (
+                self.maximum_comparisons_per_dataset_test_range
+            ),
         }
 
 
@@ -172,6 +183,7 @@ class ChampionChallengerGate:
         *,
         mode: ExperimentMode,
         evaluated_at: datetime,
+        prior_comparison_count: int = 0,
     ) -> PromotionDecision:
         """Apply a fixed gate to equal data/test windows, costs, and execution environment."""
         _require_aware_utc(evaluated_at, "evaluated_at")
@@ -227,6 +239,8 @@ class ChampionChallengerGate:
                 hard_mismatches.append(f"{label}_EVIDENCE_IDENTITY_MISMATCH")
             if spec.mode is not mode:
                 hard_mismatches.append(f"{label}_SPEC_MODE_MISMATCH")
+        if type(prior_comparison_count) is not int or prior_comparison_count < 0:
+            raise ValueError("prior_comparison_count must be a non-negative integer.")
         if hard_mismatches:
             return self._decision(
                 champion_spec,
@@ -236,6 +250,21 @@ class ChampionChallengerGate:
                 mode=mode,
                 status=PromotionStatus.REJECTED,
                 reasons=tuple(dict.fromkeys(hard_mismatches)),
+                evaluated_at=evaluated_at,
+            )
+
+        if (
+            prior_comparison_count
+            >= self._policy.maximum_comparisons_per_dataset_test_range
+        ):
+            return self._decision(
+                champion_spec,
+                challenger_spec,
+                champion_evidence,
+                challenger_evidence,
+                mode=mode,
+                status=PromotionStatus.INSUFFICIENT_EVIDENCE,
+                reasons=("MAX_HOLDOUT_COMPARISONS_REACHED",),
                 evaluated_at=evaluated_at,
             )
 
@@ -481,6 +510,18 @@ class ChampionChallengerController:
             raise ValueError("Champion evaluation evidence is required.")
         champion_evidence = self._registry.get_evidence(champion_evidence_id)
         challenger_evidence = self._registry.get_evidence(challenger_evidence_id)
+        prior_comparison_count = sum(
+            1
+            for event in self._ledger.events
+            if event.event_type is LearningEventType.CANDIDATE_COMPARED
+            and json.loads(event.payload_json).get("dataset_version")
+            == challenger_evidence.dataset_version
+            and json.loads(event.payload_json).get("test_range_start")
+            == challenger_evidence.test_range.start
+            and json.loads(event.payload_json).get("test_range_end")
+            == challenger_evidence.test_range.end
+            and json.loads(event.payload_json).get("mode") == target_mode.value
+        )
         decision = self._gate.evaluate(
             champion_spec,
             challenger_spec,
@@ -488,6 +529,7 @@ class ChampionChallengerController:
             challenger_evidence,
             mode=target_mode,
             evaluated_at=evaluated_at,
+            prior_comparison_count=prior_comparison_count,
         )
         self._ledger.append(
             LearningEventType.CANDIDATE_COMPARED,
@@ -502,6 +544,10 @@ class ChampionChallengerController:
                 "challenger_experiment_id": decision.challenger_experiment_id,
                 "net_return_delta": str(decision.net_return_delta),
                 "max_drawdown_delta": str(decision.max_drawdown_delta),
+                "dataset_version": decision.dataset_version,
+                "test_range_start": decision.test_range_start,
+                "test_range_end": decision.test_range_end,
+                "mode": decision.mode.value,
                 "policy": json.loads(decision.policy_json),
             },
         )
