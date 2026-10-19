@@ -25,6 +25,19 @@ This ledger records unclosed verification and integration obligations. An item c
 - [ ] Run full lint/type/security/pytest gates for the Phase 19 candidate when a runner is available.
 - [ ] Obtain independent risk and architecture review before declaring Phase 19 accepted.
 
+## Phase 19 — Shadow Mode runtime and verification debt
+
+- [ ] **Run the complete Phase 19 tests and all project quality gates** on one exact commit: full pytest, Ruff, strict mypy, Bandit, and pip-audit. Source/test files now exist, but no Phase 19 test execution or green CI result is claimed.
+- [ ] **Restore a real GitHub Actions runner assignment**. The previous confirmed pattern was six jobs failing in 2–3 seconds with `runner_id=0`, empty runner name, and zero steps. Account-level cause remains unconfirmed; the owner/operator must review Actions availability, usage quota/billing and policy settings.
+- [ ] **Supply the actual registered active Paper Champion and a compatible SHADOW experiment** from immutable registry artifacts. The runner now requires the same registry/ledger and a live `ChampionChallengerController.active_champion_id`; no production champion ID or approved runtime spec was present in this continuation.
+- [ ] **Validate the real data/experiment provenance contract**. Candidate and Paper Champion must have matching dataset version, feature schema, evaluation fingerprint, seed, and split boundaries; the live source/market/interval contract is separately recorded as a feed manifest. Obtain independent review that this split reflects the real registered experiment.
+- [ ] **Wire Phase 18 ConnectivityManager into the approved runtime path or record a reviewed exception**. The Phase 19 feed wraps the existing bounded read-only Nobitex adapter; generic Phase 18 manager use by production connectors remains unverified.
+- [ ] **Provision and review persistent audit storage** for the Learning Lab JSONL file: access control, backup/restore, storage integrity, retention and operational alerting. A local fsync-backed file and hash chain are not a complete defense against a privileged attacker rewriting both data and chain.
+- [ ] **Provision an approved read-only Auto-Halt status source** and prove runtime failure/unknown values abstain. The test API uses injected status callbacks; no real runtime provider was configured.
+- [ ] **Configure an external scheduler and health supervision** for bounded `poll_once` calls. No continuous polling daemon, WebSocket client, live market request, or production schedule is included or was run in this PR.
+- [ ] **Independent Phase 19 architecture/risk review**: inspect Paper Champion pointer drift, strategy/regime identity and parameter drift, data freshness/gap recovery, baseline comparison, no-order boundary, and event ledger failure behavior.
+- [ ] **No performance or fill claims** until a separately reviewed fill/cost model and actual governed observations exist. This phase does not calculate counterfactual fills or establish profitability.
+
 ## Evidence classification
 
 - **Observed pass:** exact stated command passed in a recorded environment.
