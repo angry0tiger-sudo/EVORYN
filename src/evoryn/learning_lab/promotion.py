@@ -521,6 +521,16 @@ class ChampionChallengerController:
         self._approved_shadow_candidate_id = shadow_candidate_id
 
     @property
+    def registry(self) -> ExperimentRegistry:
+        """Expose the exact registry bound to the replayed champion pointer, read-only."""
+        return self._registry
+
+    @property
+    def ledger(self) -> LearningLabLedger:
+        """Expose the durable ledger backing the Paper champion pointer, read-only."""
+        return self._ledger
+
+    @property
     def active_champion_id(self) -> str | None:
         return self._active_champion_id
 
