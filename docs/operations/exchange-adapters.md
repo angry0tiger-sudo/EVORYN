@@ -54,3 +54,12 @@ The HTTP transport pins the official HTTPS host, disallows redirects, and allowl
 The common `ExchangePort` declares `submit_order` and `cancel_order` for architectural completeness. The current Nobitex adapter always raises `TradingDisabledError` for both methods and never calls the transport. `ENABLE_REAL_TRADING=True` is rejected rather than treated as authorization. The example flag is not a runtime safety system and does not enable writes.
 
 Order-writing implementation requires the later execution and risk phases, verified API/order-lifecycle contracts, reconciliation and idempotency tests, independent review, and explicit release authorization. This adapter must not be described as production-ready for real-money trading.
+
+## Phase 21A capability evidence boundary
+
+The legacy `ExchangeCapabilities` booleans continue to describe the existing common adapter contract; they do
+not prove support for every market type. See `docs/engineering/phase-21-capability-matrix.md` and ADR 0014
+for the evidence-backed per-venue/per-market/per-feature model. An omitted capability is `unknown`. This
+initial model is not yet wired as a production runtime permission service. In particular, current Nobitex
+Spot/Margin contracts do not prove Futures support. No new order-writing route or Futures adapter is
+introduced by the initial Phase 21A foundation.
