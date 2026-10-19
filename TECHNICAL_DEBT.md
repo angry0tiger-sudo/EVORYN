@@ -40,6 +40,10 @@ This ledger records unclosed verification and integration obligations. An item c
 - [ ] **Independent Phase 19 architecture/risk review**: inspect Paper Champion pointer drift, strategy/regime identity and parameter drift, data freshness/gap recovery, baseline comparison, no-order boundary, and event ledger failure behavior.
 - [ ] **No performance or fill claims** until a separately reviewed fill/cost model and actual governed observations exist. This phase does not calculate counterfactual fills or establish profitability.
 
+## Phase 20 — Scope discovery gate
+
+- [ ] **Obtain and register the canonical Phase 20 scope before implementation.** Repository tree/code searches for `Phase 20`, `roadmap`, and `page 6` returned no matching roadmap/specification artifact. The current owner handover provides detailed acceptance requirements for Phases 18 and 19, but no Phase 20 objectives, interfaces, safety gates or acceptance criteria. Do not invent a trading, AI, connectivity or execution feature to fill that gap. Once the canonical scope is supplied or committed, record an ADR/acceptance plan and continue on a separate phase-specific branch.
+
 ## Evidence classification
 
 - **Observed pass:** exact stated command passed in a recorded environment.
