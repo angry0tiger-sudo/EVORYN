@@ -182,6 +182,33 @@ def test_routing_preferences_have_an_explicit_fingerprint() -> None:
         RegimeStrategySelector(registry, preferred_strategy_by_regime={})
 
 
+def test_selector_is_market_scoped_and_cannot_mix_market_hysteresis() -> None:
+    selector = RegimeStrategySelector(
+        build_baseline_registry(),
+        policy=StrategySelectionPolicy(
+            required_evidence_count=2,
+            required_stability_duration=timedelta(hours=1),
+            minimum_hold_duration=timedelta(hours=1),
+        ),
+    )
+    select_at(selector, RegimeLabel.BULL_TREND, 1)
+    active = select_at(selector, RegimeLabel.BULL_TREND, 2)
+    assert active.status is SelectionStatus.SWITCHED
+    assert active.selected_strategy_id == "sma-crossover-long-flat"
+
+    other_market = selector.select(
+        prediction(RegimeLabel.BULL_TREND, selection_time(3)),
+        now=selection_time(3),
+        correlation_id="selector:ETH-USDT:3",
+        market_symbol="ETH-USDT",
+    )
+
+    assert other_market.status is SelectionStatus.MARKET_SCOPE_CHANGED
+    assert other_market.previous_strategy_id == "sma-crossover-long-flat"
+    assert other_market.selected_strategy_id is None
+    assert not other_market.allow_new_signals
+
+
 def test_candidate_evidence_resets_after_large_observation_gaps() -> None:
     selector = RegimeStrategySelector(
         build_baseline_registry(),
