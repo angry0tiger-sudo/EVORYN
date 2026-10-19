@@ -87,10 +87,10 @@ class StrategySelectionLedgerEntry:
         if (
             type(self.required_stability_seconds) is not int
             or type(self.minimum_hold_seconds) is not int
-            or self.required_stability_seconds < 0
-            or self.minimum_hold_seconds < 0
+            or self.required_stability_seconds <= 0
+            or self.minimum_hold_seconds <= 0
         ):
-            raise ValueError("Strategy-selection dwell times must be non-negative integers.")
+            raise ValueError("Strategy-selection dwell times must be positive integers.")
         if type(self.allow_new_signals) is not bool:
             raise ValueError("allow_new_signals must be an explicit boolean.")
         if len(set(self.alternative_strategy_ids)) != len(self.alternative_strategy_ids):
