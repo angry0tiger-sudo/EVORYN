@@ -70,7 +70,9 @@ proven best for that regime.
   market rather than sharing evidence across symbols.
 - A model ID/version/fingerprint/schema change or registry fingerprint change clears the active
   choice. Evidence must be re-established.
-- While a new candidate is pending, the incumbent remains active if one exists. If there is no
+- While a new candidate is pending, the incumbent remains recorded if one exists. It may continue
+  issuing signals only if it explicitly supports the newly observed regime; otherwise new signals
+  pause and the research target is flat while hysteresis requirements accumulate. If there is no
   incumbent yet, the research adapter remains flat. Abstention also returns flat.
 
 Time durations are configuration constraints and cannot be zero. The evidence count is a minimum,
