@@ -19,6 +19,7 @@ from evoryn.learning_lab.experiment_registry import (
     LearningEventType,
     LearningLabLedger,
 )
+from evoryn.learning_lab.promotion import ChampionChallengerController
 from evoryn.shadow.engine import (
     NobitexRestCandleFeed,
     ShadowConfig,
@@ -213,6 +214,11 @@ class Fixture:
             self.baseline_spec, correlation_id="test:register-paper-baseline"
         )
         self.registry.register(self.spec, correlation_id="test:register-shadow")
+        self.champion_controller = ChampionChallengerController(
+            registry=self.registry,
+            ledger=self.ledger,
+            champion_experiment_id=self.baseline_spec.experiment_id,
+        )
         self.runner = ShadowRunner(
             config=self.config,
             experiment_spec=self.spec,
@@ -220,6 +226,7 @@ class Fixture:
             registry=self.registry,
             strategy=self.strategy,
             baseline_strategy=self.baseline_strategy,
+            champion_controller=self.champion_controller,
             regime_classifier=self.regime,
             auto_halt_status=lambda: self.halted,
             utcnow=lambda: self.now,
@@ -471,6 +478,11 @@ def test_baseline_must_share_registered_training_data_identity(tmp_path: Path) -
         created_at=fixture.now + timedelta(seconds=1),
     )
     fixture.registry.register(mismatched, correlation_id="test:register-mismatched-paper")
+    mismatched_controller = ChampionChallengerController(
+        registry=fixture.registry,
+        ledger=fixture.ledger,
+        champion_experiment_id=mismatched.experiment_id,
+    )
     with pytest.raises(ShadowSafetyError, match="data/split identity"):
         ShadowRunner(
             config=fixture.config,
@@ -479,6 +491,7 @@ def test_baseline_must_share_registered_training_data_identity(tmp_path: Path) -
             registry=fixture.registry,
             strategy=fixture.strategy,
             baseline_strategy=fixture.baseline_strategy,
+            champion_controller=mismatched_controller,
             regime_classifier=fixture.regime,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
