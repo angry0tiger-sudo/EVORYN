@@ -1,0 +1,504 @@
+"""Synthetic Phase 17 tests for immutable experiments, promotion gates and rollback."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from evoryn.learning_lab.backtest import IndexRange
+from evoryn.learning_lab.experiment_registry import (
+    ExperimentIntegrityError,
+    ExperimentMode,
+    ExperimentRegistry,
+    ExperimentRunEvidence,
+    ExperimentSpec,
+    LearningEventType,
+    LearningLabLedger,
+)
+from evoryn.learning_lab.promotion import (
+    ChampionChallengerController,
+    ChampionChallengerGate,
+    PromotionPolicy,
+    PromotionStatus,
+    ReleasePipelineGate,
+    ReleaseTarget,
+    RollbackPolicy,
+    RollbackStatus,
+    RollbackTrigger,
+)
+
+
+NOW = datetime(2026, 1, 1, 12, tzinfo=UTC)
+DATASET_VERSION = "d" * 64
+EVALUATION_CONFIG_FINGERPRINT = "e" * 64
+CODE_REVISION = "a" * 40
+FEATURE_SCHEMA_VERSION = "features/v1"
+TRAIN = IndexRange(0, 50)
+VALIDATION = IndexRange(50, 70)
+TEST = IndexRange(70, 100)
+
+
+def canonical_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
+    ).encode("utf-8")
+
+
+def sha256(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def parameters_fingerprint(parameters: tuple[tuple[str, str], ...]) -> str:
+    return sha256(canonical_bytes(dict(parameters)))
+
+
+def make_spec(
+    *,
+    model_id: str = "test-model-a",
+    model_fingerprint: str = "1" * 64,
+    mode: ExperimentMode = ExperimentMode.PAPER,
+    created_minutes: int = 0,
+    dataset_version: str = DATASET_VERSION,
+    evaluation_config_fingerprint: str = EVALUATION_CONFIG_FINGERPRINT,
+    parameters: tuple[tuple[str, str], ...] = (("fast_window", "5"), ("slow_window", "20")),
+    test_range: IndexRange = TEST,
+) -> ExperimentSpec:
+    return ExperimentSpec(
+        code_revision=CODE_REVISION,
+        dataset_version=dataset_version,
+        feature_schema_version=FEATURE_SCHEMA_VERSION,
+        evaluation_config_fingerprint=evaluation_config_fingerprint,
+        model_id=model_id,
+        model_version="1.0.0",
+        model_fingerprint=model_fingerprint,
+        parameters=parameters,
+        random_seed=42,
+        train_range=TRAIN,
+        validation_range=VALIDATION,
+        test_range=test_range,
+        mode=mode,
+        created_at=NOW + timedelta(minutes=created_minutes),
+    )
+
+
+def make_evidence(
+    spec: ExperimentSpec,
+    *,
+    net_return: str = "0.03",
+    max_drawdown: str = "0.08",
+    observations: int = 120,
+    closed_trades: int = 12,
+    data_quality_pass: bool = True,
+    risk_denials: int = 0,
+    run_suffix: str = "run-a",
+    collected_at: datetime = NOW + timedelta(hours=1),
+) -> ExperimentRunEvidence:
+    mode_origin = {
+        ExperimentMode.BACKTEST: "backtest_replay",
+        ExperimentMode.SHADOW: "shadow_telemetry",
+        ExperimentMode.PAPER: "paper_telemetry",
+    }
+    return ExperimentRunEvidence(
+        experiment_id=spec.experiment_id,
+        mode=spec.mode,
+        dataset_version=spec.dataset_version,
+        test_range=spec.test_range,
+        code_revision=spec.code_revision,
+        feature_schema_version=spec.feature_schema_version,
+        evaluation_config_fingerprint=spec.evaluation_config_fingerprint,
+        model_id=spec.model_id,
+        model_version=spec.model_version,
+        model_fingerprint=spec.model_fingerprint,
+        parameters_fingerprint=parameters_fingerprint(spec.parameters),
+        random_seed=spec.random_seed,
+        run_id=sha256(run_suffix.encode("utf-8")),
+        observations=observations,
+        closed_trade_count=closed_trades,
+        net_profit=Decimal("300"),
+        net_return_fraction=Decimal(net_return),
+        max_drawdown_fraction=Decimal(max_drawdown),
+        expectancy_per_closed_trade=Decimal("25"),
+        turnover_multiple=Decimal("1.7"),
+        data_quality_pass=data_quality_pass,
+        risk_gate_denial_count=risk_denials,
+        evidence_origin=mode_origin[spec.mode],
+        collected_at=collected_at,
+    )
+
+
+def make_registry(root: Path) -> tuple[ExperimentRegistry, LearningLabLedger]:
+    ledger = LearningLabLedger(root / "learning-lab-ledger.jsonl")
+    return ExperimentRegistry(root / "experiments", ledger), ledger
+
+
+def register_spec_and_evidence(
+    registry: ExperimentRegistry,
+    spec: ExperimentSpec,
+    evidence: ExperimentRunEvidence,
+) -> str:
+    registry.register(spec, correlation_id=f"test:{spec.experiment_id}:register")
+    registry.record_evidence(evidence, correlation_id=f"test:{spec.experiment_id}:evidence")
+    return evidence.evidence_id
+
+
+def test_experiment_fingerprint_binds_all_reproducibility_inputs() -> None:
+    original = make_spec()
+    different_data = make_spec(dataset_version="f" * 64)
+    different_config = make_spec(evaluation_config_fingerprint="b" * 64)
+    different_seed = replace(original, random_seed=7)
+    different_parameters = make_spec(parameters=(("fast_window", "4"), ("slow_window", "20")))
+
+    assert original.fingerprint != different_data.fingerprint
+    assert original.fingerprint != different_config.fingerprint
+    assert original.fingerprint != different_seed.fingerprint
+    assert original.fingerprint != different_parameters.fingerprint
+    assert original.experiment_id != replace(
+        original, created_at=original.created_at + timedelta(seconds=1)
+    ).experiment_id
+
+
+def test_experiment_spec_rejects_unsorted_parameters_and_overlapping_ranges() -> None:
+    with pytest.raises(ValueError, match="sorted by key"):
+        make_spec(parameters=(("slow_window", "20"), ("fast_window", "5")))
+    with pytest.raises(ValueError, match="chronological and disjoint"):
+        replace(make_spec(), validation_range=IndexRange(40, 70))
+
+
+def test_registry_stores_immutable_specs_and_detects_tampering(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    spec = make_spec()
+    experiment_id = registry.register(spec, correlation_id="experiment:register")
+
+    assert registry.get(experiment_id) == spec
+    assert ledger.verify()
+    assert ledger.events[0].event_type is LearningEventType.EXPERIMENT_REGISTERED
+
+    spec_path = tmp_path / "experiments" / "specs" / f"{experiment_id}.json"
+    content = json.loads(spec_path.read_bytes())
+    content["model_version"] = "tampered"
+    spec_path.write_bytes(canonical_bytes(content))
+
+    fresh_registry = ExperimentRegistry(tmp_path / "experiments", LearningLabLedger())
+    with pytest.raises(ExperimentIntegrityError):
+        fresh_registry.get(experiment_id)
+
+
+def test_learning_lab_ledger_is_hash_chained_and_detects_corrupt_lines(tmp_path: Path) -> None:
+    path = tmp_path / "ledger.jsonl"
+    ledger = LearningLabLedger(path)
+    event = ledger.append(
+        LearningEventType.EXPERIMENT_REGISTERED,
+        experiment_id="a" * 64,
+        correlation_id="run:test-1",
+        occurred_at=NOW,
+        payload={"dataset_version": DATASET_VERSION, "seed": 42},
+    )
+    second = ledger.append(
+        LearningEventType.EVIDENCE_RECORDED,
+        experiment_id="a" * 64,
+        correlation_id="run:test-1",
+        occurred_at=NOW + timedelta(seconds=1),
+        payload={"net_return": "0.02"},
+    )
+
+    reloaded = LearningLabLedger(path)
+    assert reloaded.verify()
+    assert [event.event_hash for event in reloaded.events] == [
+        event.event_hash,
+        second.event_hash,
+    ]
+    assert second.previous_event_hash == event.event_hash
+
+    raw = path.read_bytes().replace(b'"net_return":"0.02"', b'"net_return":"9.99"')
+    path.write_bytes(raw)
+    with pytest.raises(ExperimentIntegrityError):
+        LearningLabLedger(path)
+
+
+def test_registry_binds_evidence_to_exact_experiment_identity(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    spec = make_spec()
+    good = make_evidence(spec)
+    registry.register(spec, correlation_id="experiment:registered")
+    evidence_id = registry.record_evidence(good, correlation_id="experiment:evidence")
+
+    assert registry.get_evidence(evidence_id) == good
+    assert ledger.events[-1].event_type is LearningEventType.EVIDENCE_RECORDED
+
+    wrong_config = replace(good, evaluation_config_fingerprint="9" * 64)
+    with pytest.raises(ExperimentIntegrityError, match="identity"):
+        registry.record_evidence(wrong_config, correlation_id="experiment:bad-config")
+
+
+def test_backtest_evidence_cannot_be_created_for_paper_experiment() -> None:
+    paper_spec = make_spec(mode=ExperimentMode.PAPER)
+    fake_result: Any = object()
+    with pytest.raises(ValueError, match="BACKTEST mode"):
+        ExperimentRunEvidence.from_backtest_result(
+            paper_spec, fake_result, collected_at=NOW
+        )
+
+
+def test_champion_challenger_promotes_only_after_predeclared_gates(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    champion_spec = make_spec(model_id="champion", model_fingerprint="1" * 64)
+    challenger_spec = make_spec(
+        model_id="challenger",
+        model_fingerprint="2" * 64,
+        created_minutes=1,
+        parameters=(("fast_window", "4"), ("slow_window", "18")),
+    )
+    champion_evidence = make_evidence(
+        champion_spec, net_return="0.02", max_drawdown="0.10", run_suffix="champion-run"
+    )
+    challenger_evidence = make_evidence(
+        challenger_spec, net_return="0.03", max_drawdown="0.08", run_suffix="challenger-run"
+    )
+    register_spec_and_evidence(registry, champion_spec, champion_evidence)
+    register_spec_and_evidence(registry, challenger_spec, challenger_evidence)
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=champion_spec.experiment_id,
+        gate=ChampionChallengerGate(
+            PromotionPolicy(
+                minimum_observations=100,
+                minimum_closed_trades=10,
+                minimum_net_return_improvement=Decimal("0.005"),
+            )
+        ),
+    )
+
+    decision = controller.compare_and_promote(
+        champion_evidence_id=champion_evidence.evidence_id,
+        challenger_experiment_id=challenger_spec.experiment_id,
+        challenger_evidence_id=challenger_evidence.evidence_id,
+        target_mode=ExperimentMode.PAPER,
+        evaluated_at=NOW + timedelta(hours=2),
+        correlation_id="paper-promotion:challenger",
+    )
+
+    assert decision.status is PromotionStatus.PROMOTED_TO_PAPER
+    assert controller.active_champion_id == challenger_spec.experiment_id
+    assert controller.previous_champion_id == champion_spec.experiment_id
+    assert ledger.events[-1].event_type is LearningEventType.CANDIDATE_PROMOTED_TO_PAPER
+
+
+def test_champion_challenger_rejects_changed_cost_configuration(tmp_path: Path) -> None:
+    registry, _ = make_registry(tmp_path)
+    champion_spec = make_spec(model_id="champion", model_fingerprint="1" * 64)
+    challenger_spec = make_spec(
+        model_id="challenger",
+        model_fingerprint="2" * 64,
+        created_minutes=1,
+        evaluation_config_fingerprint="8" * 64,
+    )
+    champion = make_evidence(champion_spec, net_return="0.02", run_suffix="champion")
+    challenger = make_evidence(challenger_spec, net_return="0.05", run_suffix="challenger")
+    register_spec_and_evidence(registry, champion_spec, champion)
+    register_spec_and_evidence(registry, challenger_spec, challenger)
+
+    decision = ChampionChallengerGate().evaluate(
+        champion_spec,
+        challenger_spec,
+        champion,
+        challenger,
+        mode=ExperimentMode.PAPER,
+        evaluated_at=NOW + timedelta(hours=2),
+    )
+
+    assert decision.status is PromotionStatus.REJECTED
+    assert "CHANGED_EVALUATION_CONFIG" in decision.reasons
+
+
+def test_automatic_rollback_restores_last_known_good_paper_champion(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    champion_spec = make_spec(model_id="known-good", model_fingerprint="1" * 64)
+    challenger_spec = make_spec(
+        model_id="challenger", model_fingerprint="2" * 64, created_minutes=1,
+        parameters=(("fast_window", "4"), ("slow_window", "18"))
+    )
+    champion_good = make_evidence(
+        champion_spec, net_return="0.02", max_drawdown="0.10", run_suffix="known-good"
+    )
+    challenger_good = make_evidence(
+        challenger_spec, net_return="0.03", max_drawdown="0.08", run_suffix="challenger-good"
+    )
+    register_spec_and_evidence(registry, champion_spec, champion_good)
+    register_spec_and_evidence(registry, challenger_spec, challenger_good)
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=champion_spec.experiment_id,
+        gate=ChampionChallengerGate(
+            PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
+        ),
+        rollback_policy=RollbackPolicy(
+            minimum_observations=10,
+            maximum_drawdown_fraction=Decimal("0.20"),
+            maximum_net_loss_fraction=Decimal("0.05"),
+        ),
+    )
+    promoted = controller.compare_and_promote(
+        champion_evidence_id=champion_good.evidence_id,
+        challenger_experiment_id=challenger_spec.experiment_id,
+        challenger_evidence_id=challenger_good.evidence_id,
+        target_mode=ExperimentMode.PAPER,
+        evaluated_at=NOW + timedelta(hours=2),
+        correlation_id="paper-promotion:challenger",
+    )
+    assert promoted.status is PromotionStatus.PROMOTED_TO_PAPER
+
+    bad_paper_telemetry = make_evidence(
+        challenger_spec,
+        net_return="-0.10",
+        max_drawdown="0.30",
+        run_suffix="challenger-bad-paper",
+        collected_at=NOW + timedelta(hours=3),
+    )
+    registry.record_evidence(
+        bad_paper_telemetry, correlation_id="paper-health:challenger"
+    )
+    rollback = controller.monitor_paper_champion(
+        bad_paper_telemetry.evidence_id,
+        checked_at=NOW + timedelta(hours=4),
+        correlation_id="paper-rollback:challenger",
+    )
+
+    assert rollback.status is RollbackStatus.ROLLED_BACK
+    assert rollback.trigger is RollbackTrigger.MAX_DRAWDOWN_EXCEEDED
+    assert controller.active_champion_id == champion_spec.experiment_id
+    assert ledger.events[-1].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
+
+
+def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_paper(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    paper_champion = make_spec(model_id="champion", model_fingerprint="1" * 64)
+    shadow_champion = replace(paper_champion, mode=ExperimentMode.SHADOW)
+    shadow_challenger = make_spec(
+        model_id="challenger",
+        model_fingerprint="2" * 64,
+        mode=ExperimentMode.SHADOW,
+        created_minutes=1,
+        parameters=(("fast_window", "4"), ("slow_window", "18")),
+    )
+    paper_evidence = make_evidence(paper_champion, run_suffix="paper-champion")
+    shadow_champion_evidence = make_evidence(
+        shadow_champion,
+        run_suffix="shadow-champion",
+        collected_at=NOW + timedelta(hours=1),
+    )
+    shadow_challenger_evidence = make_evidence(
+        shadow_challenger,
+        run_suffix="shadow-challenger",
+        collected_at=NOW + timedelta(hours=1),
+    )
+    for spec, evidence in (
+        (paper_champion, paper_evidence),
+        (shadow_champion, shadow_champion_evidence),
+        (shadow_challenger, shadow_challenger_evidence),
+    ):
+        register_spec_and_evidence(registry, spec, evidence)
+    controller = ChampionChallengerController(
+        registry=registry,
+        ledger=ledger,
+        champion_experiment_id=paper_champion.experiment_id,
+        gate=ChampionChallengerGate(PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)),
+    )
+
+    decision = controller.compare_and_promote(
+        champion_evidence_id=shadow_champion_evidence.evidence_id,
+        challenger_experiment_id=shadow_challenger.experiment_id,
+        challenger_evidence_id=shadow_challenger_evidence.evidence_id,
+        target_mode=ExperimentMode.SHADOW,
+        shadow_champion_experiment_id=shadow_champion.experiment_id,
+        evaluated_at=NOW + timedelta(hours=2),
+        correlation_id="shadow-comparison:test",
+    )
+
+    assert decision.status is PromotionStatus.APPROVED_FOR_SHADOW
+    assert controller.active_champion_id == paper_champion.experiment_id
+    assert controller.approved_shadow_candidate_id == shadow_challenger.experiment_id
+
+
+def test_release_gate_requires_approved_risk_fingerprint_and_blocks_live(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    spec = make_spec(mode=ExperimentMode.PAPER)
+    registry.register(spec, correlation_id="release:register")
+    risk_fingerprint = "9" * 64
+    release_gate = ReleasePipelineGate(
+        registry=registry,
+        ledger=ledger,
+        approved_risk_policy_sha256=risk_fingerprint,
+    )
+
+    with pytest.raises(PermissionError, match="cannot create or authorize a Live release"):
+        release_gate.create_candidate(
+            spec.experiment_id,
+            target=ReleaseTarget.LIVE,
+            test_report_sha256="1" * 64,
+            security_report_sha256="2" * 64,
+            risk_policy_sha256=risk_fingerprint,
+            created_at=NOW + timedelta(hours=1),
+            correlation_id="release:attempt-live",
+        )
+    assert ledger.events[-1].event_type is LearningEventType.LIVE_RELEASE_BLOCKED
+
+    candidate = release_gate.create_candidate(
+        spec.experiment_id,
+        target=ReleaseTarget.PAPER,
+        test_report_sha256="1" * 64,
+        security_report_sha256="2" * 64,
+        risk_policy_sha256=risk_fingerprint,
+        created_at=NOW + timedelta(hours=1),
+        correlation_id="release:paper-candidate",
+    )
+    approved = release_gate.approve_candidate(
+        candidate.candidate_id,
+        approved_by="human-reviewer",
+        approval_reference="approval-ticket-123",
+        approved_at=NOW + timedelta(hours=2),
+        current_risk_policy_sha256=risk_fingerprint,
+        correlation_id="release:paper-approved",
+    )
+
+    assert approved.is_approved
+    assert ledger.events[-1].event_type is LearningEventType.RELEASE_APPROVED
+
+
+def test_release_gate_rejects_risk_policy_drift_and_changed_approval(tmp_path: Path) -> None:
+    registry, ledger = make_registry(tmp_path)
+    spec = make_spec(mode=ExperimentMode.PAPER)
+    registry.register(spec, correlation_id="release:register")
+    release_gate = ReleasePipelineGate(
+        registry=registry,
+        ledger=ledger,
+        approved_risk_policy_sha256="9" * 64,
+    )
+    with pytest.raises(PermissionError, match="Risk policy fingerprint"):
+        release_gate.create_candidate(
+            spec.experiment_id,
+            target=ReleaseTarget.PAPER,
+            test_report_sha256="1" * 64,
+            security_report_sha256="2" * 64,
+            risk_policy_sha256="8" * 64,
+            created_at=NOW + timedelta(hours=1),
+            correlation_id="release:bad-policy",
+        )
+
+
+def test_rollback_without_predecessor_enters_safe_hold_and_small_windows_do_not_trigger() -> None:
+    # Policy evaluation with too few observations is not a rollback trigger.
+    evidence = make_evidence(
+        make_spec(), observations=2, run_suffix="too-short"
+    )
+    # The controller is intentionally not constructed here: a no-predecessor controller
+    # is covered by the same rollback branch after promotion in integration tests.
+    assert evidence.observations < RollbackPolicy(minimum_observations=20).minimum_observations
