@@ -163,7 +163,6 @@ class Fixture:
             max_candle_age_seconds=180,
             max_future_skew_seconds=1,
             min_regime_confidence=Decimal("0.65"),
-            max_gap_intervals=1,
             max_history_candles=100,
         )
         self.strategy = FixedExposureStrategy(exposure)
