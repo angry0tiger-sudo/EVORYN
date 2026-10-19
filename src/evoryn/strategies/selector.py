@@ -450,13 +450,32 @@ class RegimeStrategySelector:
         )
 
     def _validate_preferences(self) -> None:
+        known_regimes = {
+            RegimeLabel.BULL_TREND,
+            RegimeLabel.BEAR_TREND,
+            RegimeLabel.RANGE_BOUND,
+            RegimeLabel.HIGH_VOLATILITY,
+        }
+        if set(self._preferences) != known_regimes:
+            raise ValueError("A strategy preference list is required for every known regime.")
         for label, choices in self._preferences.items():
-            if label is RegimeLabel.UNKNOWN or not isinstance(label, RegimeLabel):
+            if not isinstance(label, RegimeLabel) or label is RegimeLabel.UNKNOWN:
                 raise ValueError("Strategy preferences may only name known RegimeLabel values.")
             if not choices or any(not choice.strip() for choice in choices):
                 raise ValueError("Every mapped regime must have non-empty preferred plugin IDs.")
             if len(set(choices)) != len(choices):
                 raise ValueError("Preferred plugin IDs must be unique per regime.")
+            for plugin_id in choices:
+                try:
+                    plugin = self._registry.get(plugin_id)
+                except KeyError as exc:
+                    raise ValueError(
+                        f"Preferred strategy plugin {plugin_id!r} is not registered."
+                    ) from exc
+                if label not in plugin.supported_regimes:
+                    raise ValueError(
+                        f"Plugin {plugin_id!r} is not registered for regime {label.value!r}."
+                    )
 
     def _ordered_options(
         self,
