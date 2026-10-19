@@ -1,5 +1,31 @@
 """Research-only market intelligence, isolated from risk and execution authority."""
 
+from evoryn.intelligence.huggingface_provider import (
+    HuggingFaceSequenceClassificationProvider,
+    TransformersSequenceClassificationRuntime,
+)
+from evoryn.intelligence.model_provider import (
+    AdvisoryResult,
+    ConfidenceSemantics,
+    CredentialHeaderProvider,
+    DataClassification,
+    InMemoryModelAuditSink,
+    IntelligenceCore,
+    JsonPostTransport,
+    ModelAuditEvent,
+    ModelAuditEventType,
+    ModelAuditSink,
+    ModelIdentity,
+    ModelPolicy,
+    ModelProviderError,
+    ModelProviderPort,
+    ModelRequest,
+    ModelResponse,
+    ModelTask,
+    OpenAICompatibleChatAdapter,
+    StructuredJsonSchema,
+    TokenUsage,
+)
 from evoryn.intelligence.hmmlearn_adapter import (
     GaussianHMMRegimeModel,
     HMMTrainingManifest,
@@ -16,6 +42,28 @@ from evoryn.intelligence.regime import (
 )
 
 __all__ = [
+    "AdvisoryResult",
+    "ConfidenceSemantics",
+    "CredentialHeaderProvider",
+    "DataClassification",
+    "HuggingFaceSequenceClassificationProvider",
+    "InMemoryModelAuditSink",
+    "IntelligenceCore",
+    "JsonPostTransport",
+    "ModelAuditEvent",
+    "ModelAuditEventType",
+    "ModelAuditSink",
+    "ModelIdentity",
+    "ModelPolicy",
+    "ModelProviderError",
+    "ModelProviderPort",
+    "ModelRequest",
+    "ModelResponse",
+    "ModelTask",
+    "OpenAICompatibleChatAdapter",
+    "StructuredJsonSchema",
+    "TokenUsage",
+    "TransformersSequenceClassificationRuntime",
     "GaussianHMMRegimeModel",
     "HMMTrainingManifest",
     "RegimeDependencyUnavailable",
