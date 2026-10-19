@@ -157,7 +157,7 @@ def test_plugin_registration_rejects_unknown_regime_as_a_route() -> None:
 def test_hysteresis_configuration_requires_positive_time_guards() -> None:
     with pytest.raises(ValueError, match="positive whole-second timedelta"):
         StrategySelectionPolicy(required_stability_duration=timedelta(0))
-    with pytest.raises(ValueError, match="positive timedelta"):
+    with pytest.raises(ValueError, match="positive whole-second timedelta"):
         StrategySelectionPolicy(minimum_hold_duration=timedelta(0))
 
 
