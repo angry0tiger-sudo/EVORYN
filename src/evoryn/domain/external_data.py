@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from urllib.parse import urlsplit
@@ -209,6 +209,7 @@ class NewsArticleCandidate:
     attribution_text: str
     payload_sha256: str
     declared_content_sha256: str | None = None
+    related_asset_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """Validate structural provenance, while leaving content quality to the quality gate."""
@@ -232,6 +233,10 @@ class NewsArticleCandidate:
             _require_sha256(self.declared_content_sha256, "declared_content_sha256")
         if self.provider_revision is not None and not self.provider_revision.strip():
             raise ValueError("provider_revision must be None or a non-empty string.")
+        if len(set(self.related_asset_ids)) != len(self.related_asset_ids):
+            raise ValueError("related_asset_ids must be unique.")
+        if any(not asset.strip() for asset in self.related_asset_ids):
+            raise ValueError("related_asset_ids cannot contain empty values.")
 
     @property
     def normalized_content(self) -> str:
@@ -264,6 +269,8 @@ class NewsArticleRecord:
     content_sha256: str
     payload_sha256: str
     integrity_evidence: str
+    related_asset_ids: tuple[str, ...] = ()
+    source_trust_score: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         for name in (
@@ -285,6 +292,16 @@ class NewsArticleRecord:
             raise ValueError("An accepted article must have a title.")
         _require_sha256(self.content_sha256, "content_sha256")
         _require_sha256(self.payload_sha256, "payload_sha256")
+        if len(set(self.related_asset_ids)) != len(self.related_asset_ids):
+            raise ValueError("related_asset_ids must be unique.")
+        if any(not asset.strip() for asset in self.related_asset_ids):
+            raise ValueError("related_asset_ids cannot contain empty values.")
+        if (
+            not isinstance(self.source_trust_score, Decimal)
+            or not self.source_trust_score.is_finite()
+            or not Decimal("0") <= self.source_trust_score <= Decimal("1")
+        ):
+            raise ValueError("source_trust_score must be a finite Decimal in [0, 1].")
 
 
 @dataclass(frozen=True, slots=True)
@@ -338,7 +355,9 @@ class NewsSentimentRecord:
         if self.analyzed_at < self.article.retrieved_at:
             raise ValueError("Sentiment analysis cannot precede data retrieval.")
         if self.label is SentimentLabel.UNKNOWN:
-            raise ValueError("UNKNOWN sentiment must be represented by abstention, not probabilities.")
+            raise ValueError(
+                "UNKNOWN sentiment must be represented by abstention, not probabilities."
+            )
 
     @property
     def sentiment_score(self) -> Decimal:
