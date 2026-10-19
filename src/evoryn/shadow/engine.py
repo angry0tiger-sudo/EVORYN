@@ -29,6 +29,7 @@ from evoryn.learning_lab.experiment_registry import (
     LearningLabLedger,
     configuration_fingerprint,
 )
+from evoryn.learning_lab.promotion import ChampionChallengerController
 from evoryn.strategies.contracts import CausalTargetStrategy
 
 
@@ -487,6 +488,7 @@ class ShadowRunner:
         registry: ExperimentRegistry,
         strategy: CausalTargetStrategy,
         baseline_strategy: CausalTargetStrategy,
+        champion_controller: ChampionChallengerController,
         regime_classifier: RegimeClassifierPort,
         auto_halt_status: Callable[[], bool],
         utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -521,6 +523,14 @@ class ShadowRunner:
             )
         if baseline_experiment_spec.mode is not ExperimentMode.PAPER:
             raise ShadowSafetyError("The baseline experiment must be mode=PAPER.")
+        if champion_controller.registry is not registry or champion_controller.ledger is not registry.ledger:
+            raise ShadowSafetyError(
+                "Paper Champion controller must use this exact registry and persistent ledger."
+            )
+        if champion_controller.active_champion_id != baseline_experiment_spec.experiment_id:
+            raise ShadowSafetyError(
+                "The selected Paper baseline is not the current active Paper Champion."
+            )
         if registry.get(baseline_experiment_spec.experiment_id) != baseline_experiment_spec:
             raise ShadowSafetyError("Paper baseline experiment is not identically registered.")
         if (
@@ -560,6 +570,7 @@ class ShadowRunner:
         self._config = config
         self._spec = experiment_spec
         self._baseline_spec = baseline_experiment_spec
+        self._champion_controller = champion_controller
         self._registry = registry
         self._ledger: LearningLabLedger = registry.ledger
         self._strategy = strategy
@@ -707,6 +718,12 @@ class ShadowRunner:
         )
         if reason is None:
             reason = self._strategy_identity_failure()
+        if (
+            reason is None
+            and self._champion_controller.active_champion_id
+            != self._baseline_spec.experiment_id
+        ):
+            reason = "PAPER_CHAMPION_CHANGED"
         if reason is None and self._continuity_blocked:
             reason = "CONTINUITY_RECONCILIATION_REQUIRED"
         if reason is None and self._identity_blocked:
@@ -860,6 +877,7 @@ class ShadowRunner:
             "REGIME_MODEL_IDENTITY_CHANGED",
             "SHADOW_STRATEGY_IDENTITY_CHANGED",
             "PAPER_BASELINE_IDENTITY_CHANGED",
+            "PAPER_CHAMPION_CHANGED",
             "STRATEGY_IDENTITY_UNVERIFIABLE",
         }:
             self._identity_blocked = True
@@ -1345,6 +1363,9 @@ def _reason_explanation(reason_code: str) -> str:
         ),
         "PAPER_BASELINE_IDENTITY_CHANGED": (
             "Paper baseline identity changed; the comparison is no longer trusted."
+        ),
+        "PAPER_CHAMPION_CHANGED": (
+            "The active Paper Champion pointer changed; a new registered Shadow comparison is required."
         ),
         "STRATEGY_IDENTITY_UNVERIFIABLE": (
             "Strategy identity could not be revalidated; the comparison abstains."
