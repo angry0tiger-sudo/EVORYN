@@ -70,7 +70,6 @@ class ShadowConfig:
     max_candle_age_seconds: float
     max_future_skew_seconds: float = 1.0
     min_regime_confidence: Decimal = Decimal("0.65")
-    max_gap_intervals: int = 1
     max_history_candles: int = 500
 
     def __post_init__(self) -> None:
@@ -102,13 +101,11 @@ class ShadowConfig:
             or not Decimal("0") < self.min_regime_confidence <= Decimal("1")
         ):
             raise ValueError("min_regime_confidence must be a Decimal in (0, 1].")
-        if type(self.max_gap_intervals) is not int or self.max_gap_intervals < 1:
-            raise ValueError("max_gap_intervals must be a positive integer.")
         if type(self.max_history_candles) is not int or not 2 <= self.max_history_candles <= 500:
             raise ValueError("max_history_candles must be an integer in [2, 500].")
 
     @property
-    def dataset_version(self) -> str:
+    def feed_manifest_fingerprint(self) -> str:
         """Fingerprint the authorized feed contract, not pretend the stream is a static dataset."""
         return configuration_fingerprint(
             {
@@ -136,7 +133,6 @@ class ShadowConfig:
                 "max_candle_age_seconds": self.max_candle_age_seconds,
                 "max_future_skew_seconds": self.max_future_skew_seconds,
                 "min_regime_confidence": str(self.min_regime_confidence),
-                "max_gap_intervals": self.max_gap_intervals,
                 "max_history_candles": self.max_history_candles,
                 "fill_model": "none_shadow_only",
                 "fee_model": "not_applied_to_signal_projection",
@@ -250,6 +246,7 @@ class ShadowDecisionSnapshot:
     reason: str
     risk_assessment_status: str
     risk_assessment_reason: str
+    auto_halt_status: str
     execution_authorized: bool = False
 
     def __post_init__(self) -> None:
@@ -274,6 +271,7 @@ class ShadowDecisionSnapshot:
             "reason",
             "risk_assessment_status",
             "risk_assessment_reason",
+            "auto_halt_status",
         ):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must be non-empty.")
@@ -364,6 +362,7 @@ class ShadowDecisionSnapshot:
                 "status": self.risk_assessment_status,
                 "reason": self.risk_assessment_reason,
             },
+            "auto_halt_status": self.auto_halt_status,
             "execution_authorized": False,
         }
 
@@ -494,7 +493,7 @@ class ShadowRunner:
                 "feature_schema_version": self._spec.feature_schema_version,
                 "strategy_fingerprint": self._strategy_fingerprint,
                 "registered_dataset_version": self._spec.dataset_version,
-                "feed_manifest_fingerprint": self._config.dataset_version,
+                "feed_manifest_fingerprint": self._config.feed_manifest_fingerprint,
                 "evaluation_config_fingerprint": self._config.evaluation_config_fingerprint,
                 "execution_authorized": False,
             },
@@ -597,16 +596,22 @@ class ShadowRunner:
 
         candidate_history = tuple(self._history) + (candle,)
         regime: RegimePrediction | None = None
+        halt_status = "NOT_CHECKED"
         if reason is None:
             try:
                 halted = self._auto_halt_status()
             except Exception:
+                halt_status = "UNAVAILABLE"
                 reason = "AUTO_HALT_STATUS_UNAVAILABLE"
             else:
                 if type(halted) is not bool:
+                    halt_status = "UNKNOWN"
                     reason = "AUTO_HALT_STATUS_INVALID"
                 elif halted:
+                    halt_status = "ACTIVE"
                     reason = "AUTO_HALT_ACTIVE"
+                else:
+                    halt_status = "INACTIVE"
 
         if reason is None:
             try:
@@ -672,6 +677,7 @@ class ShadowRunner:
             target_quantity=proposed_quantity,
             quantity_delta=quantity_delta,
             estimated_notional_delta=notional_delta,
+            auto_halt_status=halt_status,
         )
         event_type = (
             LearningEventType.SHADOW_INPUT_REJECTED
@@ -900,6 +906,7 @@ class ShadowRunner:
         target_quantity: Decimal | None,
         quantity_delta: Decimal | None,
         estimated_notional_delta: Decimal | None,
+        auto_halt_status: str,
     ) -> ShadowDecisionSnapshot:
         return ShadowDecisionSnapshot(
             event_id=uuid.uuid4().hex,
@@ -942,6 +949,7 @@ class ShadowRunner:
                 "A target exposure is not risk approval. This observer does not possess a "
                 "validated account/portfolio and order-book risk context."
             ),
+            auto_halt_status=auto_halt_status,
             execution_authorized=False,
         )
 
