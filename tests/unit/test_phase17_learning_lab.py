@@ -12,8 +12,14 @@ from typing import Any
 
 import pytest
 
-from evoryn.learning_lab.backtest import IndexRange
+from evoryn.domain.models import Market, MarketCandle
+from evoryn.learning_lab.backtest import (
+    BacktestConfig,
+    IndexRange,
+    run_backtest,
+)
 from evoryn.learning_lab.experiment_registry import (
+    configuration_fingerprint,
     ExperimentIntegrityError,
     ExperimentMode,
     ExperimentRegistry,
@@ -22,6 +28,7 @@ from evoryn.learning_lab.experiment_registry import (
     LearningEventType,
     LearningLabLedger,
 )
+from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.learning_lab.promotion import (
     ChampionChallengerController,
     ChampionChallengerGate,
@@ -34,6 +41,7 @@ from evoryn.learning_lab.promotion import (
     RollbackStatus,
     RollbackTrigger,
 )
+from evoryn.strategies.baseline import SmaTrendBaseline
 
 
 NOW = datetime(2026, 1, 1, 12, tzinfo=UTC)
@@ -236,6 +244,92 @@ def test_registry_binds_evidence_to_exact_experiment_identity(tmp_path: Path) ->
     wrong_config = replace(good, evaluation_config_fingerprint="9" * 64)
     with pytest.raises(ExperimentIntegrityError, match="identity"):
         registry.record_evidence(wrong_config, correlation_id="experiment:bad-config")
+
+
+def test_backtest_result_is_recorded_only_with_exact_config_and_test_range() -> None:
+    interval = timedelta(hours=1)
+    market = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
+    source = "synthetic-phase17-backtest"
+    candles = tuple(
+        MarketCandle(
+            market=market,
+            timestamp=datetime(2026, 1, 1, tzinfo=UTC) + interval * index,
+            interval=interval,
+            open=Decimal("100") + Decimal(index) / Decimal("10"),
+            high=Decimal("102") + Decimal(index) / Decimal("10"),
+            low=Decimal("99") + Decimal(index) / Decimal("10"),
+            close=Decimal("101") + Decimal(index) / Decimal("10"),
+            volume=Decimal("1000"),
+            source=source,
+        )
+        for index in range(100)
+    )
+    dataset = HistoricalDataset(
+        dataset_id="phase17-synthetic-btc",
+        market=market,
+        interval=interval,
+        volume_unit="base_asset",
+        source_name=source,
+        source_uri="urn:evoryn:phase17:synthetic:v1",
+        source_revision="synthetic-1",
+        license_id="CC0-1.0",
+        license_uri="https://spdx.org/licenses/CC0-1.0.html",
+        collected_at=candles[-1].timestamp + interval + timedelta(minutes=1),
+        candles=candles,
+    )
+    strategy = SmaTrendBaseline(window=5)
+    backtest_config = BacktestConfig(
+        initial_cash=Decimal("10000"),
+        commission_bps=Decimal("10"),
+        spread_bps=Decimal("10"),
+        slippage_bps=Decimal("5"),
+        max_bar_participation=Decimal("0.5"),
+        allocation_fraction=Decimal("0.9"),
+        quantity_step=Decimal("0.001"),
+        allow_gaps=False,
+    )
+    spec = ExperimentSpec(
+        code_revision=CODE_REVISION,
+        dataset_version=dataset.version,
+        feature_schema_version="ohlcv-features/v1",
+        evaluation_config_fingerprint=configuration_fingerprint(backtest_config.as_dict()),
+        model_id=strategy.strategy_id,
+        model_version=strategy.strategy_version,
+        model_fingerprint=sha256(canonical_bytes(strategy.parameters())),
+        parameters=tuple(sorted(strategy.parameters().items())),
+        random_seed=42,
+        train_range=TRAIN,
+        validation_range=VALIDATION,
+        test_range=TEST,
+        mode=ExperimentMode.BACKTEST,
+        created_at=dataset.collected_at + timedelta(minutes=1),
+    )
+    result = run_backtest(
+        dataset,
+        strategy,
+        backtest_config,
+        start_index=TEST.start,
+        end_index=TEST.end,
+        warmup_start_index=0,
+        segment_name="phase17-evidence-integration",
+    )
+    evidence = ExperimentRunEvidence.from_backtest_result(
+        spec, result, collected_at=spec.created_at + timedelta(minutes=1)
+    )
+
+    assert evidence.mode is ExperimentMode.BACKTEST
+    assert evidence.dataset_version == dataset.version
+    assert evidence.test_range == TEST
+    assert evidence.evaluation_config_fingerprint == configuration_fingerprint(
+        backtest_config.as_dict()
+    )
+    assert evidence.run_id == result.run_id
+
+    with pytest.raises(ValueError, match="configuration differs"):
+        wrong_spec = replace(spec, evaluation_config_fingerprint="8" * 64)
+        ExperimentRunEvidence.from_backtest_result(
+            wrong_spec, result, collected_at=spec.created_at + timedelta(minutes=1)
+        )
 
 
 def test_backtest_evidence_cannot_be_created_for_paper_experiment() -> None:
