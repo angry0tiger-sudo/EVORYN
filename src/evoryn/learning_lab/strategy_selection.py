@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
+import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Protocol
 
 from evoryn.domain.models import MarketCandle
@@ -33,6 +37,9 @@ from evoryn.strategies.selector import (
     RegimeStrategySelector,
     StrategySelectionPolicy,
 )
+
+
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class TrainingManifestPort(Protocol):
@@ -149,6 +156,7 @@ class StrategySelectionOOSReport:
     fixed_baseline_strategy_id: str
     fixed_baseline_strategy_version: str
     selector_engine_version: str
+    selection_policy_json: str
     registry_fingerprint: str
     routing_fingerprint: str
     model_metadata: tuple[tuple[str, str], ...]
@@ -184,6 +192,7 @@ class StrategySelectionOOSReport:
                 "strategy_version": self.fixed_baseline_strategy_version,
             },
             "selector_engine_version": self.selector_engine_version,
+            "selection_policy": json.loads(self.selection_policy_json),
             "registry_fingerprint": self.registry_fingerprint,
             "routing_fingerprint": self.routing_fingerprint,
             "model_metadata": dict(self.model_metadata),
@@ -380,6 +389,7 @@ def evaluate_strategy_selector_out_of_sample(
         fixed_baseline_strategy_id=fixed_baseline.strategy_id,
         fixed_baseline_strategy_version=fixed_baseline.strategy_version,
         selector_engine_version=STRATEGY_SELECTOR_VERSION,
+        selection_policy_json=_canonical_json_bytes(selection_policy.as_dict()).decode("utf-8"),
         registry_fingerprint=registry.fingerprint,
         routing_fingerprint=selector.routing_fingerprint,
         model_metadata=metadata,
@@ -398,6 +408,136 @@ def evaluate_strategy_selector_out_of_sample(
         ),
         expectancy_delta=expectancy_delta,
     )
+
+
+class StrategySelectionOOSReportStore:
+    """Immutable report store with a checksum sidecar and reproducible identity validation."""
+
+    def __init__(self, root: str | Path) -> None:
+        self._root = Path(root).expanduser().resolve()
+
+    def save(self, report: StrategySelectionOOSReport) -> Path:
+        if not _SHA256_PATTERN.fullmatch(report.report_id):
+            raise ValueError("report_id must be a lowercase SHA-256 digest.")
+        report_dict = report.to_report_dict()
+        if _oos_report_identity_hash(report_dict) != report.report_id:
+            raise ValueError("Report ID does not match its versioned experiment inputs.")
+        report_bytes = _canonical_json_bytes(report_dict)
+        report_hash = hashlib.sha256(report_bytes).hexdigest()
+        destination = self._root / f"{report.report_id}.json"
+        checksum_path = self._root / f"{report.report_id}.json.sha256"
+        self._root.mkdir(parents=True, exist_ok=True)
+
+        if destination.exists() or checksum_path.exists():
+            return self._verify_existing(destination, checksum_path, report_bytes, report_hash)
+
+        report_fd, report_tmp_name = tempfile.mkstemp(
+            prefix=".oos-", suffix=".json.tmp", dir=self._root
+        )
+        checksum_fd, checksum_tmp_name = tempfile.mkstemp(
+            prefix=".oos-", suffix=".sha256.tmp", dir=self._root
+        )
+        report_tmp = Path(report_tmp_name)
+        checksum_tmp = Path(checksum_tmp_name)
+        try:
+            with os.fdopen(report_fd, "wb") as report_file:
+                report_file.write(report_bytes)
+            with os.fdopen(checksum_fd, "w", encoding="ascii", newline="") as checksum_file:
+                checksum_file.write(f"{report_hash}\n")
+            try:
+                os.link(report_tmp, destination)
+            except FileExistsError:
+                return self._verify_existing(
+                    destination, checksum_path, report_bytes, report_hash
+                )
+            try:
+                os.link(checksum_tmp, checksum_path)
+            except OSError:
+                if destination.exists() and not checksum_path.exists():
+                    destination.unlink()
+                raise
+        finally:
+            if report_tmp.exists():
+                report_tmp.unlink()
+            if checksum_tmp.exists():
+                checksum_tmp.unlink()
+        self.load(report.report_id)
+        return destination
+
+    def load(self, report_id: str) -> dict[str, Any]:
+        """Verify file bytes, canonical JSON, and the report's input-derived ID."""
+        if not _SHA256_PATTERN.fullmatch(report_id):
+            raise ValueError("report_id must be a lowercase SHA-256 digest.")
+        report_path = self._root / f"{report_id}.json"
+        checksum_path = self._root / f"{report_id}.json.sha256"
+        try:
+            report_bytes = report_path.read_bytes()
+            checksum_text = checksum_path.read_text(encoding="ascii")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError("OOS report or checksum sidecar is missing or invalid.") from exc
+        actual_hash = hashlib.sha256(report_bytes).hexdigest()
+        if checksum_text != f"{actual_hash}\n":
+            raise ValueError("OOS report checksum does not match stored bytes.")
+        try:
+            report_dict = json.loads(report_bytes)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError("OOS report is not valid JSON.") from exc
+        if not isinstance(report_dict, dict) or report_dict.get("report_id") != report_id:
+            raise ValueError("OOS report identity does not match the requested ID.")
+        if _canonical_json_bytes(report_dict) != report_bytes:
+            raise ValueError("OOS report is not in canonical JSON form.")
+        if _oos_report_identity_hash(report_dict) != report_id:
+            raise ValueError("OOS report ID does not match its experiment inputs.")
+        return report_dict
+
+    @staticmethod
+    def _verify_existing(
+        destination: Path,
+        checksum_path: Path,
+        report_bytes: bytes,
+        report_hash: str,
+    ) -> Path:
+        try:
+            existing_report = destination.read_bytes()
+            existing_checksum = checksum_path.read_text(encoding="ascii")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError("Existing OOS report package is incomplete; refusing overwrite.") from exc
+        if existing_report != report_bytes or existing_checksum != f"{report_hash}\n":
+            raise ValueError("Existing OOS report ID has conflicting report/checksum bytes.")
+        return destination
+
+
+def _oos_report_identity_hash(report: dict[str, Any]) -> str:
+    """Derive the report ID from exact dataset, train/test ranges, model, routes, and run IDs."""
+    try:
+        dataset = report["dataset"]
+        training = report["training_range"]
+        test = report["test_range"]
+        adaptive = report["adaptive_result"]
+        fixed = report["fixed_baseline_result"]
+        run_material = {
+            "dataset_id": dataset["dataset_id"],
+            "dataset_version": dataset["dataset_version"],
+            "train_range": {
+                "start": training["start"],
+                "end": training["end_exclusive"],
+            },
+            "test_range": {
+                "start": test["start"],
+                "end": test["end_exclusive"],
+            },
+            "adaptive_run_id": adaptive["run_id"],
+            "fixed_baseline_run_id": fixed["run_id"],
+            "registry_fingerprint": report["registry_fingerprint"],
+            "routing_fingerprint": report["routing_fingerprint"],
+            "model_metadata": report["model_metadata"],
+            "selection_policy": report["selection_policy"],
+            "selector_engine_version": report["selector_engine_version"],
+            "model_training_manifest": report["training_manifest"],
+        }
+    except (KeyError, TypeError) as exc:
+        raise ValueError("OOS report omits fields required for its identity.") from exc
+    return hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
 
 
 def _canonical_json_bytes(value: object) -> bytes:
