@@ -11,6 +11,7 @@ from scripts.live_readonly_nobitex_usdt import (
     WalletOnlyNobitexTransport,
     format_snapshot,
 )
+
 from evoryn.adapters.exchanges.nobitex_account import (
     NobitexReadOnlyAccountReader,
     NobitexUSDTAccountSnapshot,
