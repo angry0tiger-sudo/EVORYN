@@ -89,7 +89,45 @@ class ConnectionAuditSink(Protocol):
 
     def record(self, event: ConnectionEvent) -> None:
         """Persist or forward a sanitized connection event."""
-        raise NotImplementedError
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkRouteAuthorization:
+    """Time-bounded evidence that one explicit route may reach an exact host allowlist."""
+
+    route_id: str
+    authorization_ref: str
+    approved_by: str
+    approved_at: datetime
+    review_due_at: datetime
+    allowed_hosts: frozenset[str]
+    active: bool = True
+
+    def __post_init__(self) -> None:
+        _validate_identifier(self.route_id, "route_id")
+        _validate_identifier(self.authorization_ref, "authorization_ref")
+        _validate_identifier(self.approved_by, "approved_by")
+        if type(self.allowed_hosts) is not frozenset or not self.allowed_hosts:
+            raise ValueError("allowed_hosts must be a non-empty frozenset.")
+        normalized = frozenset(_normalize_host(host) for host in self.allowed_hosts)
+        object.__setattr__(self, "allowed_hosts", normalized)
+        approved = _require_utc(self.approved_at, "approved_at")
+        due = _require_utc(self.review_due_at, "review_due_at")
+        if due <= approved:
+            raise ValueError("review_due_at must be after approved_at.")
+        if type(self.active) is not bool:
+            raise ValueError("active must be an explicit boolean.")
+
+    def validate_at(self, *, now_utc: datetime) -> None:
+        """Fail closed when approval is future-dated, disabled, or past its review deadline."""
+        now = _require_utc(now_utc, "now_utc")
+        if not self.active:
+            raise PermissionError("The configured network route authorization is inactive.")
+        if now < self.approved_at:
+            raise PermissionError("The configured network route authorization is not yet effective.")
+        if now >= self.review_due_at:
+            raise PermissionError("The configured network route authorization has expired.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -355,9 +393,7 @@ class ConnectivityManager:
         self,
         *,
         transport: JsonApiTransport,
-        allowed_hosts: frozenset[str],
-        route_id: str,
-        route_authorized: bool,
+        route_authorization: NetworkRouteAuthorization,
         audit_sink: ConnectionAuditSink,
         retry_policy: RetryPolicy = RetryPolicy(),
         circuit_policy: CircuitBreakerPolicy = CircuitBreakerPolicy(),
@@ -366,21 +402,15 @@ class ConnectivityManager:
         sleeper: Callable[[float], None] = time.sleep,
         random_value: Callable[[], float] = random.random,
     ) -> None:
-        if type(route_authorized) is not bool:
-            raise ValueError("route_authorized must be an explicit boolean.")
-        if not route_authorized:
-            raise PermissionError(
-                "The configured network route has not been explicitly authorized."
-            )
-        if not allowed_hosts:
-            raise ValueError("A non-empty destination host allowlist is required.")
-        self._allowed_hosts = frozenset(_normalize_host(host) for host in allowed_hosts)
-        self._route_id = _validate_identifier(route_id, "route_id")
+        self._utcnow = utcnow
+        route_authorization.validate_at(now_utc=self._utcnow())
+        self._route_authorization = route_authorization
+        self._allowed_hosts = route_authorization.allowed_hosts
+        self._route_id = route_authorization.route_id
         self._transport = transport
         self._audit_sink = audit_sink
         self._retry_policy = retry_policy
         self._monotonic = monotonic
-        self._utcnow = utcnow
         self._sleep = sleeper
         self._random_value = random_value
         self._breaker = CircuitBreaker(circuit_policy, monotonic=monotonic)
@@ -401,6 +431,19 @@ class ConnectivityManager:
     ) -> Any:
         """Perform one logical idempotent GET with bounded retries and sanitized evidence."""
         cid = _correlation_id(correlation_id)
+        try:
+            self._route_authorization.validate_at(now_utc=self._utcnow())
+        except PermissionError as exc:
+            self._emit(
+                cid,
+                ConnectionEventType.DESTINATION_REJECTED,
+                target_id="<route-authorization>",
+                reason="route_authorization_inactive_or_expired",
+            )
+            raise JsonApiError(
+                "Configured network route authorization is not currently valid.",
+                kind="policy",
+            ) from exc
         host = _allowed_request_host(url, self._allowed_hosts)
         if host is None:
             self._emit(
