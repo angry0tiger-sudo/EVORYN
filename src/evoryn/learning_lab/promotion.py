@@ -454,6 +454,51 @@ class ChampionChallengerController:
         self._active_champion_id: str | None = champion_experiment_id
         self._previous_champion_id: str | None = None
         self._approved_shadow_candidate_id: str | None = None
+        self._restore_state_from_ledger()
+
+    def _restore_state_from_ledger(self) -> None:
+        """Replay durable Paper/Shadow transitions; prior safe-hold state must never auto-enable."""
+        active_id = self._active_champion_id
+        previous_id: str | None = None
+        shadow_candidate_id: str | None = None
+        has_paper_transition = False
+        for event in self._ledger.events:
+            payload = json.loads(event.payload_json)
+            if event.event_type is LearningEventType.CANDIDATE_PROMOTED_TO_PAPER:
+                previous_id = payload["previous_paper_champion_id"]
+                active_id = payload["active_paper_champion_id"]
+                has_paper_transition = True
+            elif event.event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED:
+                rollback_status = payload["rollback_status"]
+                if rollback_status == RollbackStatus.ROLLED_BACK.value:
+                    active_id = payload["restored_experiment_id"]
+                    previous_id = None
+                    has_paper_transition = True
+                elif rollback_status == RollbackStatus.SAFE_HOLD_NO_CHAMPION.value:
+                    active_id = None
+                    previous_id = None
+                    has_paper_transition = True
+            elif event.event_type is LearningEventType.CANDIDATE_APPROVED_FOR_SHADOW:
+                shadow_candidate_id = event.experiment_id
+        if active_id is not None:
+            active_spec = self._registry.get(active_id)
+            if active_spec.mode is not ExperimentMode.PAPER:
+                raise ExperimentIntegrityError(
+                    "Learning Lab ledger active champion is not a PAPER experiment."
+                )
+        if previous_id is not None:
+            previous_spec = self._registry.get(previous_id)
+            if previous_spec.mode is not ExperimentMode.PAPER:
+                raise ExperimentIntegrityError(
+                    "Learning Lab ledger rollback target is not a PAPER experiment."
+                )
+        if not has_paper_transition:
+            bootstrap_spec = self._registry.get(self._active_champion_id or "")
+            if bootstrap_spec.mode is not ExperimentMode.PAPER:
+                raise ValueError("The bootstrap Champion must be registered in PAPER mode.")
+        self._active_champion_id = active_id
+        self._previous_champion_id = previous_id
+        self._approved_shadow_candidate_id = shadow_candidate_id
 
     @property
     def active_champion_id(self) -> str | None:
@@ -553,7 +598,6 @@ class ChampionChallengerController:
             },
         )
         if decision.status is PromotionStatus.APPROVED_FOR_SHADOW:
-            self._approved_shadow_candidate_id = challenger_experiment_id
             self._ledger.append(
                 LearningEventType.CANDIDATE_APPROVED_FOR_SHADOW,
                 experiment_id=challenger_experiment_id,
@@ -561,10 +605,9 @@ class ChampionChallengerController:
                 occurred_at=evaluated_at,
                 payload={"decision_id": decision.decision_id},
             )
+            self._approved_shadow_candidate_id = challenger_experiment_id
         elif decision.status is PromotionStatus.PROMOTED_TO_PAPER:
             previous = self._active_champion_id
-            self._previous_champion_id = previous
-            self._active_champion_id = challenger_experiment_id
             self._ledger.append(
                 LearningEventType.CANDIDATE_PROMOTED_TO_PAPER,
                 experiment_id=challenger_experiment_id,
@@ -576,6 +619,8 @@ class ChampionChallengerController:
                     "active_paper_champion_id": challenger_experiment_id,
                 },
             )
+            self._previous_champion_id = previous
+            self._active_champion_id = challenger_experiment_id
         else:
             self._ledger.append(
                 LearningEventType.PROMOTION_REJECTED,
