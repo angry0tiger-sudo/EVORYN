@@ -46,42 +46,41 @@ def prediction(
     confidence_semantics: str = "hmm_posterior",
     abstained: bool = False,
 ) -> RegimePrediction:
-    """Create a stable and fully audited regime prediction fixture."""
-    probs = {
-        RegimeLabel.BULL_TREND: Decimal("0.90"),
-        RegimeLabel.BEAR_TREND: Decimal("0.04"),
-        RegimeLabel.RANGE_BOUND: Decimal("0.03"),
-        RegimeLabel.HIGH_VOLATILITY: Decimal("0.03"),
-    }
-    if label is RegimeLabel.BEAR_TREND:
-        probs = {
+    """Create a stable and internally consistent regime prediction fixture."""
+    value = Decimal("0") if abstained or label is RegimeLabel.UNKNOWN else Decimal(confidence)
+    if label is RegimeLabel.UNKNOWN or abstained:
+        probs: tuple[tuple[RegimeLabel, Decimal], ...] = ()
+    elif value == Decimal("0.9"):
+        rest = {
             RegimeLabel.BULL_TREND: Decimal("0.03"),
-            RegimeLabel.BEAR_TREND: Decimal("0.90"),
+            RegimeLabel.BEAR_TREND: Decimal("0.03"),
             RegimeLabel.RANGE_BOUND: Decimal("0.04"),
             RegimeLabel.HIGH_VOLATILITY: Decimal("0.03"),
         }
-    elif label is RegimeLabel.RANGE_BOUND:
-        probs = {
-            RegimeLabel.BULL_TREND: Decimal("0.03"),
-            RegimeLabel.BEAR_TREND: Decimal("0.03"),
-            RegimeLabel.RANGE_BOUND: Decimal("0.90"),
-            RegimeLabel.HIGH_VOLATILITY: Decimal("0.04"),
-        }
-    elif label is RegimeLabel.HIGH_VOLATILITY:
-        probs = {
-            RegimeLabel.BULL_TREND: Decimal("0.03"),
-            RegimeLabel.BEAR_TREND: Decimal("0.03"),
-            RegimeLabel.RANGE_BOUND: Decimal("0.04"),
-            RegimeLabel.HIGH_VOLATILITY: Decimal("0.90"),
-        }
-    effective_confidence = (
-        "0" if abstained or label is RegimeLabel.UNKNOWN else confidence
-    )
+        rest[label] = value
+        # The remaining three values are normalized to sum to one.
+        remaining = Decimal("0.1")
+        other_labels = [candidate for candidate in rest if candidate is not label]
+        rest[other_labels[0]] = Decimal("0.04")
+        rest[other_labels[1]] = Decimal("0.03")
+        rest[other_labels[2]] = Decimal("0.03")
+        probs = tuple(rest.items())
+    else:
+        residual = (Decimal("1") - value) / Decimal("3")
+        probs = tuple(
+            (candidate, value if candidate is label else residual)
+            for candidate in (
+                RegimeLabel.BULL_TREND,
+                RegimeLabel.BEAR_TREND,
+                RegimeLabel.RANGE_BOUND,
+                RegimeLabel.HIGH_VOLATILITY,
+            )
+        )
     return RegimePrediction(
         label=label,
-        confidence=Decimal(effective_confidence),
+        confidence=value,
         confidence_semantics=confidence_semantics,
-        probabilities=tuple(probs.items()) if not abstained else (),
+        probabilities=probs,
         as_of=timestamp,
         model_id="synthetic-hmm",
         model_version="test-1.0.0",
