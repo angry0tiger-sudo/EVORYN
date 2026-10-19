@@ -634,7 +634,7 @@ class ShadowRunner:
             or baseline_experiment_spec.parameters != baseline_parameters
         ):
             raise ShadowSafetyError(
-                "Paper baseline strategy identity/parameters/fingerprint do not match its registered experiment."
+                "Paper baseline identity, parameters, or fingerprint do not match its registered experiment."
             )
         if not callable(getattr(risk_assessor, "assess", None)):
             raise ValueError("A read-only observational risk assessor is required.")
