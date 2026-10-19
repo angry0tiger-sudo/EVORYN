@@ -560,7 +560,7 @@ class ShadowRunner:
         champion_controller: ChampionChallengerController,
         regime_classifier: RegimeClassifierPort,
         risk_assessor: ShadowRiskAssessmentPort,
-        auto_halt_status: Callable[[], bool],
+        auto_halt_status: Callable[[], object],
         utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         if experiment_spec.mode is not ExperimentMode.SHADOW:
@@ -778,7 +778,7 @@ class ShadowRunner:
 
     def process_candle(
         self,
-        candle: MarketCandle,
+        candle: object,
         *,
         received_at: datetime,
         correlation_id: str | None = None,
@@ -1221,7 +1221,7 @@ class ShadowRunner:
 
     def _validate_candle(
         self,
-        candle: MarketCandle,
+        candle: object,
         received_at: datetime,
         *,
         compare_sequence: bool = True,
@@ -1255,7 +1255,7 @@ class ShadowRunner:
         return None
 
     def _validate_regime(
-        self, prediction: RegimePrediction, received_at: datetime
+        self, prediction: object, received_at: datetime
     ) -> str | None:
         if not isinstance(prediction, RegimePrediction):
             return "REGIME_OUTPUT_INVALID"
@@ -1429,6 +1429,7 @@ class ShadowPollingService:
         observed_now = _require_utc(now or self._utcnow(), "now")
         try:
             candles = tuple(self._feed.fetch_completed(now=observed_now))
+            candles_to_process: tuple[MarketCandle, ...]
             if (
                 self._runner.last_candle_at is None
                 and not self._runner.history
@@ -1516,7 +1517,7 @@ def _require_utc(value: datetime, name: str) -> datetime:
     return value.astimezone(UTC)
 
 
-def _safe_audit_timestamp(value: datetime, fallback: datetime) -> datetime:
+def _safe_audit_timestamp(value: object, fallback: datetime) -> datetime:
     """Normalize an aware source timestamp for rejection telemetry; never trust a naive clock."""
     if not isinstance(value, datetime):
         return _require_utc(fallback, "fallback")
