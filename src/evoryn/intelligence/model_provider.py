@@ -950,9 +950,17 @@ class IntelligenceCore:
             return "OUTPUT_SCHEMA_ID_MISMATCH"
         if response.truncated or response.finish_reason.casefold() in {"length", "max_tokens"}:
             return "OUTPUT_TRUNCATED"
+        if response.finish_reason.casefold() not in {
+            "stop",
+            "completed",
+            "end_turn",
+            "stop_sequence",
+            "eos",
+        }:
+            return "FINISH_REASON_UNVERIFIED"
         if response.started_at < now or response.completed_at > request.deadline_at:
             return "RESPONSE_OUTSIDE_DEADLINE"
-        return schema.validate(response.output)
+        return "OUTPUT_SCHEMA_INVALID" if schema.validate(response.output) is not None else None
 
     def _event(
         self,
@@ -1040,6 +1048,7 @@ class OpenAICompatibleChatAdapter:
         credentials: CredentialHeaderProvider,
         schemas: tuple[StructuredJsonSchema, ...],
         clock: Callable[[], datetime] | None = None,
+        cost_estimator: Callable[[ModelIdentity, int, int], Decimal | None] | None = None,
     ) -> None:
         _validate_https_url(base_url, "base_url")
         if not schemas:
@@ -1052,6 +1061,7 @@ class OpenAICompatibleChatAdapter:
         if len(self._schemas) != len(schemas):
             raise ValueError("Schema IDs must be unique.")
         self._clock = clock
+        self._cost_estimator = cost_estimator
 
     @property
     def identity(self) -> ModelIdentity:
@@ -1126,8 +1136,8 @@ class OpenAICompatibleChatAdapter:
             raise ModelProviderError("Compatible LLM transport failed.") from None
         completed_at = self._now()
         returned_model = raw.get("model")
-        if returned_model is not None and returned_model != self.identity.model_id:
-            raise ModelProviderError("Provider response model identity changed.")
+        if returned_model != self.identity.model_id:
+            raise ModelProviderError("Provider response model identity is missing or changed.")
         choices = raw.get("choices")
         if not isinstance(choices, (tuple, list)) or not choices:
             raise ModelProviderError("Provider response has no choice.")
@@ -1144,6 +1154,25 @@ class OpenAICompatibleChatAdapter:
         if parsed_mapping is None:
             raise ModelProviderError("Provider output must be a JSON object.")
         usage = _parse_token_usage(raw.get("usage"))
+        if usage is not None and usage.estimated_cost_usd is None and self._cost_estimator is not None:
+            try:
+                estimated_cost = self._cost_estimator(
+                    self.identity, usage.input_tokens, usage.output_tokens
+                )
+            except Exception:
+                raise ModelProviderError("Model cost estimator failed.") from None
+            if estimated_cost is not None:
+                if (
+                    not isinstance(estimated_cost, Decimal)
+                    or not estimated_cost.is_finite()
+                    or estimated_cost < 0
+                ):
+                    raise ModelProviderError("Model cost estimator returned invalid usage.")
+                usage = TokenUsage(
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    estimated_cost_usd=estimated_cost,
+                )
         finish_reason_value = choice.get("finish_reason") if choice is not None else None
         finish_reason = finish_reason_value if isinstance(finish_reason_value, str) else "unknown"
         return ModelResponse(
