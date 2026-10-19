@@ -535,6 +535,16 @@ class ShadowRunner:
             != experiment_spec.feature_schema_version
         ):
             raise ShadowSafetyError("Paper baseline and Shadow feature schemas differ.")
+        if (
+            baseline_experiment_spec.dataset_version != experiment_spec.dataset_version
+            or baseline_experiment_spec.random_seed != experiment_spec.random_seed
+            or baseline_experiment_spec.train_range != experiment_spec.train_range
+            or baseline_experiment_spec.validation_range != experiment_spec.validation_range
+            or baseline_experiment_spec.test_range != experiment_spec.test_range
+        ):
+            raise ShadowSafetyError(
+                "Paper baseline and Shadow experiment data/split identity differs."
+            )
         baseline_fingerprint = strategy_fingerprint(baseline_strategy)
         baseline_parameters = tuple(sorted(baseline_strategy.parameters().items()))
         if (
@@ -695,6 +705,8 @@ class ShadowRunner:
             received,
             compare_sequence=not (self._continuity_blocked or self._identity_blocked),
         )
+        if reason is None:
+            reason = self._strategy_identity_failure()
         if reason is None and self._continuity_blocked:
             reason = "CONTINUITY_RECONCILIATION_REQUIRED"
         if reason is None and self._identity_blocked:
@@ -844,7 +856,12 @@ class ShadowRunner:
                 self._remember_regime_identity(regime)
         elif reason_code == "CANDLE_GAP":
             self._continuity_blocked = True
-        elif reason_code == "REGIME_MODEL_IDENTITY_CHANGED":
+        elif reason_code in {
+            "REGIME_MODEL_IDENTITY_CHANGED",
+            "SHADOW_STRATEGY_IDENTITY_CHANGED",
+            "PAPER_BASELINE_IDENTITY_CHANGED",
+            "STRATEGY_IDENTITY_UNVERIFIABLE",
+        }:
             self._identity_blocked = True
         return snapshot
 
@@ -989,6 +1006,31 @@ class ShadowRunner:
         self._baseline_target_quantity = baseline_target_quantity
         self._continuity_blocked = False
         self._remember_regime_identity(regime)
+
+    def _strategy_identity_failure(self) -> str | None:
+        """Reject mutable strategy/parameter identity changes during an active experiment."""
+        try:
+            current_candidate_fingerprint = strategy_fingerprint(self._strategy)
+            current_baseline_fingerprint = strategy_fingerprint(self._baseline_strategy)
+            candidate_parameters = tuple(sorted(self._strategy.parameters().items()))
+            baseline_parameters = tuple(sorted(self._baseline_strategy.parameters().items()))
+        except Exception:
+            return "STRATEGY_IDENTITY_UNVERIFIABLE"
+        if (
+            current_candidate_fingerprint != self._strategy_fingerprint
+            or self._strategy.strategy_id != self._spec.model_id
+            or self._strategy.strategy_version != self._spec.model_version
+            or candidate_parameters != self._spec.parameters
+        ):
+            return "SHADOW_STRATEGY_IDENTITY_CHANGED"
+        if (
+            current_baseline_fingerprint != self._baseline_strategy_fingerprint
+            or self._baseline_strategy.strategy_id != self._baseline_spec.model_id
+            or self._baseline_strategy.strategy_version != self._baseline_spec.model_version
+            or baseline_parameters != self._baseline_spec.parameters
+        ):
+            return "PAPER_BASELINE_IDENTITY_CHANGED"
+        return None
 
     def _validate_candle(
         self,
@@ -1297,6 +1339,15 @@ def _reason_explanation(reason_code: str) -> str:
         ),
         "MODEL_IDENTITY_REVIEW_REQUIRED": (
             "Model identity changed; a new registered experiment is required."
+        ),
+        "SHADOW_STRATEGY_IDENTITY_CHANGED": (
+            "Shadow strategy identity changed; the current experiment is no longer trusted."
+        ),
+        "PAPER_BASELINE_IDENTITY_CHANGED": (
+            "Paper baseline identity changed; the comparison is no longer trusted."
+        ),
+        "STRATEGY_IDENTITY_UNVERIFIABLE": (
+            "Strategy identity could not be revalidated; the comparison abstains."
         ),
         "AUTO_HALT_STATUS_UNAVAILABLE": "Auto-Halt status could not be established; fail closed.",
         "AUTO_HALT_STATUS_INVALID": "Auto-Halt reader returned a non-boolean state; fail closed.",
