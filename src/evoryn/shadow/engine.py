@@ -483,8 +483,10 @@ class ShadowRunner:
         *,
         config: ShadowConfig,
         experiment_spec: ExperimentSpec,
+        baseline_experiment_spec: ExperimentSpec,
         registry: ExperimentRegistry,
         strategy: CausalTargetStrategy,
+        baseline_strategy: CausalTargetStrategy,
         regime_classifier: RegimeClassifierPort,
         auto_halt_status: Callable[[], bool],
         utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -517,20 +519,47 @@ class ShadowRunner:
             raise ShadowSafetyError(
                 "Shadow configuration does not match the registered fingerprint."
             )
+        if baseline_experiment_spec.mode is not ExperimentMode.PAPER:
+            raise ShadowSafetyError("The baseline experiment must be mode=PAPER.")
+        if registry.get(baseline_experiment_spec.experiment_id) != baseline_experiment_spec:
+            raise ShadowSafetyError("Paper baseline experiment is not identically registered.")
+        if (
+            baseline_experiment_spec.evaluation_config_fingerprint
+            != config.evaluation_config_fingerprint
+        ):
+            raise ShadowSafetyError(
+                "Paper baseline and Shadow evaluation configurations differ."
+            )
+        if baseline_experiment_spec.feature_schema_version != experiment_spec.feature_schema_version:
+            raise ShadowSafetyError("Paper baseline and Shadow feature schemas differ.")
+        baseline_fingerprint = strategy_fingerprint(baseline_strategy)
+        baseline_parameters = tuple(sorted(baseline_strategy.parameters().items()))
+        if (
+            baseline_experiment_spec.model_id != baseline_strategy.strategy_id
+            or baseline_experiment_spec.model_version != baseline_strategy.strategy_version
+            or baseline_experiment_spec.parameters != baseline_parameters
+        ):
+            raise ShadowSafetyError(
+                "Paper baseline strategy does not match its registered experiment."
+            )
         if not callable(auto_halt_status):
             raise ValueError("A read-only Auto-Halt status reader is required.")
         self._config = config
         self._spec = experiment_spec
+        self._baseline_spec = baseline_experiment_spec
         self._registry = registry
         self._ledger: LearningLabLedger = registry.ledger
         self._strategy = strategy
+        self._baseline_strategy = baseline_strategy
         self._strategy_fingerprint = actual_fingerprint
+        self._baseline_strategy_fingerprint = baseline_fingerprint
         self._regime_classifier = regime_classifier
         self._auto_halt_status = auto_halt_status
         self._utcnow = utcnow
         self._history: deque[MarketCandle] = deque(maxlen=config.max_history_candles)
         self._last_candle_at: datetime | None = None
         self._target_quantity = Decimal("0")
+        self._baseline_target_quantity = Decimal("0")
         self._regime_identity: tuple[str, str, str, str] | None = None
         self._continuity_blocked = False
         self._identity_blocked = False
@@ -551,6 +580,13 @@ class ShadowRunner:
                 "feature_schema_version": self._spec.feature_schema_version,
                 "strategy_fingerprint": self._strategy_fingerprint,
                 "registered_dataset_version": self._spec.dataset_version,
+                "paper_baseline": {
+                    "experiment_id": self._baseline_spec.experiment_id,
+                    "model_id": self._baseline_spec.model_id,
+                    "model_version": self._baseline_spec.model_version,
+                    "model_fingerprint": self._baseline_spec.model_fingerprint,
+                    "strategy_fingerprint": self._baseline_strategy_fingerprint,
+                },
                 "feed_manifest_fingerprint": self._config.feed_manifest_fingerprint,
                 "evaluation_config_fingerprint": self._config.evaluation_config_fingerprint,
                 "execution_authorized": False,
@@ -692,6 +728,9 @@ class ShadowRunner:
         proposed_quantity: Decimal | None = None
         quantity_delta: Decimal | None = None
         notional_delta: Decimal | None = None
+        baseline_exposure: Decimal | None = None
+        baseline_quantity: Decimal | None = None
+        baseline_quantity_delta: Decimal | None = None
         outcome = ShadowOutcome.ABSTAIN
         reason_code = reason or "UNSET"
         explanation = _reason_explanation(reason_code)
@@ -699,13 +738,21 @@ class ShadowRunner:
         if reason is None:
             try:
                 proposed_exposure = self._strategy.target_exposure(candidate_history)
+                baseline_exposure = self._baseline_strategy.target_exposure(candidate_history)
                 if (
                     not isinstance(proposed_exposure, Decimal)
                     or not proposed_exposure.is_finite()
                     or proposed_exposure < 0
                     or proposed_exposure > 1
                 ):
-                    raise ValueError("target exposure is outside [0, 1].")
+                    raise ValueError("Shadow strategy target exposure is outside [0, 1].")
+                if (
+                    not isinstance(baseline_exposure, Decimal)
+                    or not baseline_exposure.is_finite()
+                    or baseline_exposure < 0
+                    or baseline_exposure > 1
+                ):
+                    raise ValueError("Paper baseline target exposure is outside [0, 1].")
                 proposed_quantity = _floor_step(
                     (
                         self._config.virtual_capital
@@ -715,20 +762,36 @@ class ShadowRunner:
                     / candle.close,
                     self._config.quantity_step,
                 )
+                baseline_quantity = _floor_step(
+                    (
+                        self._config.virtual_capital
+                        * self._config.allocation_fraction
+                        * baseline_exposure
+                    )
+                    / candle.close,
+                    self._config.quantity_step,
+                )
             except Exception:
                 proposed_exposure = None
                 proposed_quantity = None
-                reason_code = "STRATEGY_OUTPUT_INVALID"
-                explanation = "Strategy raised an exception or returned an invalid target exposure."
+                baseline_exposure = None
+                baseline_quantity = None
+                reason_code = "STRATEGY_OR_BASELINE_OUTPUT_INVALID"
+                explanation = (
+                    "Shadow strategy or registered Paper baseline raised an exception or "
+                    "returned an invalid target exposure; the complete comparison abstains."
+                )
                 outcome = ShadowOutcome.ABSTAIN
             else:
                 quantity_delta = proposed_quantity - self._target_quantity
+                baseline_quantity_delta = baseline_quantity - self._baseline_target_quantity
                 notional_delta = quantity_delta * candle.close
                 outcome = _outcome_for(self._target_quantity, proposed_quantity)
                 reason_code = "SHADOW_TARGET_COMPUTED"
                 explanation = (
-                    "A hypothetical target was computed from a completed candle; no order was "
-                    "created or sent. Risk authorization was not evaluated from account/book state."
+                    "Shadow and registered Paper-baseline target projections were computed from "
+                    "the same completed history. They are analytical quantities only: no order, "
+                    "fill or risk approval was created."
                 )
 
         snapshot = self._build_snapshot(
@@ -745,10 +808,20 @@ class ShadowRunner:
             quantity_delta=quantity_delta,
             estimated_notional_delta=notional_delta,
             auto_halt_status=halt_status,
+            baseline_experiment_id=self._baseline_spec.experiment_id,
+            baseline_model_id=self._baseline_spec.model_id,
+            baseline_model_version=self._baseline_spec.model_version,
+            baseline_model_fingerprint=self._baseline_spec.model_fingerprint,
+            baseline_strategy_id=self._baseline_strategy.strategy_id,
+            baseline_strategy_version=self._baseline_strategy.strategy_version,
+            baseline_strategy_fingerprint=self._baseline_strategy_fingerprint,
+            baseline_target_exposure=baseline_exposure,
+            baseline_target_quantity=baseline_quantity,
+            baseline_quantity_delta=baseline_quantity_delta,
         )
         event_type = (
             LearningEventType.SHADOW_INPUT_REJECTED
-            if outcome is ShadowOutcome.ABSTAIN and reason is not None
+            if outcome is ShadowOutcome.ABSTAIN
             else LearningEventType.SHADOW_DECISION_RECORDED
         )
         self._append_event(
@@ -763,6 +836,7 @@ class ShadowRunner:
             self._history.append(candle)
             self._last_candle_at = candle.timestamp
             self._target_quantity = proposed_quantity or Decimal("0")
+            self._baseline_target_quantity = baseline_quantity or Decimal("0")
             if regime is not None:
                 self._remember_regime_identity(regime)
         elif reason_code == "CANDLE_GAP":
