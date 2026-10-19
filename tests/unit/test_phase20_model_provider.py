@@ -347,10 +347,10 @@ def test_input_schema_and_size_gates_fail_closed() -> None:
 @pytest.mark.parametrize(
     ("output", "expected"),
     [
-        ({"summary": "only one field"}, "Required output fields are missing."),
+        ({"summary": "only one field"}, "OUTPUT_SCHEMA_INVALID"),
         (
             {"summary": "ok", "suggestion": "ok", "submit_order": True},
-            "Output contains fields outside the declared schema.",
+            "OUTPUT_SCHEMA_INVALID",
         ),
         (
             {
@@ -574,6 +574,37 @@ def test_openai_compatible_adapter_abstains_on_identity_drift_and_invalid_json()
     )
     with pytest.raises(ModelProviderError, match="valid JSON"):
         bad_adapter.invoke(request_for("llm-compatible"), timeout_seconds=1.0)
+
+
+def test_compatible_adapter_requires_model_identity_and_can_estimate_cost_explicitly() -> None:
+    model_identity = identity("llm-compatible", "fixture-llm", "fixture-snapshot-1")
+    response_body = {
+        "model": "fixture-llm",
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {"summary": "estimated", "suggestion": "remain advisory"}
+                    )
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 20, "completion_tokens": 10},
+    }
+    adapter = OpenAICompatibleChatAdapter(
+        identity=model_identity,
+        base_url="https://gateway.example.test/v1",
+        transport=FakeJsonTransport(response_body),
+        credentials=FakeCredentials(),
+        schemas=(OUTPUT_SCHEMA,),
+        clock=lambda: NOW,
+        cost_estimator=lambda _identity, _input_tokens, _output_tokens: Decimal("0.003"),
+    )
+
+    response = adapter.invoke(request_for("llm-compatible"), timeout_seconds=1.0)
+
+    assert response.usage == TokenUsage(20, 10, Decimal("0.003"))
 
 
 def test_openai_compatible_adapter_rejects_non_https_endpoint() -> None:
