@@ -177,7 +177,8 @@ class NewsAwareConservativeOverlay:
                 asset.upper() for asset in article.related_asset_ids
             }:
                 continue
-            if sentiment.available_at > decision_at:
+            # Equal timestamps do not prove the article was processed before the bar open.
+            if sentiment.available_at >= decision_at:
                 continue
             if (
                 decision_at - sentiment.available_at > self._policy.maximum_news_age
