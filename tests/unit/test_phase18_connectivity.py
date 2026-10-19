@@ -18,6 +18,7 @@ from evoryn.adapters.network.connectivity import (
     FeedFreshnessError,
     FeedFreshnessGuard,
     FeedFreshnessPolicy,
+    NetworkRouteAuthorization,
     RateLimitDeferredError,
     RetryPolicy,
 )
@@ -69,6 +70,17 @@ class FakeTransport:
         return outcome
 
 
+def make_route_authorization(clock: FakeTime) -> NetworkRouteAuthorization:
+    return NetworkRouteAuthorization(
+        route_id="approved-direct",
+        authorization_ref="test:phase18-policy",
+        approved_by="unit-test",
+        approved_at=clock.wall_now - timedelta(minutes=1),
+        review_due_at=clock.wall_now + timedelta(days=30),
+        allowed_hosts=frozenset({"api.example.test"}),
+    )
+
+
 def make_manager(
     transport: FakeTransport,
     sink: MemoryAuditSink,
@@ -79,9 +91,7 @@ def make_manager(
 ) -> ConnectivityManager:
     return ConnectivityManager(
         transport=transport,
-        allowed_hosts=frozenset({"api.example.test"}),
-        route_id="approved-direct",
-        route_authorized=True,
+        route_authorization=make_route_authorization(clock),
         audit_sink=sink,
         retry_policy=retry or RetryPolicy(base_delay_seconds=1, max_delay_seconds=4),
         circuit_policy=circuit or CircuitBreakerPolicy(failure_threshold=2, cooldown_seconds=3),
@@ -271,9 +281,7 @@ def test_audit_failure_blocks_transport() -> None:
     transport = FakeTransport([{"should": "not-run"}])
     manager = ConnectivityManager(
         transport=transport,
-        allowed_hosts=frozenset({"api.example.test"}),
-        route_id="approved-direct",
-        route_authorized=True,
+        route_authorization=make_route_authorization(clock),
         audit_sink=BrokenSink(),
         monotonic=clock.monotonic,
         utcnow=clock.utcnow,
@@ -348,3 +356,32 @@ def test_freshness_gap_requires_explicit_reconciliation_to_rebaseline() -> None:
     assert guard.last_observed_at is None
     assert sink.events[-1].event_type is ConnectionEventType.FEED_FRESHNESS_RESET
     assert sink.events[-1].evidence_ref == "reconcile:issue-18"
+
+def test_expired_route_authorization_is_denied_before_transport() -> None:
+    sink = MemoryAuditSink()
+    clock = FakeTime()
+    transport = FakeTransport([{"must": "not-run"}])
+    manager = ConnectivityManager(
+        transport=transport,
+        route_authorization=NetworkRouteAuthorization(
+            route_id="approved-direct",
+            authorization_ref="test:short-review",
+            approved_by="unit-test",
+            approved_at=clock.wall_now - timedelta(minutes=1),
+            review_due_at=clock.wall_now + timedelta(seconds=1),
+            allowed_hosts=frozenset({"api.example.test"}),
+        ),
+        audit_sink=sink,
+        utcnow=clock.utcnow,
+        monotonic=clock.monotonic,
+        sleeper=clock.sleep,
+        random_value=lambda: 0.5,
+    )
+    clock.wall_now += timedelta(seconds=1)
+
+    with pytest.raises(JsonApiError, match="authorization"):
+        manager.get_json("https://api.example.test/v1/ping", headers={}, params={})
+
+    assert transport.calls == []
+    assert sink.events[-1].event_type is ConnectionEventType.DESTINATION_REJECTED
+    assert sink.events[-1].reason == "route_authorization_inactive_or_expired"
