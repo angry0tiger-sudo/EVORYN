@@ -45,11 +45,17 @@ construct a market-data provider or launch an exchange-backed runtime. A product
 OS-level service installation, log/health monitoring, startup policy, independent review and recovery
 drills remain separate release gates.
 
-## Observed real-history run
+## Latest observed real-history run
 
-A successful workflow run on review-branch SHA `ba4bab8e46414fd8506b167f6ef8430d2d23abbb` completed the 180-day BTC-USDT hourly pipeline. It loaded 4,319 contiguous public OHLCV bars, trained the Random Forest, created a versioned model manifest and ran the final holdout backtest against the trained-regime, SMA crossover and buy-and-hold references. Both six-gate CI and the research workflow passed; all output files and checksums are retained in [Research Run #3](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277) and its [artifact](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277/artifacts/12222590242).
+The latest successful workflow on code/test SHA `f9f634553f8c6edb2b173b7b885ad2d9cf34330c` completed the 180-day BTC-USDT hourly pipeline. Standard six-gate CI [Run #39328332810](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39328332810) passed all six jobs (379 passed, one optional-ML skip). On the same code/test SHA, public-history research [Run #4](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39328332540) passed 380 tests in 7.78s with the research dependencies installed, passed the research dependency audit, fetched public OHLCV history, trained the model, evaluated the final holdout and published artifacts.
 
-This was a successful *pipeline execution*, not model acceptance. On 858 final-holdout weak labels, accuracy was 34.50%, balanced accuracy 25.40% and macro-F1 24.80%. A constant majority-class baseline achieved 58.39% accuracy. The trained-regime backtest returned -0.2411% after modeled costs, versus +1.4833% for buy-and-hold. The candidate is therefore retained for research and is not promoted into the active runtime. Full metrics, hashes, split details and limitations are in [the research record](../research/2026-10-20-nobitex-regime-holdout.md).
+- Dataset: 4,320 contiguous hourly BTC-USDT bars, 9 pages, 2026-04-22 21:30 to 2026-10-19 20:30 UTC; gap count 0.
+- Dataset version: `c1a13b3533f3777fa743a8fd6632d73b1760b355341fa1537b7a5ef6ab24a616`; candle SHA-256: `0d976abd6772fc8dce0578b55d69c9686aabe7ffa0a9329cc46c600349297d84`; dataset-manifest SHA-256: `6054e2276864a69497a57f7953ab66b43b9f04bb192a3466303d9fa9d5905651`.
+- Model SHA-256: `38799b767b2aa6c2910c07383c3e213db090d5b8d5c1a1e401ee963173c17f2c`; retained [artifact #12223262662](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39328332540/artifacts/12223262662).
+- On 858 final-holdout samples: accuracy 33.92%, balanced accuracy 25.59%, macro-F1 24.66%, Brier 0.72879, log loss 1.34498. The train-only majority-class baseline reached 58.51% accuracy and 25.00% balanced accuracy.
+- Same-cost holdout backtests: trained-regime long/flat -0.2411% return / 0.2411% max drawdown / 1 closed trade; SMA crossover -1.3562% / 3.9004% / 12 closed trades; buy-and-hold +1.4810% / 2.2600% / 0 closed trades (position remains open). These are simulation estimates, not profitability evidence.
+
+The save/reload/checksum verification of the content-addressed dataset, independently pinned model/manifest loader tests, optional-ML integration suite and artifact publication all passed on this code head. The model still fails the predictive-quality gate and is not promoted into Paper or Live defaults. Historical Run #3 on `ba4bab8e46414fd8506b167f6ef8430d2d23abbb` remains retained at [Run #3](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277) and [its artifact](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277/artifacts/12222590242); its older 4,319-candle dataset is historical and is not the current metric identity.
 
 ## Research limits and release status
 
