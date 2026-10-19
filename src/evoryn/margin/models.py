@@ -139,7 +139,7 @@ class DelegationLimitSnapshot:
                 raise ValueError("Delegation rows must use the typed domain model.")
             key = (item.side, item.leverage)
             if key in seen:
-                raise ValueError("Duplicate side/leverage rows in delegation limit snapshot.")
+                raise ValueError("duplicate side/leverage rows in delegation limit snapshot.")
             seen.add(key)
 
 
