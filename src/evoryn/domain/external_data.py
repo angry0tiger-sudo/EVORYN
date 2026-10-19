@@ -211,6 +211,7 @@ class NewsArticleCandidate:
     declared_content_sha256: str | None = None
     related_asset_ids: tuple[str, ...] = ()
     language_evidence: str = "provider_field"
+    provider_id_evidence: str = "provider_field"
 
     def __post_init__(self) -> None:
         """Validate structural provenance, while leaving content quality to the quality gate."""
@@ -240,6 +241,8 @@ class NewsArticleCandidate:
             "operator_asserted",
         }:
             raise ValueError("language_evidence must identify the actual provenance of language.")
+        if self.provider_id_evidence not in {"provider_field", "url_sha256"}:
+            raise ValueError("provider_id_evidence must identify how the article ID was derived.")
         if len(set(self.related_asset_ids)) != len(self.related_asset_ids):
             raise ValueError("related_asset_ids must be unique.")
         if any(not asset.strip() for asset in self.related_asset_ids):
@@ -279,6 +282,7 @@ class NewsArticleRecord:
     related_asset_ids: tuple[str, ...] = ()
     source_trust_score: Decimal = Decimal("0")
     language_evidence: str = "provider_field"
+    provider_id_evidence: str = "provider_field"
 
     def __post_init__(self) -> None:
         for name in (
@@ -313,6 +317,8 @@ class NewsArticleRecord:
             "operator_asserted",
         }:
             raise ValueError("language_evidence must identify the actual provenance of language.")
+        if self.provider_id_evidence not in {"provider_field", "url_sha256"}:
+            raise ValueError("provider_id_evidence must identify how the article ID was derived.")
         if len(set(self.related_asset_ids)) != len(self.related_asset_ids):
             raise ValueError("related_asset_ids must be unique.")
         if any(not asset.strip() for asset in self.related_asset_ids):
