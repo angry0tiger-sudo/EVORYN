@@ -82,7 +82,11 @@ Each record contains:
 - prior active strategy, candidate/active selection and available compatible alternatives;
 - reason/status codes, evidence count, candidate start and last switch time;
 - configured confidence threshold, required evidence, stability and hold durations;
-- registry fingerprint, invalidation conditions and `allow_new_signals`.
+- registry and routing fingerprints, invalidation conditions and `allow_new_signals`;
+- both the ledger-recorded timestamp and the regime prediction's `as_of` timestamp, so event
+  freshness can be reconstructed independently;
+- the previous, candidate, and active strategy IDs; actual evidence count even after the threshold
+  is met; and the configured maximum prediction age.
 
 The event object resides in the domain layer. The selector depends only on a decision-sink protocol,
 not on PaperBroker or execution itself. Ledgers are in-memory and append-only within the process;
