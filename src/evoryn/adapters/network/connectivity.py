@@ -604,9 +604,11 @@ class ConnectivityManager:
         if not math.isfinite(sample) or not 0.0 <= sample <= 1.0:
             raise ValueError("random_value must return a finite number in [0, 1].")
         jitter = 1.0 + ((2.0 * sample) - 1.0) * self._retry_policy.jitter_fraction
-        delay = min(self._retry_policy.max_delay_seconds, max(0.0, base * jitter))
+        delay: float = float(
+            min(self._retry_policy.max_delay_seconds, max(0.0, base * jitter))
+        )
         if error.retry_after_seconds is not None:
-            delay = max(delay, error.retry_after_seconds)
+            delay = max(delay, float(error.retry_after_seconds))
         return delay
 
     def _is_retryable(self, error: JsonApiError) -> bool:
