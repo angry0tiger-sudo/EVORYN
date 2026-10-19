@@ -45,6 +45,7 @@ class SelectionStatus(StrEnum):
     NO_COMPATIBLE_PLUGIN = "no_compatible_plugin"
     MODEL_IDENTITY_CHANGED = "model_identity_changed"
     REGISTRY_CHANGED = "registry_changed"
+    MARKET_SCOPE_CHANGED = "market_scope_changed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +164,7 @@ class StrategySelectionDecision:
             SelectionStatus.NO_COMPATIBLE_PLUGIN,
             SelectionStatus.MODEL_IDENTITY_CHANGED,
             SelectionStatus.REGISTRY_CHANGED,
+            SelectionStatus.MARKET_SCOPE_CHANGED,
         } and self.allow_new_signals:
             raise ValueError("Fail-closed selection outcomes must prohibit new strategy signals.")
         if self.status in {SelectionStatus.SWITCHED, SelectionStatus.RETAINED} and (
@@ -270,6 +272,7 @@ class RegimeStrategySelector:
         self._model_identity: tuple[str, str, str, str] | None = None
         self._registry_fingerprint = registry.fingerprint
         self._decision_sequence = 0
+        self._market_symbol: str | None = None
 
     @property
     def current_strategy_id(self) -> str | None:
@@ -303,6 +306,29 @@ class RegimeStrategySelector:
             raise ValueError("correlation_id must not be empty.")
         if not market_symbol.strip():
             raise ValueError("market_symbol must not be empty.")
+        if self._market_symbol is None:
+            self._market_symbol = market_symbol
+        elif market_symbol != self._market_symbol:
+            previous_strategy_id = self._current_strategy_id
+            self._current_strategy_id = None
+            self._last_switch_at = None
+            self._clear_candidate()
+            return self._make_decision(
+                prediction,
+                now=now,
+                correlation_id=correlation_id,
+                market_symbol=market_symbol,
+                status=SelectionStatus.MARKET_SCOPE_CHANGED,
+                reason_code="SELECTOR_MARKET_SCOPE_MISMATCH",
+                reason=(
+                    f"Selector instance is bound to {self._market_symbol!r}; "
+                    "cross-market evidence is not combined."
+                ),
+                candidate_id=None,
+                alternatives=(),
+                allow_new_signals=False,
+                previous_strategy_id=previous_strategy_id,
+            )
         if prediction.as_of.utcoffset() != timedelta(0):
             self._clear_candidate()
             return self._make_decision(
@@ -669,6 +695,7 @@ class RegimeStrategySelector:
                 "model_fingerprint_or_feature_schema_changed",
                 "strategy_registry_fingerprint_changed",
                 "strategy_routing_fingerprint_changed",
+                "market_scope_changed",
                 "hard_risk_gate_denies_or_halts_execution",
                 "out_of_sample_evidence_fails_or_is_missing",
             ),
