@@ -61,7 +61,9 @@ class CoinMarketCapConnector:
             self.source_id, DataUse.MARKET_REFERENCE, now=now
         )
         if authorization.base_url.rstrip("/") != _CMC_BASE_URL:
-            raise PermissionError("CoinMarketCap authorization must reference its official API host.")
+            raise PermissionError(
+                "CoinMarketCap authorization must reference its official API host."
+            )
         url = urljoin(_CMC_BASE_URL + "/", "v1/cryptocurrency/quotes/latest")
         payload = self._transport.get_json(
             url,
@@ -73,10 +75,14 @@ class CoinMarketCapConnector:
             raise ExternalProviderDataError("CoinMarketCap response omitted data mapping.")
         asset = item.get(str(asset_id))
         if not isinstance(asset, dict):
-            raise ExternalProviderDataError("CoinMarketCap did not return the requested numeric ID.")
+            raise ExternalProviderDataError(
+                "CoinMarketCap did not return the requested numeric ID."
+            )
         quote_map = asset.get("quote")
         if not isinstance(quote_map, dict) or not isinstance(quote_map.get(currency), dict):
-            raise ExternalProviderDataError("CoinMarketCap response omitted requested quote currency.")
+            raise ExternalProviderDataError(
+                "CoinMarketCap response omitted requested quote currency."
+            )
         quote = quote_map[currency]
         observed = _timestamp(quote.get("last_updated") or asset.get("last_updated"))
         digest = _payload_digest(payload)
@@ -147,7 +153,9 @@ class CoinGeckoConnector:
             params={"vs_currency": currency, "ids": asset_id},
         )
         if not isinstance(payload, list) or len(payload) != 1 or not isinstance(payload[0], dict):
-            raise ExternalProviderDataError("CoinGecko response must contain exactly one market row.")
+            raise ExternalProviderDataError(
+                "CoinGecko response must contain exactly one market row."
+            )
         asset = payload[0]
         if asset.get("id") != asset_id:
             raise ExternalProviderDataError("CoinGecko returned an asset ID other than requested.")
