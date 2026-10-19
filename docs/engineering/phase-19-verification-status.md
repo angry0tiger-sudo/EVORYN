@@ -7,7 +7,7 @@
 
 ## Source snapshot
 
-At the time of the structural check, the Phase 19 branch head was `18a1abd805831a05a171ba8803eea89617e10d98` and tree SHA was `a6667f30cb0efcf99fde91c0d76a4afcce86d558`.
+Current branch snapshot after the latest verification-ledger update: HEAD `c9a4d9023efc2a7a9c3cbea905b341ece14079f0`, tree SHA `0658aea51804e65b1de5979ca14490f2fea7a1a9`. The Phase 19 Python source/test blobs below are unchanged from the previous structural check; the latest commits update evidence and technical-debt documentation only.
 
 The Git tree recorded these exact source blobs:
 - `src/evoryn/shadow/engine.py`: `d1e1c968268b853e0e763aaed2a516003a9368c4`
@@ -17,7 +17,7 @@ The Git tree recorded these exact source blobs:
 - `src/evoryn/shadow/__init__.py`: `8b2fc7c18ba3680a1cccb35ede5e55618884a17e`
 - `docs/adr/0012-shadow-mode-observation-only.md`: `bb3b18edcabc1641ad930d4f5bdeb96b20e2aba5`
 - `docs/operations/phase-19-shadow-mode.md`: `b777b4242965e6fb93aecf7cb206c102b2b230aa`
-- `TECHNICAL_DEBT.md`: `32aa7072d6ff58d7b554f7d1b3ffbcd573917ead`
+- `TECHNICAL_DEBT.md`: `c791c58a1ebba750257f9f6a31b07897bfc66cc9`
 
 These are Git blob identifiers from the repository tree, not claims that Python executed them.
 
@@ -32,16 +32,23 @@ These are static source/structure checks. **They are not a Python compile, pytes
 
 ## CI execution evidence
 
-GitHub Actions run #670 / ID `39218153499` was triggered for candidate head `18a1abd805831a05a171ba8803eea89617e10d98`. The six jobs (preflight, pytest, Ruff, mypy, Bandit, pip-audit) all concluded `failure` within approximately three seconds, each with `runner_id=0`, empty `runner_name` and `steps=[]`. This means no runner started these commands. There were no diagnostic artifacts.
+Latest CI evidence before the evidence-only documentation commits:
+- Run #675 / ID `39218669025` (push) on candidate head `4bc4da16e39c2c80165bedfe021ffca88f0acacc`.
+- Run #676 / ID `39218674816` (pull request) on the same candidate head.
 
-The lower-level reason for runner allocation failure is still unconfirmed. The suspected account/quota issue is a diagnostic lead, not a fact established by the API.
+In both runs, all six jobs (preflight, pytest, Ruff, mypy, Bandit, pip-audit) concluded `failure` within approximately three seconds. Every job reported `runner_id=0`, empty `runner_name` and `steps=[]`. Fetching preflight logs returned `BlobNotFound`; no diagnostic artifact was available. This confirms that no runner executed the commands. A later evidence-only commit updates this report and the technical-debt ledger; its CI result must be checked separately.
+
+The reason the hosted runner was not allocated is still unconfirmed. Quota exhaustion remains a diagnostic hypothesis, not a fact established by the API.
 
 ## Local execution status
 
-- Full canonical repository checkout in the local execution environment: **not available**.
-- Phase 19 `compileall`: **not run**.
-- Phase 19 canonical pytest suite: **not run**.
-- Ruff, strict mypy, Bandit and pip-audit: **not run**.
+- Full canonical repository checkout in the available sandbox: **not available**. The inspected `/mnt/data/evoryn-local` contained only `README.md`; it had no `.git` directory or EVORYN source tree.
+- Direct `git ls-remote https://github.com/angry0tiger-sudo/EVORYN.git` attempt: **blocked**, because this sandbox could not resolve `github.com`.
+- Available local runtime: Python `3.13.5` and pytest `9.0.2`; `ruff`, `mypy`, `bandit` and `pip-audit` executables were not installed.
+- Phase 19 `compileall`: **not run**, because the source tree was unavailable.
+- Phase 19 canonical pytest suite: **not run**, because the source tree was unavailable.
+- Ruff, strict mypy, Bandit and pip-audit: **not run**, because the tools were absent.
+- Authorized remote workstation execution was unavailable within the current remote-execution usage allowance; it was not retried.
 - Live market request: **not performed**.
 - Real exchange order: **not sent**.
 
