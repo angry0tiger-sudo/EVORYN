@@ -459,6 +459,17 @@ def test_paper_baseline_identity_drift_latches_fail_closed(tmp_path: Path) -> No
     assert fixture.runner.history == ()
 
 
+def test_shadow_abstains_when_active_paper_champion_pointer_changes(tmp_path: Path) -> None:
+    fixture = Fixture(tmp_path)
+    fixture.champion_controller._active_champion_id = None
+    snapshot = fixture.runner.process_candle(fixture.candle(), received_at=fixture.now)
+
+    assert snapshot.outcome is ShadowOutcome.ABSTAIN
+    assert snapshot.reason_code == "PAPER_CHAMPION_CHANGED"
+    assert snapshot.baseline_experiment_id == fixture.baseline_spec.experiment_id
+    assert fixture.runner.history == ()
+
+
 def test_baseline_must_share_registered_training_data_identity(tmp_path: Path) -> None:
     fixture = Fixture(tmp_path)
     mismatched = ExperimentSpec(
@@ -543,6 +554,7 @@ def test_runner_rejects_non_shadow_experiment(tmp_path: Path) -> None:
             registry=fixture.registry,
             strategy=fixture.strategy,
             baseline_strategy=fixture.baseline_strategy,
+            champion_controller=fixture.champion_controller,
             regime_classifier=fixture.regime,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
@@ -615,6 +627,7 @@ def test_unregistered_experiment_is_rejected(tmp_path: Path) -> None:
             registry=other_registry,
             strategy=fixture.strategy,
             baseline_strategy=fixture.baseline_strategy,
+            champion_controller=fixture.champion_controller,
             regime_classifier=fixture.regime,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
@@ -634,6 +647,7 @@ def test_non_persistent_learning_ledger_is_rejected(tmp_path: Path) -> None:
             registry=memory_registry,
             strategy=fixture.strategy,
             baseline_strategy=fixture.baseline_strategy,
+            champion_controller=fixture.champion_controller,
             regime_classifier=fixture.regime,
             auto_halt_status=lambda: False,
             utcnow=lambda: fixture.now,
