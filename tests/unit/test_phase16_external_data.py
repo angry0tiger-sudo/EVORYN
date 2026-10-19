@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -23,6 +24,7 @@ from evoryn.adapters.network.json_http import HttpsJsonTransport, JsonApiError
 from evoryn.domain.external_data import (
     DataUse,
     NewsArticleCandidate,
+    NewsArticleRecord,
     NewsIngestionStatus,
     NewsSentimentRecord,
     SentimentLabel,
@@ -33,6 +35,7 @@ from evoryn.intelligence.news_sentiment import (
     FINANCIAL_NEWS_MODEL_CARD,
     HuggingFaceNewsSentimentAdapter,
     NewsSentimentOutcome,
+    SentimentModelReview,
 )
 from evoryn.learning_lab.backtest import BacktestConfig, chronological_split
 from evoryn.learning_lab.historical_data import HistoricalDataset
@@ -64,8 +67,8 @@ class FakeJsonTransport:
         self,
         url: str,
         *,
-        headers: dict[str, str],
-        params: dict[str, str],
+        headers: Mapping[str, str],
+        params: Mapping[str, str],
     ) -> Any:
         self.calls.append({"url": url, "headers": dict(headers), "params": dict(params)})
         return self.payload
@@ -252,7 +255,9 @@ def accepted_article(
     return registry, result.article
 
 
-def sentiment_record(article, *, analyzed_at: datetime) -> NewsSentimentRecord:
+def sentiment_record(
+    article: NewsArticleRecord, *, analyzed_at: datetime
+) -> NewsSentimentRecord:
     return NewsSentimentRecord(
         article=article,
         analyzed_at=analyzed_at,
@@ -276,7 +281,7 @@ def sentiment_review(
     *,
     rights_verified: bool = True,
     commercial_approved: bool = False,
-):
+) -> SentimentModelReview:
     return HuggingFaceNewsSentimentAdapter.financial_phrasebank_candidate(
         reviewed_by="explicit-test-review",
         reviewed_at=DATA_START - timedelta(days=1),
