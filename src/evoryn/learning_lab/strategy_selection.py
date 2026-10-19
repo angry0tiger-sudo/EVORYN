@@ -16,7 +16,8 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 from evoryn.domain.models import MarketCandle
-from evoryn.execution.spot import ExecutionLedger, StrategySelectionLedgerEntry
+from evoryn.domain.strategy_decisions import StrategySelectionLedgerEntry
+from evoryn.execution.spot import ExecutionLedger
 from evoryn.intelligence.regime import RegimePrediction
 from evoryn.learning_lab.backtest import (
     BacktestConfig,
