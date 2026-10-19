@@ -49,7 +49,9 @@ class _SameHostHttpsRedirects(HTTPRedirectHandler):
         if (
             original.scheme != "https"
             or target.scheme != "https"
-            or original.hostname != target.hostname
+            or (original.hostname or "").casefold() != (target.hostname or "").casefold()
+            or original.port not in (None, 443)
+            or target.port not in (None, 443)
             or target.username is not None
             or target.password is not None
         ):
