@@ -570,6 +570,39 @@ def test_margin_risk_assessment_cannot_authorize_new_exposure() -> None:
         )
 
 
+def test_margin_risk_rejects_non_usdt_quote_currency() -> None:
+    non_usdt = MarginMarketSettings(
+        market_symbol="BTCIRT",
+        src_currency="btc",
+        dst_currency="irt",
+        position_fee_rate=Decimal("0.001"),
+        max_leverage=Decimal("5"),
+        buy_enabled=True,
+        sell_enabled=True,
+        observed_at=NOW,
+    )
+    intent_irt = MarginOpenIntent(
+        market_symbol="BTCIRT",
+        side=MarginSide.BUY,
+        amount=Decimal("1"),
+        price=Decimal("100"),
+        leverage=Decimal("2"),
+        observed_at=NOW,
+    )
+    limits = DelegationLimitSnapshot(
+        market_symbol="BTCIRT",
+        observed_at=NOW,
+        limits=(DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("250")),),
+    )
+
+    result = MarginRiskPolicy().evaluate_open_intent(
+        intent_irt, non_usdt, limits, liquidity_pool(), now=NOW
+    )
+
+    assert result.disposition is MarginOrderDisposition.REJECT
+    assert result.reason_code == "quote_currency_not_allowed"
+
+
 def test_margin_position_reconciliation_reports_every_material_mismatch() -> None:
     expected = position()
     observed = position(collateral="199", margin_ratio=Decimal("1.2"))

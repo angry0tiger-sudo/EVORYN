@@ -23,6 +23,7 @@ from evoryn.ports.exchange_errors import (
     InvalidExchangeRequest,
     MalformedExchangeResponse,
     TradingDisabledError,
+    UnsupportedExchangeCapability,
 )
 
 
@@ -290,14 +291,14 @@ def test_wallet_read_requires_token_before_any_transport_call(
     """Missing account credentials are rejected without making an HTTP attempt."""
     adapter = make_adapter(empty_transport, token=None)
 
-    with pytest.raises(AuthenticationError, match="read-only NOBITEX_API_TOKEN"):
+    with pytest.raises(AuthenticationError, match="NOBITEX_READONLY_API_TOKEN"):
         adapter.get_balances()
 
     assert empty_transport.calls == []
 
 
-def test_wallet_balances_are_normalized_using_mock_response() -> None:
-    """Mocked wallet rows retain decimal balance and blocked values."""
+def test_wallet_balances_request_and_return_only_usdt() -> None:
+    """The adapter asks for USDT only and filters other wallet rows defensively."""
     transport = FakeNobitexTransport(
         responses={
             ("GET", "/v2/wallets"): {
@@ -305,16 +306,74 @@ def test_wallet_balances_are_normalized_using_mock_response() -> None:
                 "wallets": {
                     "BTC": {"balance": "1.2500", "blocked": "0.2500"},
                     "USDT": {"balance": "100", "blocked": "10"},
+                    "ETH": {"balance": "4", "blocked": "1"},
                 },
             }
         }
     )
     balances = make_adapter(transport).get_balances()
 
-    assert balances[0].currency == "BTC"
-    assert balances[0].balance == Decimal("1.2500")
-    assert balances[0].blocked == Decimal("0.2500")
+    assert len(balances) == 1
+    assert balances[0].currency == "USDT"
+    assert balances[0].balance == Decimal("100")
+    assert balances[0].blocked == Decimal("10")
+    assert transport.calls[0][0:2] == ("GET", "/v2/wallets")
+    assert transport.calls[0][2] == {"currencies": "usdt", "type": "spot"}
     assert transport.calls[0][4] == "fixture-read-only-token"
+
+
+def test_usdt_market_discovery_filters_non_usdt_pairs() -> None:
+    transport = FakeNobitexTransport(
+        responses={
+            ("GET", "/market/stats"): {
+                "status": "ok",
+                "stats": {
+                    "btc-usdt": {"latest": "100"},
+                    "eth-usdt": {"latest": "20"},
+                    "shib-irt": {"latest": "1"},
+                    "sol-btc": {"latest": "0.001"},
+                    "global": {"latest": "0"},
+                },
+            }
+        }
+    )
+
+    markets = make_adapter(transport).get_usdt_markets()
+
+    assert [market.symbol for market in markets] == ["BTC-USDT", "ETH-USDT"]
+    assert all(market.venue == "nobitex" for market in markets)
+    assert all(market.market_type == "spot" for market in markets)
+    assert transport.calls[0][2] == {"dstCurrency": "usdt"}
+
+
+def test_non_usdt_market_is_rejected_before_market_data_transport_call() -> None:
+    transport = FakeNobitexTransport(responses={})
+    adapter = make_adapter(transport)
+    non_usdt_market = Market(symbol="BTC-IRT", venue="nobitex", market_type="spot")
+
+    with pytest.raises(UnsupportedExchangeCapability, match="USDT-only"):
+        adapter.get_order_book(non_usdt_market)
+
+    assert transport.calls == []
+
+
+def test_transport_blocks_non_usdt_market_and_wallet_reads_before_network_io() -> None:
+    transport = NobitexHTTPTransport()
+
+    with pytest.raises(InvalidExchangeRequest, match="USDT-quoted"):
+        transport.request("GET", "/market/stats", params={"dstCurrency": "irt"})
+    with pytest.raises(InvalidExchangeRequest, match="restricted to USDT"):
+        transport.request(
+            "GET",
+            "/v2/wallets",
+            params={"currencies": "btc", "type": "spot"},
+        )
+    with pytest.raises(InvalidExchangeRequest, match="restricted to USDT"):
+        transport.request(
+            "GET",
+            "/v2/wallets",
+            params={"currencies": "usdt", "type": "all"},
+        )
 
 
 def test_order_status_is_read_only_and_normalized(market: Market) -> None:

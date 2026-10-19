@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from threading import RLock
 
+from evoryn.config import MarketPolicy
 from evoryn.domain.models import MarketSnapshot, OrderRequest, OrderType, Side
 from evoryn.risk.models import (
     PortfolioSnapshot,
@@ -23,9 +24,15 @@ def _runtime_is_instance(value: object, expected: type[object]) -> bool:
 class RiskEngine:
     """Stateful, latched fail-closed gate for a single Spot market."""
 
-    def __init__(self, limits: RiskLimits) -> None:
-        """Construct the gate from validated, explicit hard limits."""
+    def __init__(
+        self,
+        limits: RiskLimits,
+        *,
+        market_policy: MarketPolicy | None = None,
+    ) -> None:
+        """Construct the gate with explicit hard limits and the default USDT whitelist."""
         self._limits = limits
+        self._market_policy = market_policy or MarketPolicy.from_environment()
         self._lock = RLock()
         self._halt_reason: str | None = None
         self._kill_switch_active = False
@@ -92,6 +99,14 @@ class RiskEngine:
                     RiskAction.HALT,
                     "risk_halt_latched",
                     self._halt_reason or "The manual kill switch is active.",
+                )
+
+            market_rejection = self._market_policy.rejection_reason(request.market)
+            if market_rejection is not None:
+                return self._result(
+                    RiskAction.REJECT,
+                    market_rejection,
+                    "Requested market is outside the configured Nobitex Spot/USDT whitelist.",
                 )
 
             unsafe_data = self._data_failure(request, market_data, now)

@@ -46,20 +46,27 @@ This ledger records open verification and runtime-integration obligations. Close
 
 ## Phase 21A — Market Capability Contract Foundation
 
-- [x] **Merged bounded capability-contract foundation.** PR #23 was squash-merged at `1a7871dad08a12565bf63edcd8c21af8794da816`. The merge is a domain-contract milestone, not production authorization or Futures support.
-- [x] **Exact merge-SHA CI verified.** GitHub Actions [Run #39256040848](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39256040848) passed all six configured jobs on `1a7871dad08a12565bf63edcd8c21af8794da816`.
-- [ ] **Runtime wiring remains unverified.** `CapabilityMatrix` is not yet a production runtime authorization service. Legacy booleans do not imply market-specific support.
-- [x] **Owner scope directive recorded:** subsequent Phase 21 work is focused only on Nobitex Spot and documented delegated Margin. No international venue investigation is in scope. Nobitex Futures remains Unknown and is not being pursued.
+- [x] **Merged and verified.** PR #23 squash-merged as `1a7871dad08a12565bf63edcd8c21af8794da816`; exact merge-SHA CI [Run #39256040848](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39256040848) passed all six jobs.
+- [ ] **Runtime capability authorization is still not wired end-to-end.** `CapabilityMatrix` remains a domain contract; this does not grant Futures support or production readiness.
+- [x] **Owner scope recorded:** EVORYN trading market scope is Nobitex only; currently enabled quote currency is USDT. Nobitex Futures remains Unknown and is not being pursued.
 
 ## Phase 21B — Nobitex Margin Conformance and Pool-Aware Risk
 
-- [ ] **Require an explicit, fresh liquidity-pool snapshot for every new Margin opening-intent assessment.** Unknown/stale/future evidence must halt; an inactive or exhausted pool must not permit a new opening.
-- [ ] **Prove exact side-specific delegation units and boundaries.** BUY compares `amount × price` against the unique BUY limit in destination currency; SELL compares `amount` against the unique SELL limit in source currency. Equality is permitted; any excess is rejected.
-- [ ] **Keep market-level `buyEnabled`/`sellEnabled`, source-reported `maxLeverage`, user/side/leverage-specific delegation rows, pool currency, pool capacity, and timestamp freshness independent checks.**
-- [ ] **Ensure a healthy existing-position assessment cannot independently authorize additional exposure.** New risk must pass the open-intent policy with current market settings, user limits and pool capacity.
-- [ ] **Keep Margin adapter normalization-only and the generic Nobitex ExchangePort Spot-read-only.** No authenticated Margin runtime, Margin order/close endpoint, collateral edit, transfer, or Live order path is introduced by Phase 21B.
-- [ ] **Verify with offline unit and contract conformance tests on the exact PR SHA:** pytest, Ruff, strict mypy, Bandit, preflight/compileall and pip-audit. Any failing or unrun gate remains open.
-- [ ] **Account-collateral sufficiency remains a runtime-integration gap.** The generic initial-collateral estimate is planning-only; the current pure Margin policy has no approved Margin-wallet balance source or fully specified server calculation.
+- [x] **Pool evidence is required for an offline new-risk assessment.** PR #24 merged as `a535d14ff60e64530aa50ee441ab06dd9e7a0cb2`; pool snapshots require fresh, valid, matching source-currency evidence.
+- [x] **Side-specific delegation caps are tested.** BUY uses destination-currency notional; SELL uses source-currency amount. Equality is allowed and excess is rejected.
+- [x] **Position health cannot authorize new exposure.** The model rejects `new_risk_permitted=True`; a separate open-intent evaluation is required.
+- [x] **Exact-head CI passed.** PR CI [Run #39258330307](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39258330307) passed all six configured jobs with 286 pytest tests.
+- [ ] **Account Margin-wallet collateral sufficiency and a production authenticated Margin data runtime remain unimplemented.** The pure opening-intent evaluation does not authorize an exchange order.
+
+## Phase 22 — Nobitex Read-Only Account Data and USDT-Only Market Gate
+
+- [ ] **Read-only wallet reader:** implement isolated Spot/Margin USDT wallet snapshots through `GET /v2/wallets?currencies=usdt&type=spot|margin`; no profile, banking, transfer, withdrawal, or order endpoint is used by the new account reader.
+- [ ] **Provider-side token permission remains an external deployment prerequisite.** Code accepts only `NOBITEX_READONLY_API_TOKEN`; it cannot independently inspect or prove the account's server-side permissions. Do not deploy until the supplied token is verified in Nobitex account/API-key settings to have no trade or withdrawal permissions.
+- [ ] **Hard whitelist:** configuration and the Risk Engine reject markets outside Nobitex Spot/USDT. The supported quote-currency ceiling is fixed in source to USDT; unsupported currencies in environment config fail at startup. Margin's separate policy also rejects non-USDT quote currency.
+- [ ] **Transport-level defense:** constrain market-statistics, candle, order-book, trade-data, and wallet reads to USDT quote/wallet requests, so adapter bypass does not silently broaden the read scope.
+- [ ] **Exact-SHA evidence required:** unit tests, Ruff, strict mypy, Bandit, preflight/compileall and pip-audit. Tests use mock transports; no live account call is issued in CI.
+- [ ] **Live API smoke test is intentionally unrun.** No read-only token is available inside this engineering session. Do not claim live-data connectivity until a separately supervised, read-only smoke test runs with a provider-confirmed restricted token; never ask for that token in chat or put it in source control.
+- [ ] **No trade/write route is enabled.** Live order submission/cancel, withdrawal, transfer and collateral mutation remain unavailable.
 
 ## Evidence classification
 
