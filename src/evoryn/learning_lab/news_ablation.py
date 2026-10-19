@@ -179,7 +179,10 @@ class NewsAwareConservativeOverlay:
                 continue
             if sentiment.available_at > decision_at:
                 continue
-            if decision_at - sentiment.available_at > self._policy.maximum_news_age:
+            if (
+                decision_at - sentiment.available_at > self._policy.maximum_news_age
+                or decision_at - article.published_at > self._policy.maximum_news_age
+            ):
                 continue
             if article.source_trust_score < self._policy.minimum_source_trust:
                 continue
@@ -228,7 +231,7 @@ class NewsAblationReport:
     news_articles_actually_vetoed: int
     veto_decision_count: int
     source_provenance: tuple[tuple[str, str, str, str], ...]
-    model_provenance: tuple[tuple[str, str, str, str, str, bool], ...]
+    model_provenance: tuple[tuple[str, str, str, str, str, str, bool, bool], ...]
     policy_json: str
     news_corpus_fingerprint: str
     net_profit_delta: Decimal
@@ -273,16 +276,20 @@ class NewsAblationReport:
                         "model_revision": revision,
                         "model_license_id": model_license,
                         "training_dataset_id": dataset_id,
+                        "training_dataset_revision": dataset_revision,
                         "training_dataset_license_id": dataset_license,
                         "training_data_rights_verified": rights_verified,
+                        "commercial_use_approved": commercial_approved,
                     }
                     for (
                         model_id,
                         revision,
                         model_license,
                         dataset_id,
+                        dataset_revision,
                         dataset_license,
                         rights_verified,
+                        commercial_approved,
                     ) in self.model_provenance
                 ],
             },
@@ -439,8 +446,10 @@ def evaluate_news_ablation(
                     item.model_revision,
                     item.model_license_id,
                     item.model_training_dataset_id,
+                    item.model_training_dataset_revision,
                     item.model_training_dataset_license_id,
                     item.model_training_data_rights_verified,
+                    item.commercial_use_approved,
                 )
                 for item in relevant_records
             }
@@ -462,13 +471,14 @@ def evaluate_news_ablation(
         "models": [list(item) for item in model_provenance],
     }
     report_id = hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
-    news_evidence_in_test = sum(
-        1
-        for sentiment in relevant_records
-        if partitions.test.start <= _available_time_as_index(
-            sentiment.available_at,
-            dataset,
-        ) < partitions.test.end
+    news_evidence_in_test = len(
+        {
+            f"{sentiment.article.source_id}:{sentiment.article.provider_article_id}"
+            for sentiment in relevant_records
+            if partitions.test.start
+            <= _available_time_as_index(sentiment.available_at, dataset)
+            < partitions.test.end
+        }
     )
     return NewsAblationReport(
         report_id=report_id,
@@ -496,6 +506,149 @@ def evaluate_news_ablation(
         conclusion=conclusion,
         conclusion_reason=reason,
     )
+
+
+class NewsAblationReportStore:
+    """Immutable JSON/checksum storage for reproducible news-versus-price ablation reports."""
+
+    def __init__(self, root: str | Path) -> None:
+        self._root = Path(root).expanduser().resolve()
+
+    def save(self, report: NewsAblationReport) -> Path:
+        if not _SHA256_PATTERN.fullmatch(report.report_id):
+            raise ValueError("report_id must be a lowercase SHA-256 digest.")
+        report_dict = report.to_report_dict()
+        if _ablation_report_identity_hash(report_dict) != report.report_id:
+            raise ValueError("Report ID does not match ablation inputs.")
+        report_bytes = report.to_json_bytes()
+        report_digest = hashlib.sha256(report_bytes).hexdigest()
+        destination = self._root / f"{report.report_id}.json"
+        checksum_path = self._root / f"{report.report_id}.json.sha256"
+        self._root.mkdir(parents=True, exist_ok=True)
+        if destination.exists() or checksum_path.exists():
+            return self._verify_existing(destination, checksum_path, report_bytes, report_digest)
+
+        report_fd, report_tmp_name = tempfile.mkstemp(
+            prefix=".news-ablation-", suffix=".json.tmp", dir=self._root
+        )
+        checksum_fd, checksum_tmp_name = tempfile.mkstemp(
+            prefix=".news-ablation-", suffix=".sha256.tmp", dir=self._root
+        )
+        report_tmp = Path(report_tmp_name)
+        checksum_tmp = Path(checksum_tmp_name)
+        try:
+            with os.fdopen(report_fd, "wb") as report_file:
+                report_file.write(report_bytes)
+            with os.fdopen(checksum_fd, "w", encoding="ascii", newline="") as checksum_file:
+                checksum_file.write(f"{report_digest}\\n")
+            try:
+                os.link(report_tmp, destination)
+            except FileExistsError:
+                return self._verify_existing(
+                    destination, checksum_path, report_bytes, report_digest
+                )
+            try:
+                os.link(checksum_tmp, checksum_path)
+            except OSError:
+                if destination.exists() and not checksum_path.exists():
+                    destination.unlink()
+                raise
+        finally:
+            if report_tmp.exists():
+                report_tmp.unlink()
+            if checksum_tmp.exists():
+                checksum_tmp.unlink()
+        self.load(report.report_id)
+        return destination
+
+    def load(self, report_id: str) -> dict[str, Any]:
+        """Read only reports with a valid checksum, canonical JSON, and recomputed input identity."""
+        if not _SHA256_PATTERN.fullmatch(report_id):
+            raise ValueError("report_id must be a lowercase SHA-256 digest.")
+        destination = self._root / f"{report_id}.json"
+        checksum_path = self._root / f"{report_id}.json.sha256"
+        try:
+            report_bytes = destination.read_bytes()
+            checksum = checksum_path.read_text(encoding="ascii")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError("Ablation report or checksum sidecar is missing/invalid.") from exc
+        digest = hashlib.sha256(report_bytes).hexdigest()
+        if checksum != f"{digest}\\n":
+            raise ValueError("Ablation report checksum does not match stored bytes.")
+        try:
+            report_dict = json.loads(report_bytes)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError("Ablation report is invalid JSON.") from exc
+        if not isinstance(report_dict, dict) or report_dict.get("report_id") != report_id:
+            raise ValueError("Ablation report does not match the requested ID.")
+        if _canonical_json_bytes(report_dict) != report_bytes:
+            raise ValueError("Ablation report is not canonical JSON.")
+        if _ablation_report_identity_hash(report_dict) != report_id:
+            raise ValueError("Ablation report ID does not match its experiment inputs.")
+        return report_dict
+
+    @staticmethod
+    def _verify_existing(
+        destination: Path,
+        checksum_path: Path,
+        report_bytes: bytes,
+        report_digest: str,
+    ) -> Path:
+        try:
+            existing = destination.read_bytes()
+            checksum = checksum_path.read_text(encoding="ascii")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError("Existing ablation report is incomplete; refusing overwrite.") from exc
+        if existing != report_bytes or checksum != f"{report_digest}\\n":
+            raise ValueError("Existing ablation report ID has conflicting content.")
+        return destination
+
+
+def _ablation_report_identity_hash(report: dict[str, Any]) -> str:
+    """Recompute report identity from the dataset, held-out range, runs, news corpus and terms."""
+    try:
+        dataset = report["dataset"]
+        test_range = report["test_range"]
+        baseline = report["price_only_baseline"]
+        news_result = report["news_aware_result"]
+        news_evidence = report["news_evidence"]
+        run_material = {
+            "dataset_id": dataset["dataset_id"],
+            "dataset_version": dataset["dataset_version"],
+            "test_range": {
+                "start": test_range["start"],
+                "end_exclusive": test_range["end_exclusive"],
+            },
+            "baseline_run_id": baseline["run_id"],
+            "news_run_id": news_result["run_id"],
+            "news_corpus_fingerprint": news_evidence["corpus_fingerprint"],
+            "policy": report["policy"],
+            "sources": [
+                [
+                    source["source_id"],
+                    source["license_id"],
+                    source["terms_revision"],
+                    source["attribution_text"],
+                ]
+                for source in news_evidence["sources"]
+            ],
+            "models": [
+                [
+                    model["model_id"],
+                    model["model_revision"],
+                    model["model_license_id"],
+                    model["training_dataset_id"],
+                    model["training_dataset_revision"],
+                    model["training_dataset_license_id"],
+                    model["training_data_rights_verified"],
+                    model["commercial_use_approved"],
+                ]
+                for model in news_evidence["models"]
+            ],
+        }
+    except (KeyError, TypeError) as exc:
+        raise ValueError("Ablation report omits required identity inputs.") from exc
+    return hashlib.sha256(_canonical_json_bytes(run_material)).hexdigest()
 
 
 def _available_time_as_index(available_at: datetime, dataset: HistoricalDataset) -> int:
