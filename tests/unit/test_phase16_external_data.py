@@ -280,7 +280,7 @@ def sentiment_review(
     )
 
 
-def test_coinmarketcap_official_json_adapter_requires_license_and_keeps_api_key_out_of_url() -> None:
+def test_coinmarketcap_official_api_requires_license_and_keeps_key_out_of_url() -> None:
     transport = FakeJsonTransport(
         {
             "data": {
@@ -589,7 +589,7 @@ def test_news_corpus_requires_retention_permission_and_purges_on_expiry() -> Non
     assert corpus.snapshot(now=expired_at).articles == ()
 
 
-def test_sentiment_model_default_candidate_is_blocked_until_training_data_rights_are_reviewed() -> None:
+def test_sentiment_model_candidate_is_blocked_without_training_data_rights() -> None:
     registry, article = accepted_article(published_at=NOW - timedelta(minutes=10))
     runtime = FakeSentimentRuntime()
     adapter = HuggingFaceNewsSentimentAdapter(
@@ -702,7 +702,9 @@ def ablation_dataset(count: int = 120) -> HistoricalDataset:
     )
 
 
-def test_news_ablation_respects_available_at_and_compares_on_same_held_out_test(tmp_path: Path) -> None:
+def test_news_ablation_respects_available_at_and_uses_the_same_test_range(
+    tmp_path: Path,
+) -> None:
     dataset = ablation_dataset()
     partitions = chronological_split(dataset)
     crash_time = dataset.candles[100].timestamp
