@@ -7,6 +7,7 @@
 
 - Repository commit under test: `5639f9ad6a1133be814251db0d958fe4d463d06d`
 - Standard six-gate CI: push [Run #39329776104](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776104) and PR [Run #39329781455](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329781455), all six jobs succeeded on the same code/test SHA.
+- Final documentation-only snapshot `65150ec5937abaad5e130e6f8027d026f76a939f` also passed all six gates in push [Run #39330490769](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39330490769) and PR [Run #39330494963](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39330494963). The research artifacts remain tied to source/test SHA `5639f9ad6a1133be814251db0d958fe4d463d06d`; the subsequent commits changed documentation only.
 - Real-history training and backtest: [Research Run #5](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776038), successful on the same commit. The workflow's offline ML integration suite reported **381 passed in 12.74s**, the full research dependency audit passed, and the public-history download/model/backtest/report steps succeeded.
 - Retained model/data/backtest artifact (90-day retention): [nobitex-regime-research-39329776038-1](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776038/artifacts/12224231419).
 - Artifact ZIP SHA-256: `9ae0c56564cf7ac6eca66929ed7d6b491e60e44638fae0070455f84639959224`.
