@@ -25,7 +25,7 @@ Use `ExperimentSpec` with:
 fingerprint `BacktestConfig.as_dict()`; the recorder checks that the result's exact config agrees with
 the registered fingerprint. Never reuse a fingerprint after changing commission, spread, slippage,
 volume participation, initial capital, allocation, quantity step, feature definition or runtime assumption.
- The engine's code revision and run identity are captured separately from this config fingerprint.
+The engine's code revision and run identity are captured separately from this config fingerprint.
 
 Example identity setup:
 
@@ -50,6 +50,7 @@ backtest_config = BacktestConfig(
     max_bar_participation=Decimal("0.05"),
     allocation_fraction=Decimal("0.90"),
     quantity_step=Decimal("0.001"),
+    allow_gaps=False,
 )
 spec = ExperimentSpec(
     code_revision="a" * 40,  # Replace with the real lowercase Git commit SHA.
