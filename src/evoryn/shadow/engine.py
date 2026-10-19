@@ -43,6 +43,7 @@ class ShadowLedgerUnavailable(RuntimeError):
 
 class ShadowOutcome(StrEnum):
     ABSTAIN = "abstain"
+    REJECT = "reject"
     STAY_FLAT = "stay_flat"
     HOLD_LONG = "hold_long"
     ENTER_LONG = "enter_long"
@@ -166,6 +167,54 @@ def strategy_fingerprint(strategy: CausalTargetStrategy) -> str:
     }
     encoded = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+class ShadowRiskAssessmentStatus(StrEnum):
+    """Observational risk check outcomes; none authorizes real or Paper execution."""
+
+    OBSERVATIONAL_PASS = "observational_pass"
+    REJECT = "reject"
+    HALT = "halt"
+    ABSTAIN = "abstain"
+
+
+@dataclass(frozen=True, slots=True)
+class ShadowRiskAssessment:
+    """Sanitized output from an injected, read-only virtual-risk assessment."""
+
+    status: ShadowRiskAssessmentStatus
+    reason_code: str
+    explanation: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, ShadowRiskAssessmentStatus):
+            raise ValueError("Risk assessment status must be a canonical value.")
+        _validate_id(self.reason_code, "reason_code")
+        if (
+            not isinstance(self.explanation, str)
+            or not self.explanation.strip()
+            or len(self.explanation) > 256
+            or any(ord(char) < 32 for char in self.explanation)
+        ):
+            raise ValueError("Risk assessment explanation must be sanitized text of at most 256 chars.")
+
+
+class ShadowRiskAssessmentPort(Protocol):
+    """Pure assessment of a hypothetical target; MUST NOT submit orders or mutate live risk state."""
+
+    def assess(
+        self,
+        *,
+        market: Market,
+        candle: MarketCandle,
+        target_exposure: Decimal,
+        target_quantity: Decimal,
+        quantity_delta: Decimal,
+        baseline_target_quantity: Decimal,
+        virtual_capital: Decimal,
+    ) -> ShadowRiskAssessment:
+        """Return a sanitized observational pass/reject/halt/abstain result."""
+        ...
 
 
 class RegimeClassifierPort(Protocol):
@@ -490,6 +539,7 @@ class ShadowRunner:
         baseline_strategy: CausalTargetStrategy,
         champion_controller: ChampionChallengerController,
         regime_classifier: RegimeClassifierPort,
+        risk_assessor: ShadowRiskAssessmentPort,
         auto_halt_status: Callable[[], bool],
         utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
@@ -565,6 +615,8 @@ class ShadowRunner:
             raise ShadowSafetyError(
                 "Paper baseline strategy does not match its registered experiment."
             )
+        if not callable(getattr(risk_assessor, "assess", None)):
+            raise ValueError("A read-only observational risk assessor is required.")
         if not callable(auto_halt_status):
             raise ValueError("A read-only Auto-Halt status reader is required.")
         self._config = config
@@ -578,6 +630,7 @@ class ShadowRunner:
         self._strategy_fingerprint = actual_fingerprint
         self._baseline_strategy_fingerprint = baseline_fingerprint
         self._regime_classifier = regime_classifier
+        self._risk_assessor = risk_assessor
         self._auto_halt_status = auto_halt_status
         self._utcnow = utcnow
         self._history: deque[MarketCandle] = deque(maxlen=config.max_history_candles)
@@ -783,6 +836,8 @@ class ShadowRunner:
         baseline_exposure: Decimal | None = None
         baseline_quantity: Decimal | None = None
         baseline_quantity_delta: Decimal | None = None
+        risk_status = "NOT_EVALUATED"
+        risk_reason = "Risk assessment not run because a prior input gate abstained."
         outcome = ShadowOutcome.ABSTAIN
         reason_code = reason or "UNSET"
         explanation = _reason_explanation(reason_code)
@@ -838,13 +893,47 @@ class ShadowRunner:
                 quantity_delta = proposed_quantity - self._target_quantity
                 baseline_quantity_delta = baseline_quantity - self._baseline_target_quantity
                 notional_delta = quantity_delta * candle.close
-                outcome = _outcome_for(self._target_quantity, proposed_quantity)
-                reason_code = "SHADOW_TARGET_COMPUTED"
-                explanation = (
-                    "Shadow and registered Paper-baseline target projections were computed from "
-                    "the same completed history. They are analytical quantities only: no order, "
-                    "fill or risk approval was created."
-                )
+                try:
+                    risk_result = self._risk_assessor.assess(
+                        market=self._config.market,
+                        candle=candle,
+                        target_exposure=proposed_exposure,
+                        target_quantity=proposed_quantity,
+                        quantity_delta=quantity_delta,
+                        baseline_target_quantity=baseline_quantity,
+                        virtual_capital=self._config.virtual_capital,
+                    )
+                    if not isinstance(risk_result, ShadowRiskAssessment):
+                        raise ValueError("Risk assessor returned an invalid result type.")
+                except Exception:
+                    risk_status = "UNAVAILABLE"
+                    risk_reason = "Read-only risk assessment failed or returned an invalid result."
+                    reason_code = "RISK_ASSESSMENT_UNAVAILABLE"
+                    explanation = risk_reason
+                    outcome = ShadowOutcome.ABSTAIN
+                else:
+                    risk_status = risk_result.status.value
+                    risk_reason = risk_result.explanation
+                    if risk_result.status is ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS:
+                        outcome = _outcome_for(self._target_quantity, proposed_quantity)
+                        reason_code = "SHADOW_TARGET_COMPUTED"
+                        explanation = (
+                            "The candidate and registered Paper baseline were evaluated on the "
+                            "same completed history and the read-only Shadow risk assessor passed. "
+                            "No order, fill or execution authorization was created."
+                        )
+                    elif risk_result.status is ShadowRiskAssessmentStatus.REJECT:
+                        outcome = ShadowOutcome.REJECT
+                        reason_code = "RISK_GATE_REJECTED"
+                        explanation = risk_result.explanation
+                    elif risk_result.status is ShadowRiskAssessmentStatus.HALT:
+                        outcome = ShadowOutcome.REJECT
+                        reason_code = "RISK_GATE_HALTED"
+                        explanation = risk_result.explanation
+                    else:
+                        outcome = ShadowOutcome.ABSTAIN
+                        reason_code = "RISK_GATE_ABSTAINED"
+                        explanation = risk_result.explanation
 
         snapshot = self._build_snapshot(
             candle=candle,
@@ -870,10 +959,12 @@ class ShadowRunner:
             baseline_target_exposure=baseline_exposure,
             baseline_target_quantity=baseline_quantity,
             baseline_quantity_delta=baseline_quantity_delta,
+            risk_assessment_status=risk_status,
+            risk_assessment_reason=risk_reason,
         )
         event_type = (
             LearningEventType.SHADOW_INPUT_REJECTED
-            if outcome is ShadowOutcome.ABSTAIN
+            if outcome in {ShadowOutcome.ABSTAIN, ShadowOutcome.REJECT}
             else LearningEventType.SHADOW_DECISION_RECORDED
         )
         self._append_event(
@@ -884,7 +975,7 @@ class ShadowRunner:
         )
 
         # No state mutation occurs until the append-only Learning Lab ledger has accepted the event.
-        if outcome is not ShadowOutcome.ABSTAIN:
+        if outcome not in {ShadowOutcome.ABSTAIN, ShadowOutcome.REJECT}:
             self._history.append(candle)
             self._last_candle_at = candle.timestamp
             self._target_quantity = proposed_quantity or Decimal("0")
@@ -1013,6 +1104,28 @@ class ShadowRunner:
             / last.close,
             self._config.quantity_step,
         )
+        current_delta = target_quantity - self._target_quantity
+        try:
+            risk_result = self._risk_assessor.assess(
+                market=self._config.market,
+                candle=last,
+                target_exposure=exposure,
+                target_quantity=target_quantity,
+                quantity_delta=current_delta,
+                baseline_target_quantity=baseline_target_quantity,
+                virtual_capital=self._config.virtual_capital,
+            )
+        except Exception as exc:
+            raise ShadowSafetyError(
+                "Risk assessment failed during feed reconciliation; state was not reset."
+            ) from exc
+        if (
+            not isinstance(risk_result, ShadowRiskAssessment)
+            or risk_result.status is not ShadowRiskAssessmentStatus.OBSERVATIONAL_PASS
+        ):
+            raise ShadowSafetyError(
+                "Risk assessment did not pass for reconciled Shadow target; state was not reset."
+            )
         self._append_event(
             LearningEventType.SHADOW_RECONCILIATION,
             correlation_id=f"shadow-reconcile:{self._run_id}",
@@ -1028,6 +1141,8 @@ class ShadowRunner:
                 "last_candle_at": _iso(last.timestamp),
                 "target_exposure": str(exposure),
                 "target_quantity": str(target_quantity),
+                "risk_assessment_status": risk_result.status.value,
+                "risk_assessment_reason": risk_result.explanation,
                 "paper_baseline": {
                     "experiment_id": self._baseline_spec.experiment_id,
                     "target_exposure": str(baseline_exposure),
@@ -1167,6 +1282,8 @@ class ShadowRunner:
         baseline_target_exposure: Decimal | None,
         baseline_target_quantity: Decimal | None,
         baseline_quantity_delta: Decimal | None,
+        risk_assessment_status: str,
+        risk_assessment_reason: str,
     ) -> ShadowDecisionSnapshot:
         return ShadowDecisionSnapshot(
             event_id=uuid.uuid4().hex,
@@ -1218,11 +1335,8 @@ class ShadowRunner:
             outcome=outcome,
             reason_code=reason_code,
             reason=reason,
-            risk_assessment_status="NOT_EVALUATED",
-            risk_assessment_reason=(
-                "A target exposure is not risk approval. This observer does not possess a "
-                "validated account/portfolio and order-book risk context."
-            ),
+            risk_assessment_status=risk_assessment_status,
+            risk_assessment_reason=risk_assessment_reason,
             auto_halt_status=auto_halt_status,
             execution_authorized=False,
         )
