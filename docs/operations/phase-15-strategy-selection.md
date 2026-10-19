@@ -82,7 +82,8 @@ Each record contains:
 - prior active strategy, candidate/active selection and available compatible alternatives;
 - reason/status codes, evidence count, candidate start and last switch time;
 - configured confidence threshold, required evidence, stability and hold durations;
-- registry and routing fingerprints, invalidation conditions and `allow_new_signals`;
+- selector engine version, registry and routing fingerprints, invalidation conditions and
+  `allow_new_signals`;
 - both the ledger-recorded timestamp and the regime prediction's `as_of` timestamp, so event
   freshness can be reconstructed independently;
 - the previous, candidate, and active strategy IDs; actual evidence count even after the threshold
