@@ -810,6 +810,8 @@ class ReleasePipelineGate:
     ) -> ReleaseCandidate:
         """Record a gated non-Live candidate; an attempted Live target is rejected and audited."""
         _require_aware_utc(created_at, "created_at")
+        if not correlation_id.strip():
+            raise ValueError("correlation_id must not be empty.")
         spec = self._registry.get(experiment_id)
         if target is ReleaseTarget.LIVE:
             self._ledger.append(
@@ -821,6 +823,13 @@ class ReleasePipelineGate:
             )
             raise PermissionError("Phase 17 cannot create or authorize a Live release.")
         if target not in {ReleaseTarget.PAPER, ReleaseTarget.SHADOW}:
+            self._record_rejection(
+                experiment_id,
+                correlation_id=correlation_id,
+                occurred_at=created_at,
+                reason_code="UNSUPPORTED_RELEASE_TARGET",
+                payload={"target": target.value},
+            )
             raise ValueError("Unsupported release target.")
         _require_sha(
             code=promotion_decision_id,
@@ -838,15 +847,39 @@ class ReleasePipelineGate:
             and json.loads(event.payload_json).get("decision_id") == promotion_decision_id
             for event in self._ledger.events
         ):
+            self._record_rejection(
+                experiment_id,
+                correlation_id=correlation_id,
+                occurred_at=created_at,
+                reason_code="PASSING_PROMOTION_DECISION_MISSING",
+                payload={
+                    "target": target.value,
+                    "promotion_decision_id": promotion_decision_id,
+                },
+            )
             raise PermissionError(
                 "Release candidate requires a matching passing Champion/Challenger decision."
             )
         if risk_policy_sha256 != self._approved_risk_policy_sha256:
+            self._record_rejection(
+                experiment_id,
+                correlation_id=correlation_id,
+                occurred_at=created_at,
+                reason_code="RISK_POLICY_FINGERPRINT_MISMATCH",
+                payload={"target": target.value, "risk_policy_sha256": risk_policy_sha256},
+            )
             raise PermissionError(
                 "Risk policy fingerprint differs from the approved immutable policy."
             )
         expected_mode = ExperimentMode(target.value)
         if spec.mode is not expected_mode:
+            self._record_rejection(
+                experiment_id,
+                correlation_id=correlation_id,
+                occurred_at=created_at,
+                reason_code="EXPERIMENT_MODE_DOES_NOT_MATCH_RELEASE_TARGET",
+                payload={"target": target.value, "experiment_mode": spec.mode.value},
+            )
             raise ValueError("Experiment mode must match the proposed non-Live release target.")
         for name, value in (
             ("test_report_sha256", test_report_sha256),
@@ -854,8 +887,6 @@ class ReleasePipelineGate:
             ("risk_policy_sha256", risk_policy_sha256),
         ):
             _require_sha(code=value, name=name, length=64)
-        if not correlation_id.strip():
-            raise ValueError("correlation_id must not be empty.")
         material = {
             "experiment_id": experiment_id,
             "target": target.value,
@@ -897,6 +928,24 @@ class ReleasePipelineGate:
         )
         return candidate
 
+    def _record_rejection(
+        self,
+        experiment_id: str,
+        *,
+        correlation_id: str,
+        occurred_at: datetime,
+        reason_code: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Keep rejected release transitions visible in the Learning Lab Ledger."""
+        self._ledger.append(
+            LearningEventType.RELEASE_REJECTED,
+            experiment_id=experiment_id,
+            correlation_id=correlation_id,
+            occurred_at=occurred_at,
+            payload={"reason_code": reason_code, **payload},
+        )
+
     def approve_candidate(
         self,
         candidate_id: str,
@@ -916,6 +965,16 @@ class ReleasePipelineGate:
         ):
             raise ValueError("Human approver, approval reference and correlation ID are required.")
         if current_risk_policy_sha256 != self._approved_risk_policy_sha256:
+            self._record_rejection(
+                candidate.experiment_id if candidate_id in self._candidates else "0" * 64,
+                correlation_id=correlation_id,
+                occurred_at=approved_at,
+                reason_code="RISK_POLICY_CHANGED_ON_APPROVAL",
+                payload={
+                    "candidate_id": candidate_id,
+                    "current_risk_policy_sha256": current_risk_policy_sha256,
+                },
+            )
             raise PermissionError("Risk policy changed after release candidate creation.")
         try:
             candidate = self._candidates[candidate_id]
