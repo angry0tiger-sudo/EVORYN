@@ -148,6 +148,7 @@ class StrategySelectionOOSReport:
     fixed_baseline_result: BacktestResult
     fixed_baseline_strategy_id: str
     fixed_baseline_strategy_version: str
+    selector_engine_version: str
     registry_fingerprint: str
     routing_fingerprint: str
     model_metadata: tuple[tuple[str, str], ...]
@@ -182,6 +183,7 @@ class StrategySelectionOOSReport:
                 "strategy_id": self.fixed_baseline_strategy_id,
                 "strategy_version": self.fixed_baseline_strategy_version,
             },
+            "selector_engine_version": self.selector_engine_version,
             "registry_fingerprint": self.registry_fingerprint,
             "routing_fingerprint": self.routing_fingerprint,
             "model_metadata": dict(self.model_metadata),
@@ -377,6 +379,7 @@ def evaluate_strategy_selector_out_of_sample(
         fixed_baseline_result=fixed_result,
         fixed_baseline_strategy_id=fixed_baseline.strategy_id,
         fixed_baseline_strategy_version=fixed_baseline.strategy_version,
+        selector_engine_version=STRATEGY_SELECTOR_VERSION,
         registry_fingerprint=registry.fingerprint,
         routing_fingerprint=selector.routing_fingerprint,
         model_metadata=metadata,
