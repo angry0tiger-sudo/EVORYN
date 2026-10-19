@@ -16,9 +16,9 @@ from typing import Any
 
 from evoryn.learning_lab.experiment_registry import (
     ExperimentMode,
+    ExperimentRegistry,
     ExperimentRunEvidence,
     ExperimentSpec,
-    ExperimentRegistry,
     LearningEventType,
     LearningLabLedger,
     _canonical_json_bytes,
@@ -633,6 +633,7 @@ class ReleaseCandidate:
     candidate_id: str
     experiment_id: str
     target: ReleaseTarget
+    promotion_decision_id: str
     test_report_sha256: str
     security_report_sha256: str
     risk_policy_sha256: str
@@ -645,6 +646,7 @@ class ReleaseCandidate:
         for name in (
             "candidate_id",
             "experiment_id",
+            "promotion_decision_id",
             "test_report_sha256",
             "security_report_sha256",
             "risk_policy_sha256",
@@ -695,6 +697,7 @@ class ReleasePipelineGate:
         experiment_id: str,
         *,
         target: ReleaseTarget,
+        promotion_decision_id: str,
         test_report_sha256: str,
         security_report_sha256: str,
         risk_policy_sha256: str,
@@ -715,6 +718,25 @@ class ReleasePipelineGate:
             raise PermissionError("Phase 17 cannot create or authorize a Live release.")
         if target not in {ReleaseTarget.PAPER, ReleaseTarget.SHADOW}:
             raise ValueError("Unsupported release target.")
+        _require_sha(
+            code=promotion_decision_id,
+            name="promotion_decision_id",
+            length=64,
+        )
+        expected_event = (
+            LearningEventType.CANDIDATE_PROMOTED_TO_PAPER
+            if target is ReleaseTarget.PAPER
+            else LearningEventType.CANDIDATE_APPROVED_FOR_SHADOW
+        )
+        if not any(
+            event.event_type is expected_event
+            and event.experiment_id == experiment_id
+            and json.loads(event.payload_json).get("decision_id") == promotion_decision_id
+            for event in self._ledger.events
+        ):
+            raise PermissionError(
+                "Release candidate requires a matching passing Champion/Challenger decision."
+            )
         if risk_policy_sha256 != self._approved_risk_policy_sha256:
             raise PermissionError("Risk policy fingerprint differs from the approved immutable policy.")
         expected_mode = ExperimentMode(target.value)
@@ -731,6 +753,7 @@ class ReleasePipelineGate:
         material = {
             "experiment_id": experiment_id,
             "target": target.value,
+            "promotion_decision_id": promotion_decision_id,
             "test_report_sha256": test_report_sha256,
             "security_report_sha256": security_report_sha256,
             "risk_policy_sha256": risk_policy_sha256,
@@ -740,6 +763,7 @@ class ReleasePipelineGate:
             candidate_id=_sha256(_canonical_json_bytes(material)),
             experiment_id=experiment_id,
             target=target,
+            promotion_decision_id=promotion_decision_id,
             test_report_sha256=test_report_sha256,
             security_report_sha256=security_report_sha256,
             risk_policy_sha256=risk_policy_sha256,
@@ -757,6 +781,7 @@ class ReleasePipelineGate:
             payload={
                 "candidate_id": candidate.candidate_id,
                 "target": target.value,
+                "promotion_decision_id": promotion_decision_id,
                 "test_report_sha256": test_report_sha256,
                 "security_report_sha256": security_report_sha256,
                 "risk_policy_sha256": risk_policy_sha256,
@@ -778,7 +803,11 @@ class ReleasePipelineGate:
     ) -> ReleaseCandidate:
         """Record human review evidence; approval still does not deploy or authorize Live."""
         _require_aware_utc(approved_at, "approved_at")
-        if not approved_by.strip() or not approval_reference.strip() or not correlation_id.strip():
+        if (
+            not approved_by.strip()
+            or not approval_reference.strip()
+            or not correlation_id.strip()
+        ):
             raise ValueError("Human approver, approval reference and correlation ID are required.")
         if current_risk_policy_sha256 != self._approved_risk_policy_sha256:
             raise PermissionError("Risk policy changed after release candidate creation.")
