@@ -150,7 +150,6 @@ class ReconciliationReport:
 
 
 @dataclass(frozen=True, slots=True)
-@dataclass(frozen=True, slots=True)
 class MockVenueOrder:
     """Separate immutable order representation held by the in-memory mock venue."""
 
