@@ -23,7 +23,7 @@ class NewsFieldMapping:
     """Explicit JSON field paths for one provider's official licensed news endpoint."""
 
     items_path: str
-    article_id_path: str
+    article_id_path: str | None
     source_name_path: str
     article_url_path: str
     published_at_path: str
@@ -37,7 +37,6 @@ class NewsFieldMapping:
     def __post_init__(self) -> None:
         for name in (
             "items_path",
-            "article_id_path",
             "source_name_path",
             "article_url_path",
             "published_at_path",
@@ -46,6 +45,8 @@ class NewsFieldMapping:
             "summary_path",
         ):
             _validate_json_path(getattr(self, name), name)
+        if self.article_id_path is not None:
+            _validate_json_path(self.article_id_path, "article_id_path")
         for name in (
             "revision_path",
             "related_asset_ids_path",
@@ -182,7 +183,13 @@ class LicensedNewsJsonConnector:
             declared_hash = _string_at(
                 row, self._mapping.declared_content_sha256_path, required=False
             )
-            provider_id = _string_at(row, self._mapping.article_id_path, required=True)
+            provider_id = _string_at(
+                row, self._mapping.article_id_path, required=False
+            )
+            provider_id_evidence = "provider_field"
+            if not provider_id:
+                provider_id = f"url-sha256:{hashlib.sha256(url_value.encode('utf-8')).hexdigest()}"
+                provider_id_evidence = "url_sha256"
             source_name = _string_at(row, self._mapping.source_name_path, required=True)
             row_bytes = json.dumps(
                 row,
@@ -210,6 +217,7 @@ class LicensedNewsJsonConnector:
                     declared_content_sha256=declared_hash,
                     related_asset_ids=related_ids,
                     language_evidence=language_evidence,
+                    provider_id_evidence=provider_id_evidence,
                 )
             )
         return tuple(normalized)
