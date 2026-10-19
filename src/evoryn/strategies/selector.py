@@ -203,8 +203,6 @@ class StrategySelectionDecision:
         )
 
 
-
-
 class RegimeStrategySelector:
     """Stateful selector requiring repeated, time-separated evidence before switching plugins."""
 
@@ -339,6 +337,7 @@ class RegimeStrategySelector:
 
         current_registry_fingerprint = self._registry.fingerprint
         if current_registry_fingerprint != self._registry_fingerprint:
+            previous_strategy_id = self._current_strategy_id
             self._reset_after_external_change(current_registry_fingerprint, prediction)
             return self._make_decision(
                 prediction,
@@ -351,6 +350,7 @@ class RegimeStrategySelector:
                 candidate_id=None,
                 alternatives=(),
                 allow_new_signals=False,
+                previous_strategy_id=previous_strategy_id,
             )
 
         identity = (
@@ -360,6 +360,7 @@ class RegimeStrategySelector:
             prediction.feature_schema_version,
         )
         if self._model_identity is not None and identity != self._model_identity:
+            previous_strategy_id = self._current_strategy_id
             self._reset_after_external_change(current_registry_fingerprint, prediction)
             self._model_identity = identity
             return self._make_decision(
@@ -373,6 +374,7 @@ class RegimeStrategySelector:
                 candidate_id=None,
                 alternatives=(),
                 allow_new_signals=False,
+                previous_strategy_id=previous_strategy_id,
             )
         self._model_identity = identity
 
@@ -380,6 +382,13 @@ class RegimeStrategySelector:
             self._last_prediction_as_of is not None
             and prediction.as_of <= self._last_prediction_as_of
         ):
+            if (
+                prediction.abstained
+                or prediction.label is RegimeLabel.UNKNOWN
+                or prediction.confidence_semantics not in self._ACCEPTED_CONFIDENCE_SEMANTICS
+                or prediction.confidence < self._policy.min_confidence
+            ):
+                self._clear_candidate()
             return self._make_decision(
                 prediction,
                 now=now,
@@ -623,7 +632,11 @@ class RegimeStrategySelector:
             routing_fingerprint=self._routing_fingerprint,
             previous_strategy_id=(
                 previous_strategy_id
-                if status is SelectionStatus.SWITCHED
+                if status in {
+                    SelectionStatus.SWITCHED,
+                    SelectionStatus.MODEL_IDENTITY_CHANGED,
+                    SelectionStatus.REGISTRY_CHANGED,
+                }
                 else self._current_strategy_id
             ),
             candidate_strategy_id=candidate_id,
