@@ -114,9 +114,8 @@ class NewsDeduplicationIndex:
                         NewsIngestionStatus.SUSPICIOUS,
                         "CONTENT_MUTATED_WITHOUT_NEW_PROVIDER_REVISION",
                     )
-                # A provider-declared new revision is a new version, not silent mutation.
-                if candidate.provider_revision == previous.provider_revision:
-                    return NewsIngestionStatus.SUSPICIOUS, "REVISION_DID_NOT_CHANGE"
+                # An explicit provider revision is the only exception to same-item URL/title dedup.
+                return None
 
             if candidate.content_sha256 in self._content_hashes:
                 return NewsIngestionStatus.DUPLICATE, "DUPLICATE_CONTENT_HASH"
