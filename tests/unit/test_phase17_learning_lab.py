@@ -251,7 +251,8 @@ def test_registry_binds_evidence_to_exact_experiment_identity(tmp_path: Path) ->
     evidence_id = registry.record_evidence(good, correlation_id="experiment:evidence")
 
     assert registry.get_evidence(evidence_id) == good
-    assert ledger.events[-1].event_type is LearningEventType.EVIDENCE_RECORDED
+    recorded_evidence_event = ledger.events[-1].event_type
+    assert recorded_evidence_event is LearningEventType.EVIDENCE_RECORDED
 
     wrong_config = replace(good, evaluation_config_fingerprint="9" * 64)
     with pytest.raises(ExperimentIntegrityError, match="identity"):
@@ -967,7 +968,8 @@ def test_orphaned_spec_and_evidence_files_require_audit_reconciliation(
     with pytest.raises(ExperimentIntegrityError, match="Ledger event"):
         registry.get(spec.experiment_id)
     assert registry.register(spec, correlation_id="recovery:spec") == spec.experiment_id
-    assert ledger.events[-1].event_type is LearningEventType.EXPERIMENT_REGISTRATION_REUSED
+    reused_registration_event = ledger.events[-1].event_type
+    assert reused_registration_event is LearningEventType.EXPERIMENT_REGISTRATION_REUSED
 
     evidence = make_evidence(spec, run_suffix="orphan-evidence")
     evidence_path = root / "evidence" / f"{evidence.evidence_id}.json"
