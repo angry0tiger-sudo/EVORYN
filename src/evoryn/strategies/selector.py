@@ -674,6 +674,7 @@ class RegimeStrategySelector:
                     SelectionStatus.SWITCHED,
                     SelectionStatus.MODEL_IDENTITY_CHANGED,
                     SelectionStatus.REGISTRY_CHANGED,
+                    SelectionStatus.MARKET_SCOPE_CHANGED,
                 }
                 else self._current_strategy_id
             ),
