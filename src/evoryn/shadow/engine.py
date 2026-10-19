@@ -605,7 +605,11 @@ class ShadowRunner:
         """Evaluate one completed candle. Invalid, repeated, late, or uncertain input abstains."""
         received = _require_utc(received_at, "received_at")
         cid = _safe_correlation(correlation_id)
-        reason = self._validate_candle(candle, received)
+        reason = self._validate_candle(
+            candle,
+            received,
+            compare_sequence=not (self._continuity_blocked or self._identity_blocked),
+        )
         if reason is None and self._continuity_blocked:
             reason = "CONTINUITY_RECONCILIATION_REQUIRED"
         if reason is None and self._identity_blocked:
@@ -771,7 +775,10 @@ class ShadowRunner:
             )
             if reason is not None:
                 raise ShadowSafetyError(f"Reconciliation data rejected: {reason}.")
-            if previous is not None and candle.timestamp - previous.timestamp != self._config.interval:
+            if (
+                previous is not None
+                and candle.timestamp - previous.timestamp != self._config.interval
+            ):
                 raise ShadowSafetyError("Reconciliation history has a gap or duplicate timestamp.")
             previous = candle
         latest_age = (received - (rows[-1].timestamp + rows[-1].interval)).total_seconds()
@@ -1018,7 +1025,11 @@ class ShadowPollingService:
         observed_now = _require_utc(now or self._utcnow(), "now")
         try:
             candles = tuple(self._feed.fetch_completed(now=observed_now))
-            if self._runner.last_candle_at is None and not self._runner.history and len(candles) > 1:
+            if (
+                self._runner.last_candle_at is None
+                and not self._runner.history
+                and len(candles) > 1
+            ):
                 self._runner.bootstrap_history(candles, received_at=observed_now)
                 candles_to_process = (candles[-1],)
             else:
@@ -1115,15 +1126,21 @@ def _decimal_or_none(value: Decimal | None) -> str | None:
 
 def _reason_explanation(reason_code: str) -> str:
     mapping = {
-        "CONTINUITY_RECONCILIATION_REQUIRED": "Feed continuity is blocked until explicit reconciliation.",
-        "MODEL_IDENTITY_REVIEW_REQUIRED": "Model identity changed; a new registered experiment is required.",
+        "CONTINUITY_RECONCILIATION_REQUIRED": (
+            "Feed continuity is blocked until explicit reconciliation."
+        ),
+        "MODEL_IDENTITY_REVIEW_REQUIRED": (
+            "Model identity changed; a new registered experiment is required."
+        ),
         "AUTO_HALT_STATUS_UNAVAILABLE": "Auto-Halt status could not be established; fail closed.",
         "AUTO_HALT_STATUS_INVALID": "Auto-Halt reader returned a non-boolean state; fail closed.",
         "AUTO_HALT_ACTIVE": "Auto-Halt is active; no hypothetical target is emitted.",
         "REGIME_CLASSIFIER_ERROR": "Regime classifier failed; the decision abstains.",
         "REGIME_OUTPUT_INVALID": "Regime classifier returned an invalid output.",
         "REGIME_MODEL_IDENTITY_CHANGED": "Regime model identity changed during the Shadow run.",
-        "REGIME_CONFIDENCE_BELOW_THRESHOLD": "Regime confidence did not meet the configured threshold.",
+        "REGIME_CONFIDENCE_BELOW_THRESHOLD": (
+            "Regime confidence did not meet the configured threshold."
+        ),
         "REGIME_FROM_FUTURE": "Regime prediction timestamp is future-dated.",
         "REGIME_STALE": "Regime prediction is stale.",
         "CANDLE_GAP": "Candle sequence has a gap; reconciliation is required.",
@@ -1132,7 +1149,9 @@ def _reason_explanation(reason_code: str) -> str:
         "STALE_CANDLE": "Candle freshness gate rejected stale input.",
         "FUTURE_CANDLE": "Candle timestamp is implausibly in the future.",
         "STRATEGY_OUTPUT_INVALID": "Strategy output was invalid or strategy raised an exception.",
-        "MARKET_IDENTITY_MISMATCH": "Candle market identity differs from the registered Shadow market.",
+        "MARKET_IDENTITY_MISMATCH": (
+            "Candle market identity differs from the registered Shadow market."
+        ),
         "CANDLE_INTERVAL_MISMATCH": "Candle interval differs from the registered Shadow interval.",
         "FEED_SOURCE_MISMATCH": "Candle source differs from the registered Shadow feed.",
     }
