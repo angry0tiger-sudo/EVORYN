@@ -8,6 +8,8 @@ from decimal import Decimal
 from evoryn.margin.models import (
     DelegationLimitSnapshot,
     MarginHealth,
+    MarginLiquidityPoolSnapshot,
+    MarginLiquidityPoolStatus,
     MarginMarketSettings,
     MarginMode,
     MarginOpenIntent,
@@ -99,6 +101,7 @@ class MarginRiskPolicy:
         intent: MarginOpenIntent,
         settings: MarginMarketSettings,
         delegation_limits: DelegationLimitSnapshot,
+        liquidity_pool: MarginLiquidityPoolSnapshot,
         *,
         now: datetime,
     ) -> MarginOrderRiskResult:
@@ -123,6 +126,7 @@ class MarginRiskPolicy:
             not _is_aware(intent.observed_at)
             or not _is_aware(settings.observed_at)
             or not _is_aware(delegation_limits.observed_at)
+            or not _is_aware(liquidity_pool.observed_at)
         ):
             return _order_result(
                 MarginOrderDisposition.HALT,
@@ -132,19 +136,66 @@ class MarginRiskPolicy:
         intent_age = now - intent.observed_at
         settings_age = now - settings.observed_at
         limits_age = now - delegation_limits.observed_at
+        pool_age = now - liquidity_pool.observed_at
         if (
             intent_age < timedelta(0)
             or settings_age < timedelta(0)
             or limits_age < timedelta(0)
+            or pool_age < timedelta(0)
             or intent_age.total_seconds() > self.max_data_age_seconds
             or settings_age.total_seconds() > self.max_data_age_seconds
             or limits_age.total_seconds() > self.max_data_age_seconds
+            or pool_age.total_seconds() > self.max_data_age_seconds
         ):
             return _order_result(
                 MarginOrderDisposition.HALT,
                 "stale_margin_inputs",
                 "Intent, market capability, or delegation-limit data is stale or from the future.",
             )
+        if liquidity_pool.currency.casefold() != settings.src_currency.casefold():
+            return _order_result(
+                MarginOrderDisposition.REJECT,
+                "margin_pool_currency_mismatch",
+                "The liquidity-pool snapshot does not match the market source currency.",
+            )
+        if liquidity_pool.status is MarginLiquidityPoolStatus.UNKNOWN:
+            return _order_result(
+                MarginOrderDisposition.HALT,
+                "margin_pool_state_unknown",
+                "Active-pool state is unknown; additional Margin risk must stop.",
+            )
+        if liquidity_pool.status is MarginLiquidityPoolStatus.INACTIVE:
+            return _order_result(
+                MarginOrderDisposition.REJECT,
+                "margin_pool_inactive",
+                "Nobitex does not list an active liquidity pool for this source currency.",
+            )
+        available_pool_capacity = liquidity_pool.available_capacity
+        if available_pool_capacity is None:
+            return _order_result(
+                MarginOrderDisposition.HALT,
+                "margin_pool_capacity_unknown",
+                "Reported active-pool capacity is incomplete; additional risk must stop.",
+            )
+        if available_pool_capacity < Decimal("0"):
+            return _order_result(
+                MarginOrderDisposition.HALT,
+                "margin_pool_capacity_inconsistent",
+                "Reported filledCapacity exceeds capacity; the pool snapshot is inconsistent.",
+            )
+        if available_pool_capacity == Decimal("0"):
+            return _order_result(
+                MarginOrderDisposition.REJECT,
+                "margin_pool_capacity_exhausted",
+                "The source-currency liquidity pool has no remaining capacity.",
+            )
+        if intent.amount > available_pool_capacity:
+            return _order_result(
+                MarginOrderDisposition.REJECT,
+                "margin_pool_capacity_exceeded",
+                "Requested source-currency amount exceeds the active pool's remaining capacity.",
+            )
+
         side_enabled = (
             settings.buy_enabled if intent.side.value == "buy" else settings.sell_enabled
         )
@@ -189,8 +240,8 @@ class MarginRiskPolicy:
             disposition=MarginOrderDisposition.ALLOW,
             reason_code="within_reported_margin_limits",
             explanation=(
-                "Market, side, leverage, freshness, and source-reported delegation limits "
-                "passed. The collateral amount is a planning estimate, not venue authority."
+                "Market, side, leverage, freshness, active pool capacity, and source-reported "
+                "delegation limits passed. Collateral is a planning estimate, not venue authority."
             ),
             estimated_initial_collateral=estimated_collateral,
         )
@@ -201,7 +252,7 @@ class MarginRiskPolicy:
         *,
         now: datetime,
     ) -> MarginRiskAssessment:
-        """Classify a venue-reported open position without inventing execution state."""
+        """Classify position health only; this method cannot authorize additional exposure."""
         if not _is_aware(now):
             raise ValueError("Margin risk evaluation time must be timezone-aware.")
         if not _is_aware(position.observed_at):
@@ -278,8 +329,8 @@ class MarginRiskPolicy:
         return _assessment(
             position, now, MarginHealth.HEALTHY,
             "within_reported_margin_thresholds",
-            "Position is above the reported minimum ratio and has not crossed the venue threshold.",
-            new_risk_permitted=True,
+            "Position is above the reported minimum ratio and has not crossed the venue threshold. "
+            "This position-only assessment does not authorize additional exposure.",
         )
 
 

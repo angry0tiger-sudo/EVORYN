@@ -12,6 +12,8 @@ from evoryn.margin.models import (
     DelegationLimit,
     DelegationLimitSnapshot,
     MarginHealth,
+    MarginLiquidityPoolSnapshot,
+    MarginLiquidityPoolStatus,
     MarginMarketSettings,
     MarginMode,
     MarginOpenIntent,
@@ -39,6 +41,29 @@ def settings(
         max_leverage=Decimal("5"),
         buy_enabled=buy_enabled,
         sell_enabled=sell_enabled,
+        observed_at=observed_at,
+    )
+
+
+def liquidity_pool(
+    *,
+    currency: str = "btc",
+    status: MarginLiquidityPoolStatus = MarginLiquidityPoolStatus.ACTIVE,
+    capacity: str = "100",
+    filled_capacity: str = "0",
+    observed_at: datetime = NOW,
+) -> MarginLiquidityPoolSnapshot:
+    if status is MarginLiquidityPoolStatus.ACTIVE:
+        return MarginLiquidityPoolSnapshot(
+            currency=currency,
+            status=status,
+            observed_at=observed_at,
+            capacity=Decimal(capacity),
+            filled_capacity=Decimal(filled_capacity),
+        )
+    return MarginLiquidityPoolSnapshot(
+        currency=currency,
+        status=status,
         observed_at=observed_at,
     )
 
@@ -246,7 +271,7 @@ def test_liquidation_threshold_scenarios(
         assert not result.new_risk_permitted
     else:
         assert result.health is MarginHealth.HEALTHY
-        assert result.new_risk_permitted
+        assert not result.new_risk_permitted
 
 
 def test_margin_ratio_at_minimum_trips_at_risk_even_before_threshold_crossing() -> None:
@@ -316,16 +341,16 @@ def test_buy_order_uses_quote_limit_and_sell_order_uses_base_limit() -> None:
     )
 
     buy_ok = policy.evaluate_open_intent(
-        intent(side=MarginSide.BUY, amount="2", price="100"), settings(), limits, now=NOW
+        intent(side=MarginSide.BUY, amount="2", price="100"), settings(), limits, liquidity_pool(), now=NOW
     )
     buy_rejected = policy.evaluate_open_intent(
-        intent(side=MarginSide.BUY, amount="3", price="100"), settings(), limits, now=NOW
+        intent(side=MarginSide.BUY, amount="3", price="100"), settings(), limits, liquidity_pool(), now=NOW
     )
     sell_ok = policy.evaluate_open_intent(
-        intent(side=MarginSide.SELL, amount="0.04"), settings(), limits, now=NOW
+        intent(side=MarginSide.SELL, amount="0.04"), settings(), limits, liquidity_pool(), now=NOW
     )
     sell_rejected = policy.evaluate_open_intent(
-        intent(side=MarginSide.SELL, amount="0.06"), settings(), limits, now=NOW
+        intent(side=MarginSide.SELL, amount="0.06"), settings(), limits, liquidity_pool(), now=NOW
     )
 
     assert buy_ok.disposition is MarginOrderDisposition.ALLOW
@@ -344,15 +369,16 @@ def test_disabled_direction_stale_settings_and_unknown_limit_fail_closed() -> No
     )
 
     disabled = policy.evaluate_open_intent(
-        intent(), settings(buy_enabled=False), buy_limit, now=NOW
+        intent(), settings(buy_enabled=False), buy_limit, liquidity_pool(), now=NOW
     )
     stale = policy.evaluate_open_intent(
         intent(),
         settings(observed_at=NOW - timedelta(minutes=2)),
         buy_limit,
+        liquidity_pool(),
         now=NOW,
     )
-    missing = policy.evaluate_open_intent(intent(leverage="1.5"), settings(), buy_limit, now=NOW)
+    missing = policy.evaluate_open_intent(intent(leverage="1.5"), settings(), buy_limit, liquidity_pool(), now=NOW)
 
     assert disabled.reason_code == "margin_side_disabled"
     assert stale.disposition is MarginOrderDisposition.HALT
@@ -380,10 +406,10 @@ def test_delegation_limit_snapshot_must_be_fresh_and_same_market() -> None:
     )
 
     stale = policy.evaluate_open_intent(
-        valid_intent, fresh_settings, stale_limits, now=NOW
+        valid_intent, fresh_settings, stale_limits, liquidity_pool(), now=NOW
     )
     wrong_market = policy.evaluate_open_intent(
-        valid_intent, fresh_settings, wrong_market_limits, now=NOW
+        valid_intent, fresh_settings, wrong_market_limits, liquidity_pool(), now=NOW
     )
 
     assert stale.disposition is MarginOrderDisposition.HALT
@@ -402,6 +428,126 @@ def test_duplicate_side_leverage_rows_are_rejected() -> None:
                 DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("200")),
             ),
         )
+
+
+def test_active_pool_normalization_preserves_reported_capacity_without_float_coercion() -> None:
+    normalized = NobitexMarginAdapter.normalize_liquidity_pool(
+        {
+            "status": "ok",
+            "pools": {
+                "btc": {"capacity": "30", "filledCapacity": "28.082343"},
+                "doge": {"capacity": "5000000", "filledCapacity": "5000000"},
+            },
+        },
+        currency="BTC",
+        observed_at=NOW,
+    )
+
+    assert normalized.status is MarginLiquidityPoolStatus.ACTIVE
+    assert normalized.capacity == Decimal("30")
+    assert normalized.filled_capacity == Decimal("28.082343")
+    assert normalized.available_capacity == Decimal("1.917657")
+
+
+def test_successful_active_pool_listing_marks_omitted_currency_inactive() -> None:
+    normalized = NobitexMarginAdapter.normalize_liquidity_pool(
+        {"status": "ok", "pools": {"btc": {"capacity": "30", "filledCapacity": "2"}}},
+        currency="doge",
+        observed_at=NOW,
+    )
+
+    assert normalized.status is MarginLiquidityPoolStatus.INACTIVE
+    assert normalized.available_capacity is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"status": "failed", "pools": {}},
+        {"status": "ok", "pools": []},
+        {"status": "ok", "pools": {"btc": {"capacity": 1.5, "filledCapacity": "0"}}},
+        {"status": "ok", "pools": {"btc": {"capacity": "30"}}},
+    ],
+)
+def test_invalid_pool_response_never_becomes_an_allowance(payload: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        NobitexMarginAdapter.normalize_liquidity_pool(
+            payload, currency="btc", observed_at=NOW
+        )
+
+
+def test_inactive_or_unknown_pool_blocks_opening() -> None:
+    policy = MarginRiskPolicy()
+    limits = DelegationLimitSnapshot(
+        market_symbol="BTCUSDT",
+        observed_at=NOW,
+        limits=(DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("250")),),
+    )
+
+    inactive = policy.evaluate_open_intent(
+        intent(), settings(), limits,
+        liquidity_pool(status=MarginLiquidityPoolStatus.INACTIVE), now=NOW
+    )
+    unknown = policy.evaluate_open_intent(
+        intent(), settings(), limits,
+        liquidity_pool(status=MarginLiquidityPoolStatus.UNKNOWN), now=NOW
+    )
+
+    assert inactive.disposition is MarginOrderDisposition.REJECT
+    assert inactive.reason_code == "margin_pool_inactive"
+    assert unknown.disposition is MarginOrderDisposition.HALT
+    assert unknown.reason_code == "margin_pool_state_unknown"
+
+
+def test_pool_capacity_must_be_fresh_consistent_and_sufficient() -> None:
+    policy = MarginRiskPolicy()
+    limits = DelegationLimitSnapshot(
+        market_symbol="BTCUSDT",
+        observed_at=NOW,
+        limits=(DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("250")),),
+    )
+
+    stale = policy.evaluate_open_intent(
+        intent(), settings(), limits,
+        liquidity_pool(observed_at=NOW - timedelta(seconds=31)), now=NOW
+    )
+    exhausted = policy.evaluate_open_intent(
+        intent(amount="0.1"), settings(), limits,
+        liquidity_pool(capacity="1", filled_capacity="1"), now=NOW
+    )
+    oversubscribed = policy.evaluate_open_intent(
+        intent(amount="2"), settings(), limits,
+        liquidity_pool(capacity="1", filled_capacity="0"), now=NOW
+    )
+    inconsistent = policy.evaluate_open_intent(
+        intent(), settings(), limits,
+        liquidity_pool(capacity="1", filled_capacity="2"), now=NOW
+    )
+
+    assert stale.disposition is MarginOrderDisposition.HALT
+    assert stale.reason_code == "stale_margin_inputs"
+    assert exhausted.disposition is MarginOrderDisposition.REJECT
+    assert exhausted.reason_code == "margin_pool_capacity_exhausted"
+    assert oversubscribed.disposition is MarginOrderDisposition.REJECT
+    assert oversubscribed.reason_code == "margin_pool_capacity_exceeded"
+    assert inconsistent.disposition is MarginOrderDisposition.HALT
+    assert inconsistent.reason_code == "margin_pool_capacity_inconsistent"
+
+
+def test_pool_source_currency_must_match_margin_market() -> None:
+    policy = MarginRiskPolicy()
+    limits = DelegationLimitSnapshot(
+        market_symbol="BTCUSDT",
+        observed_at=NOW,
+        limits=(DelegationLimit(MarginSide.BUY, Decimal("2"), Decimal("250")),),
+    )
+    result = policy.evaluate_open_intent(
+        intent(), settings(), limits,
+        liquidity_pool(currency="eth"), now=NOW
+    )
+
+    assert result.disposition is MarginOrderDisposition.REJECT
+    assert result.reason_code == "margin_pool_currency_mismatch"
 
 
 def test_margin_position_reconciliation_reports_every_material_mismatch() -> None:

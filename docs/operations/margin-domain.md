@@ -16,6 +16,7 @@ https://github.com/nobitex/docs-api/blob/master/source/includes/_position.md
 The normalizer follows the documented fields from:
 - GET /margin/markets/list
 - GET /margin/v2/delegation-limit
+- GET /liquidity-pools/list
 - GET /positions/list and GET /positions/:positionId:/status
 
 Market settings are account/depth dependent. A market's buyEnabled and sellEnabled flags
@@ -41,6 +42,26 @@ is compared to the source-currency limit. These checks are not interchangeable.
 
 No field is coerced to floating-point. Missing optional fields remain None; invalid or
 missing required market capability fields raise a normalization error.
+
+## Pool-aware opening risk
+
+The official `GET /liquidity-pools/list` endpoint returns the active pool listing and its `capacity` /
+`filledCapacity` values. A source-currency pool can become inactive; the official documentation states that
+new Margin orders cannot be placed against inactive pools even though closing existing positions remains
+possible. The current normalizer is pure: a currency present in a successful active-pool listing becomes
+ACTIVE with source-reported capacities; a currency omitted from that complete successful listing becomes
+INACTIVE for that observation. Errors or malformed responses raise instead of inventing status.
+
+Every call to `MarginRiskPolicy.evaluate_open_intent` requires this pool snapshot as well as fresh market
+settings and the user's `/margin/v2/delegation-limit` snapshot. Timestamps must be aware, not future-dated,
+and within the policy's maximum age. Pool currency must match the market source currency. UNKNOWN or stale
+pool evidence halts new opening evaluation; inactive, exhausted, inconsistent, or insufficient pool capacity
+rejects or halts as appropriate. Available pool capacity is checked in source-currency amount units; BUY
+delegation caps remain quote-currency notionals.
+
+A healthy `MarginRiskAssessment` is only a classification of one observed position. It cannot authorize
+additional exposure because it lacks the proposed intent, current user delegation caps and pool capacity.
+New risk must pass the separate opening-intent gate.
 
 ## Risk operation
 
