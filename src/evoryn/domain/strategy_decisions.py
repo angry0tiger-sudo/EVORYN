@@ -38,6 +38,7 @@ class StrategySelectionLedgerEntry:
     allow_new_signals: bool
     invalidation_conditions: tuple[str, ...]
     registry_fingerprint: str
+    routing_fingerprint: str
 
     def __post_init__(self) -> None:
         _require_aware(self.recorded_at, "Strategy-decision timestamp")
@@ -55,6 +56,7 @@ class StrategySelectionLedgerEntry:
             "reason_code",
             "reason",
             "registry_fingerprint",
+            "routing_fingerprint",
         ):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty.")
