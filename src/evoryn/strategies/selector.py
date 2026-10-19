@@ -173,6 +173,7 @@ class StrategySelectionDecision:
             event_id=self.decision_id,
             correlation_id=self.correlation_id,
             recorded_at=self.recorded_at,
+            regime_as_of=self.regime_as_of,
             market_symbol=self.market_symbol,
             regime_label=self.regime_label.value,
             regime_confidence=self.regime_confidence,
@@ -181,6 +182,7 @@ class StrategySelectionDecision:
             model_version=self.model_version,
             model_fingerprint=self.model_fingerprint,
             feature_schema_version=self.feature_schema_version,
+            previous_strategy_id=self.previous_strategy_id,
             candidate_strategy_id=self.candidate_strategy_id,
             active_strategy_id=self.selected_strategy_id,
             alternative_strategy_ids=self.alternative_strategy_ids,
@@ -195,6 +197,9 @@ class StrategySelectionDecision:
                 self.policy.required_stability_duration.total_seconds()
             ),
             minimum_hold_seconds=int(self.policy.minimum_hold_duration.total_seconds()),
+            maximum_prediction_age_seconds=int(
+                self.policy.maximum_prediction_age.total_seconds()
+            ),
             confidence_threshold=self.policy.min_confidence,
             allow_new_signals=self.allow_new_signals,
             invalidation_conditions=self.invalidation_conditions,
