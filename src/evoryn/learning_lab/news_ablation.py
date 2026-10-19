@@ -11,10 +11,10 @@ import json
 import os
 import re
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -562,7 +562,7 @@ class NewsAblationReportStore:
         return destination
 
     def load(self, report_id: str) -> dict[str, Any]:
-        """Read only reports with a valid checksum, canonical JSON, and recomputed input identity."""
+        """Read reports with a valid checksum, canonical form and recomputed input identity."""
         if not _SHA256_PATTERN.fullmatch(report_id):
             raise ValueError("report_id must be a lowercase SHA-256 digest.")
         destination = self._root / f"{report_id}.json"
