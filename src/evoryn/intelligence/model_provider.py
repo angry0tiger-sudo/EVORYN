@@ -666,7 +666,10 @@ class IntelligenceCore:
         provider = self._providers.get(request.provider_id)
         schema_in = self._schemas.get(request.input_schema_id)
         schema_out = self._schemas.get(request.output_schema_id)
-        reason = self._policy_rejection(request, provider, now)
+        try:
+            reason = self._policy_rejection(request, provider, now)
+        except Exception:
+            reason = "PROVIDER_CONTRACT_INVALID"
         if reason is None and schema_in is None:
             reason = "INPUT_SCHEMA_NOT_REGISTERED"
         if reason is None and schema_out is None:
@@ -735,6 +738,21 @@ class IntelligenceCore:
                 return self._abstain(request, now, input_fingerprint, "AUDIT_UNAVAILABLE")
             return self._abstain(request, now, input_fingerprint, "PROVIDER_ERROR")
 
+        if not isinstance(response, ModelResponse):
+            if not self._audit(
+                self._event(
+                    request,
+                    now,
+                    input_fingerprint,
+                    ModelAuditEventType.RESPONSE_REJECTED,
+                    model_id=provider.identity.model_id,
+                    reason_code="INVALID_RESPONSE_TYPE",
+                )
+            ):
+                return self._abstain(request, now, input_fingerprint, "AUDIT_UNAVAILABLE")
+            return self._abstain(
+                request, now, input_fingerprint, "INVALID_RESPONSE_TYPE", identity=provider.identity
+            )
         invalid_reason = self._response_rejection(request, provider, response, schema_out, now)
         output_fingerprint: str | None = None
         if invalid_reason is None:
