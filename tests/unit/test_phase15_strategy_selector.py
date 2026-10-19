@@ -31,6 +31,7 @@ from evoryn.strategies.plugins import (
 from evoryn.strategies.selector import (
     RegimeStrategySelector,
     SelectionStatus,
+    StrategySelectionDecision,
     StrategySelectionPolicy,
 )
 
@@ -107,7 +108,7 @@ def select_at(
     confidence: str = "0.9",
     model_fingerprint: str = "model-fingerprint-v1",
     abstained: bool = False,
-):
+) -> StrategySelectionDecision:
     as_of = selection_time(index)
     return selector.select(
         prediction(
