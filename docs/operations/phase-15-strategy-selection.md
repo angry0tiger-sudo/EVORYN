@@ -107,9 +107,28 @@ durable persistence and tamper-evident signatures are not claimed.
 
 It returns both complete Phase 13 backtest results plus differences in net profit, net return,
 maximum drawdown and expectancy where both runs close at least one trade. Its combined report
-contains the train/test index ranges, model manifest, registry fingerprint and all strategy
-selection/abstention ledger rows. If the registry/model identity changes during the test run, the
-evaluator refuses to return a valid comparison.
+contains the train/test index ranges, model manifest, selector engine version, registry/routing
+fingerprints and all strategy selection/abstention ledger rows. If the registry/model identity changes
+during the test run, the evaluator refuses to return a valid comparison.
+
+The net-profit and return deltas are adaptive minus fixed baseline. The drawdown delta is also
+adaptive minus fixed, so a positive drawdown delta means the adaptive run had a larger (worse)
+maximum drawdown. Expectancy delta is null unless both comparisons contain a closed trade.
+
+Persist a report without overwriting an existing run identity:
+
+```python
+from evoryn.learning_lab.strategy_selection import StrategySelectionOOSReportStore
+
+store = StrategySelectionOOSReportStore("data/strategy-selector-oos")
+report_path = store.save(report)
+verified_report = store.load(report.report_id)
+```
+
+The store verifies canonical JSON, a SHA-256 sidecar, and that the report ID matches the exact
+dataset/test ranges, adaptive/fixed run IDs, model manifest, selector version, route fingerprints
+and policy. The checksum detects accidental changes; it is not a digital signature against an
+attacker able to rewrite both the data and checksum.
 
 The test split must not be used to retune thresholds or route preferences. Doing so consumes the
 holdout and requires a different unseen dataset range for a future performance claim.
