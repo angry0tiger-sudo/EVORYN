@@ -379,6 +379,17 @@ class AbstainingRegimeDetector:
         """Expose optional, versioned training evidence for out-of-sample evaluation gates."""
         return getattr(self._model, "training_manifest", None)
 
+    @property
+    def model_metadata(self) -> dict[str, str]:
+        """Expose versioned model identity needed to fingerprint selector experiments."""
+        return {
+            "model_id": self._model.model_id,
+            "model_version": self._model.model_version,
+            "model_fingerprint": self._model.model_fingerprint,
+            "confidence_semantics": self._model.confidence_semantics,
+            "feature_schema_version": self._features.feature_schema_version,
+        }
+
     def classify(
         self, completed_history: Sequence[MarketCandle], *, now: datetime
     ) -> RegimePrediction:
