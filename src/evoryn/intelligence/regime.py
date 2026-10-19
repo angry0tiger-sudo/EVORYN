@@ -16,7 +16,6 @@ from typing import Any, Protocol
 
 from evoryn.domain.models import MarketCandle
 
-
 REGIME_FEATURE_SCHEMA_VERSION = "1.0.0"
 REGIME_MODEL_OUTPUTS = (
     "bull_trend",
@@ -56,10 +55,6 @@ class RegimeFeatureVector:
     volume_ratio: Decimal
 
     def __post_init__(self) -> None:
-        if not isinstance(self.label, RegimeLabel):
-            raise ValueError("Prediction label must be a canonical RegimeLabel.")
-        if type(self.abstained) is not bool:
-            raise ValueError("abstained must be an explicit boolean.")
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("Feature as_of must be timezone-aware.")
         if self.sample_count <= 0:
@@ -167,7 +162,7 @@ class RegimeFeatureExtractor:
             raise ValueError("Internal feature window has an unexpected length.")
         returns = tuple(
             (current.close / previous.close) - Decimal("1")
-            for previous, current in zip(window, window[1:])
+            for previous, current in zip(window, window[1:], strict=False)
         )
         mean_return = sum(returns, Decimal("0")) / Decimal(len(returns))
         variance = sum(
@@ -232,6 +227,10 @@ class RegimePrediction:
     reason_code: str
 
     def __post_init__(self) -> None:
+        if not isinstance(self.label, RegimeLabel):
+            raise ValueError("Prediction label must be a canonical RegimeLabel.")
+        if type(self.abstained) is not bool:
+            raise ValueError("abstained must be an explicit boolean.")
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("Prediction timestamp must be timezone-aware.")
         if (
@@ -317,10 +316,25 @@ class RegimePrediction:
 class RegimeProbabilityModel(Protocol):
     """Research model port. A model predicts regimes; it cannot authorize trading actions."""
 
-    model_id: str
-    model_version: str
-    model_fingerprint: str
-    confidence_semantics: str
+    @property
+    def model_id(self) -> str:
+        """Stable model identifier."""
+        ...
+
+    @property
+    def model_version(self) -> str:
+        """Immutable model version."""
+        ...
+
+    @property
+    def model_fingerprint(self) -> str:
+        """Fingerprint of model parameters and training manifest."""
+        ...
+
+    @property
+    def confidence_semantics(self) -> str:
+        """Meaning of the returned scores."""
+        ...
 
     @property
     def is_ready(self) -> bool:

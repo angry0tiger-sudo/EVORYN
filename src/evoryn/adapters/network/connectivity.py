@@ -22,7 +22,6 @@ from urllib.parse import urlsplit
 
 from evoryn.adapters.network.json_http import JsonApiError, JsonApiTransport
 
-
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _TRANSIENT_STATUS_CODES = frozenset({408, 425, 500, 502, 503, 504})
@@ -605,9 +604,11 @@ class ConnectivityManager:
         if not math.isfinite(sample) or not 0.0 <= sample <= 1.0:
             raise ValueError("random_value must return a finite number in [0, 1].")
         jitter = 1.0 + ((2.0 * sample) - 1.0) * self._retry_policy.jitter_fraction
-        delay = min(self._retry_policy.max_delay_seconds, max(0.0, base * jitter))
+        delay: float = float(
+            min(self._retry_policy.max_delay_seconds, max(0.0, base * jitter))
+        )
         if error.retry_after_seconds is not None:
-            delay = max(delay, error.retry_after_seconds)
+            delay = max(delay, float(error.retry_after_seconds))
         return delay
 
     def _is_retryable(self, error: JsonApiError) -> bool:

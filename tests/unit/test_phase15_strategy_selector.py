@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -25,15 +26,14 @@ from evoryn.learning_lab.strategy_selection import (
 from evoryn.strategies.baseline import FlatBaseline, SmaCrossoverBaseline
 from evoryn.strategies.plugins import (
     StrategyPluginRegistration,
-    StrategyPluginRegistry,
     build_baseline_registry,
 )
 from evoryn.strategies.selector import (
     RegimeStrategySelector,
     SelectionStatus,
+    StrategySelectionDecision,
     StrategySelectionPolicy,
 )
-
 
 BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
 INTERVAL = timedelta(hours=1)
@@ -108,7 +108,7 @@ def select_at(
     confidence: str = "0.9",
     model_fingerprint: str = "model-fingerprint-v1",
     abstained: bool = False,
-):
+) -> StrategySelectionDecision:
     as_of = selection_time(index)
     return selector.select(
         prediction(
@@ -542,7 +542,7 @@ def test_oos_evaluation_compares_adaptive_selector_to_fixed_strategy(tmp_path: P
     report = evaluate_strategy_selector_out_of_sample(
         dataset,
         partitions=partitions,
-        detector=detector,  # type: ignore[arg-type]
+        detector=detector,
         registry=build_baseline_registry(),
         selection_policy=StrategySelectionPolicy(
             min_confidence=Decimal("0.65"),

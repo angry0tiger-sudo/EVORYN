@@ -153,7 +153,7 @@ def _required_int(payload: Mapping[str, object], key: str) -> int:
 
 def _required_decimal(payload: Mapping[str, object], key: str) -> Decimal:
     value = payload.get(key)
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, (bool, float)):
         raise ValueError(f"Required Margin field {key!r} must not be a float or boolean.")
     if not isinstance(value, (str, int, Decimal)):
         raise ValueError(f"Required Margin field {key!r} is missing or invalid.")

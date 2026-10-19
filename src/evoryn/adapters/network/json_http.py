@@ -29,7 +29,7 @@ def parse_retry_after_seconds(value: str | None, *, now: datetime | None = None)
             return None
         reference = now or datetime.now(UTC)
         if reference.tzinfo is None or reference.utcoffset() is None:
-            raise ValueError("now must be timezone-aware.")
+            raise ValueError("now must be timezone-aware.") from None
         delay = (retry_at.astimezone(UTC) - reference.astimezone(UTC)).total_seconds()
     if not math.isfinite(delay) or delay < 0:
         return None

@@ -9,12 +9,12 @@ for the intended use before inference is permitted.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping, Protocol
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from evoryn.adapters.data.license_registry import SourceLicenseRegistry
@@ -25,7 +25,6 @@ from evoryn.domain.external_data import (
     SentimentLabel,
     require_aware_utc,
 )
-
 
 FINANCIAL_NEWS_MODEL_ID = (
     "mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
@@ -200,22 +199,27 @@ class LocalHuggingFaceRuntime:
     def _load(self, key: tuple[str, str]) -> None:
         model_id, revision = key
         try:
-            import torch
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            import torch  # type: ignore[import-not-found]
+            from transformers import (  # type: ignore[import-not-found]
+                AutoModelForSequenceClassification,
+                AutoTokenizer,
+            )
         except ImportError as exc:
             raise NLPDependencyUnavailable(
                 "Install the optional news-nlp dependencies before loading Hugging Face weights."
             ) from exc
         kwargs = {
-            "revision": revision,
             "local_files_only": not self._allow_model_download,
             "trust_remote_code": False,
             "cache_dir": self._cache_dir,
         }
         try:
-            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True, **kwargs)
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_id, revision=revision, use_fast=True, **kwargs
+            )
             model = AutoModelForSequenceClassification.from_pretrained(
                 model_id,
+                revision=revision,
                 use_safetensors=True,
                 **kwargs,
             )

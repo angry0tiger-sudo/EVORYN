@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -18,11 +19,12 @@ from evoryn.adapters.data.market_aggregators import (
 )
 from evoryn.adapters.data.news_connector import LicensedNewsJsonConnector, NewsFieldMapping
 from evoryn.adapters.data.news_corpus import NewsEventCorpus
-from evoryn.adapters.data.news_quality import NewsQualityGate, NewsQualityPolicy
+from evoryn.adapters.data.news_quality import NewsQualityGate
 from evoryn.adapters.network.json_http import HttpsJsonTransport, JsonApiError
 from evoryn.domain.external_data import (
     DataUse,
     NewsArticleCandidate,
+    NewsArticleRecord,
     NewsIngestionStatus,
     NewsSentimentRecord,
     SentimentLabel,
@@ -33,6 +35,7 @@ from evoryn.intelligence.news_sentiment import (
     FINANCIAL_NEWS_MODEL_CARD,
     HuggingFaceNewsSentimentAdapter,
     NewsSentimentOutcome,
+    SentimentModelReview,
 )
 from evoryn.learning_lab.backtest import BacktestConfig, chronological_split
 from evoryn.learning_lab.historical_data import HistoricalDataset
@@ -43,7 +46,6 @@ from evoryn.learning_lab.news_ablation import (
     evaluate_news_ablation,
 )
 from evoryn.strategies.baseline import SmaTrendBaseline
-
 
 NOW = datetime(2026, 10, 19, 12, tzinfo=UTC)
 DATA_START = datetime(2026, 10, 1, tzinfo=UTC)
@@ -65,8 +67,8 @@ class FakeJsonTransport:
         self,
         url: str,
         *,
-        headers: dict[str, str],
-        params: dict[str, str],
+        headers: Mapping[str, str],
+        params: Mapping[str, str],
     ) -> Any:
         self.calls.append({"url": url, "headers": dict(headers), "params": dict(params)})
         return self.payload
@@ -253,7 +255,9 @@ def accepted_article(
     return registry, result.article
 
 
-def sentiment_record(article, *, analyzed_at: datetime) -> NewsSentimentRecord:
+def sentiment_record(
+    article: NewsArticleRecord, *, analyzed_at: datetime
+) -> NewsSentimentRecord:
     return NewsSentimentRecord(
         article=article,
         analyzed_at=analyzed_at,
@@ -277,7 +281,7 @@ def sentiment_review(
     *,
     rights_verified: bool = True,
     commercial_approved: bool = False,
-):
+) -> SentimentModelReview:
     return HuggingFaceNewsSentimentAdapter.financial_phrasebank_candidate(
         reviewed_by="explicit-test-review",
         reviewed_at=DATA_START - timedelta(days=1),
@@ -498,7 +502,7 @@ def test_licensed_news_json_connector_records_provider_and_retrieval_provenance(
     assert item.related_asset_ids == ("BTC-USDT",)
     assert transport.calls[0]["url"] == "https://newsapi.org/v2/everything"
     assert "secret-news-key" not in transport.calls[0]["url"]
-    assert "secret-news-key" == transport.calls[0]["headers"]["X-NEWS-KEY"]
+    assert transport.calls[0]["headers"]["X-NEWS-KEY"] == "secret-news-key"
 
 
 def test_news_connector_language_fallback_must_match_explicit_request_filter() -> None:
@@ -739,7 +743,7 @@ def ablation_dataset(count: int = 120) -> HistoricalDataset:
         market=MARKET,
         interval=INTERVAL,
         volume_unit="base_asset",
-        source_name="Synthetic Phase 16 fixture",
+        source_name="synthetic-phase16-ablation",
         source_uri="urn:evoryn:synthetic-phase16-ablation:v1",
         source_revision="synthetic-v1",
         license_id="CC0-1.0",

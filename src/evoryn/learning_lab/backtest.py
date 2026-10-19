@@ -14,20 +14,30 @@ import json
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from decimal import Decimal, ROUND_FLOOR
+from datetime import UTC, datetime
+from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
 from typing import Any
 
-from evoryn.domain.models import MarketCandle, Side
+from evoryn.domain.models import Side
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.strategies.contracts import CausalTargetStrategy
-
 
 BACKTEST_ENGINE_VERSION = "1.0.0"
 _BPS_DENOMINATOR = Decimal("10000")
 _ZERO = Decimal("0")
 _ONE = Decimal("1")
+
+
+def _canonical_json_bytes(value: object) -> bytes:
+    """Serialize a JSON-compatible report deterministically for fingerprints and storage."""
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 @dataclass(frozen=True, slots=True)

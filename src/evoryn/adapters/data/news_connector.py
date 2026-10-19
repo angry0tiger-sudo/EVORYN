@@ -156,7 +156,10 @@ class LicensedNewsJsonConnector:
             url_value = _string_at(row, self._mapping.article_url_path, required=True)
             published_text = _string_at(row, self._mapping.published_at_path, required=False)
             published_at = _optional_timestamp(published_text)
-            revision = _string_at(row, self._mapping.revision_path, required=False)
+            revision_value = _string_at(
+                row, self._mapping.revision_path, required=False
+            )
+            revision = revision_value or None
             language = _string_at(row, self._mapping.language_path, required=False)
             language_evidence = "provider_field"
             if not language:
@@ -181,9 +184,10 @@ class LicensedNewsJsonConnector:
                         "related_asset_ids_path must resolve to a string array."
                     )
                 related_ids = tuple(sorted({item.strip().upper() for item in raw_related}))
-            declared_hash = _string_at(
+            declared_hash_value = _string_at(
                 row, self._mapping.declared_content_sha256_path, required=False
             )
+            declared_hash = declared_hash_value or None
             provider_id = _string_at(
                 row, self._mapping.article_id_path, required=False
             )

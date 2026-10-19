@@ -9,7 +9,6 @@ from decimal import Decimal
 from evoryn.domain.models import MarketCandle
 from evoryn.strategies.contracts import CausalTargetStrategy
 
-
 BaselineStrategy = CausalTargetStrategy
 
 

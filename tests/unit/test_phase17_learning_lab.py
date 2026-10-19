@@ -19,7 +19,6 @@ from evoryn.learning_lab.backtest import (
     run_backtest,
 )
 from evoryn.learning_lab.experiment_registry import (
-    configuration_fingerprint,
     ExperimentIntegrityError,
     ExperimentMode,
     ExperimentRegistry,
@@ -27,6 +26,7 @@ from evoryn.learning_lab.experiment_registry import (
     ExperimentSpec,
     LearningEventType,
     LearningLabLedger,
+    configuration_fingerprint,
 )
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.learning_lab.promotion import (
@@ -42,7 +42,6 @@ from evoryn.learning_lab.promotion import (
     RollbackTrigger,
 )
 from evoryn.strategies.baseline import SmaTrendBaseline
-
 
 NOW = datetime(2026, 1, 1, 12, tzinfo=UTC)
 DATASET_VERSION = "d" * 64
@@ -252,7 +251,8 @@ def test_registry_binds_evidence_to_exact_experiment_identity(tmp_path: Path) ->
     evidence_id = registry.record_evidence(good, correlation_id="experiment:evidence")
 
     assert registry.get_evidence(evidence_id) == good
-    assert ledger.events[-1].event_type is LearningEventType.EVIDENCE_RECORDED
+    recorded_evidence_event = ledger.events[-1].event_type
+    assert recorded_evidence_event is LearningEventType.EVIDENCE_RECORDED
 
     wrong_config = replace(good, evaluation_config_fingerprint="9" * 64)
     with pytest.raises(ExperimentIntegrityError, match="identity"):
@@ -896,6 +896,11 @@ def test_paper_health_without_trusted_attestation_fails_closed_to_safe_hold(
     )
 
 
+def _current_champion_id(controller: ChampionChallengerController) -> str | None:
+    """Re-read mutable champion state after a monitor operation."""
+    return controller.active_champion_id
+
+
 def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Path) -> None:
     registry, ledger = make_registry(tmp_path)
     spec = make_spec(model_id="single-champion", model_fingerprint="7" * 64)
@@ -930,7 +935,7 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
         correlation_id="rollback:insufficient",
     )
     assert short_result.status is RollbackStatus.INSUFFICIENT_EVIDENCE
-    assert controller.active_champion_id == spec.experiment_id
+    assert _current_champion_id(controller) == spec.experiment_id
 
     result = controller.monitor_paper_champion(
         bad_evidence.evidence_id,
@@ -940,7 +945,7 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
     assert result.status is RollbackStatus.SAFE_HOLD_NO_CHAMPION
     assert result.trigger is RollbackTrigger.MAX_DRAWDOWN_EXCEEDED
     assert result.active_champion_id is None
-    assert controller.active_champion_id is None
+    assert _current_champion_id(controller) is None
     assert ledger.events[-2].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
     assert ledger.events[-1].event_type is LearningEventType.CHAMPION_HEALTH_CHECKED
 
@@ -968,7 +973,8 @@ def test_orphaned_spec_and_evidence_files_require_audit_reconciliation(
     with pytest.raises(ExperimentIntegrityError, match="Ledger event"):
         registry.get(spec.experiment_id)
     assert registry.register(spec, correlation_id="recovery:spec") == spec.experiment_id
-    assert ledger.events[-1].event_type is LearningEventType.EXPERIMENT_REGISTRATION_REUSED
+    reused_registration_event = ledger.events[-1].event_type
+    assert reused_registration_event is LearningEventType.EXPERIMENT_REGISTRATION_REUSED
 
     evidence = make_evidence(spec, run_suffix="orphan-evidence")
     evidence_path = root / "evidence" / f"{evidence.evidence_id}.json"

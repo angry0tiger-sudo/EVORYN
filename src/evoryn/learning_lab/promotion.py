@@ -521,6 +521,16 @@ class ChampionChallengerController:
         self._approved_shadow_candidate_id = shadow_candidate_id
 
     @property
+    def registry(self) -> ExperimentRegistry:
+        """Expose the exact registry bound to the replayed champion pointer, read-only."""
+        return self._registry
+
+    @property
+    def ledger(self) -> LearningLabLedger:
+        """Expose the durable ledger backing the Paper champion pointer, read-only."""
+        return self._ledger
+
+    @property
     def active_champion_id(self) -> str | None:
         return self._active_champion_id
 
@@ -706,9 +716,10 @@ class ChampionChallengerController:
                 decision, experiment_id=evidence.experiment_id, correlation_id=correlation_id
             )
 
-        if evidence.experiment_id != self._active_champion_id:
-            trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
-        elif evidence.mode is not ExperimentMode.PAPER:
+        if (
+            evidence.experiment_id != self._active_champion_id
+            or evidence.mode is not ExperimentMode.PAPER
+        ):
             trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
         elif not self._has_trusted_telemetry(evidence):
             trigger = RollbackTrigger.TELEMETRY_ATTESTATION_FAILED
@@ -983,7 +994,8 @@ class ReleasePipelineGate:
         if not correlation_id.strip():
             raise ValueError("correlation_id must not be empty.")
         spec = self._registry.get(experiment_id)
-        if target is ReleaseTarget.LIVE:
+        target_value: object = target
+        if target_value is ReleaseTarget.LIVE:
             self._ledger.append(
                 LearningEventType.LIVE_RELEASE_BLOCKED,
                 experiment_id=experiment_id,
@@ -992,13 +1004,13 @@ class ReleasePipelineGate:
                 payload={"target": target.value, "reason": "PHASE17_HAS_NO_LIVE_PROMOTION_PATH"},
             )
             raise PermissionError("Phase 17 cannot create or authorize a Live release.")
-        if target not in {ReleaseTarget.PAPER, ReleaseTarget.SHADOW}:
+        if target_value not in {ReleaseTarget.PAPER, ReleaseTarget.SHADOW}:
             self._record_rejection(
                 experiment_id,
                 correlation_id=correlation_id,
                 occurred_at=created_at,
                 reason_code="UNSUPPORTED_RELEASE_TARGET",
-                payload={"target": target.value},
+                payload={"target": str(target_value)},
             )
             raise ValueError("Unsupported release target.")
         _require_sha(

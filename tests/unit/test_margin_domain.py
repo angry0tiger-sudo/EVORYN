@@ -22,7 +22,6 @@ from evoryn.margin.models import (
 )
 from evoryn.margin.risk import MarginCalculator, MarginReconciler, MarginRiskPolicy
 
-
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 
 

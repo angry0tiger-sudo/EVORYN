@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from decimal import Decimal
 from difflib import SequenceMatcher
 from threading import RLock
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -19,7 +20,6 @@ from evoryn.domain.external_data import (
     NewsIngestionStatus,
     require_aware_utc,
 )
-
 
 _TRACKING_QUERY_KEYS = frozenset(
     {"fbclid", "gclid", "ref", "ref_src", "source", "mc_cid", "mc_eid"}
@@ -130,7 +130,7 @@ class NewsDeduplicationIndex:
             for known_title in self._titles:
                 if min(len(title), len(known_title)) >= 20 and (
                     SequenceMatcher(None, title, known_title).ratio()
-                    >= self._near_duplicate_similarity
+                    >= self.near_duplicate_similarity
                 ):
                     return NewsIngestionStatus.DUPLICATE, "NEAR_DUPLICATE_NORMALIZED_TITLE"
         return None

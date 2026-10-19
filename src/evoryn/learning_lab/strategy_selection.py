@@ -38,23 +38,61 @@ from evoryn.strategies.selector import (
     StrategySelectionPolicy,
 )
 
-
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class TrainingManifestPort(Protocol):
     """Minimum immutable evidence required before OOS selection may run."""
 
-    model_id: str
-    model_version: str
-    feature_schema_version: str
-    training_dataset_version: str
-    training_split: str
-    train_start_index: int
-    train_end_index_exclusive: int
-    train_start_at: datetime
-    train_end_at: datetime
-    model_fingerprint: str
+    @property
+    def model_id(self) -> str:
+        """Stable model identifier."""
+        ...
+
+    @property
+    def model_version(self) -> str:
+        """Immutable model version."""
+        ...
+
+    @property
+    def feature_schema_version(self) -> str:
+        """Feature contract version."""
+        ...
+
+    @property
+    def training_dataset_version(self) -> str:
+        """Exact immutable training dataset identity."""
+        ...
+
+    @property
+    def training_split(self) -> str:
+        """Training partition identity."""
+        ...
+
+    @property
+    def train_start_index(self) -> int:
+        """Inclusive train start index."""
+        ...
+
+    @property
+    def train_end_index_exclusive(self) -> int:
+        """Exclusive train end index."""
+        ...
+
+    @property
+    def train_start_at(self) -> datetime:
+        """UTC start time for the training range."""
+        ...
+
+    @property
+    def train_end_at(self) -> datetime:
+        """UTC end time for the training range."""
+        ...
+
+    @property
+    def model_fingerprint(self) -> str:
+        """Fingerprint for model and training configuration."""
+        ...
 
     def to_dict(self) -> dict[str, Any]:
         """Return the model's reproducibility manifest."""

@@ -26,7 +26,6 @@ from evoryn.paper.failure_injection import FailureInjector, FailureMode
 from evoryn.risk.engine import RiskEngine
 from evoryn.risk.models import RiskAction, RiskLimits
 
-
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 INITIAL_CASH = Decimal("10000")

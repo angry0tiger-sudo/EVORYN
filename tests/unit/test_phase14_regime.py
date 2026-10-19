@@ -21,7 +21,6 @@ from evoryn.intelligence.regime import (
 from evoryn.learning_lab.backtest import chronological_split
 from evoryn.learning_lab.historical_data import HistoricalDataset
 
-
 BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
 INTERVAL = timedelta(hours=1)
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")

@@ -28,7 +28,6 @@ from evoryn.learning_lab.historical_data import (
 )
 from evoryn.strategies.baseline import SmaCrossoverBaseline, SmaTrendBaseline
 
-
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 INTERVAL = timedelta(hours=1)

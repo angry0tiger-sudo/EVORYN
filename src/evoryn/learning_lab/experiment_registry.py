@@ -21,7 +21,6 @@ from typing import Any
 
 from evoryn.learning_lab.backtest import BacktestResult, IndexRange
 
-
 _SCHEMA_VERSION = 1
 
 
@@ -49,6 +48,12 @@ class LearningEventType(StrEnum):
     RELEASE_APPROVED = "release_approved"
     RELEASE_REJECTED = "release_rejected"
     LIVE_RELEASE_BLOCKED = "live_release_blocked"
+    SHADOW_RUN_STARTED = "shadow_run_started"
+    SHADOW_DECISION_RECORDED = "shadow_decision_recorded"
+    SHADOW_INPUT_REJECTED = "shadow_input_rejected"
+    SHADOW_RISK_REJECTED = "shadow_risk_rejected"
+    SHADOW_FEED_FAILURE = "shadow_feed_failure"
+    SHADOW_RECONCILIATION = "shadow_reconciliation"
 
 
 class ExperimentIntegrityError(ValueError):
@@ -474,6 +479,11 @@ class LearningLabLedger:
             return tuple(self._events)
 
     @property
+    def is_persistent(self) -> bool:
+        """Return whether ledger events are written to an fsync-backed JSONL file."""
+        return self._path is not None
+
+    @property
     def last_event_hash(self) -> str:
         with self._lock:
             return self._events[-1].event_hash if self._events else "0" * 64
@@ -563,7 +573,8 @@ class LearningLabLedger:
             return True
 
     def _append_persisted(self, event: LearningLabLedgerEvent) -> None:
-        assert self._path is not None
+        if self._path is None:
+            raise ExperimentIntegrityError("Persistent ledger path is not configured.")
         self._path.parent.mkdir(parents=True, exist_ok=True)
         line = _canonical_json_bytes(event.to_dict())
         descriptor = os.open(self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -579,7 +590,8 @@ class LearningLabLedger:
             os.close(descriptor)
 
     def _load_and_verify(self) -> None:
-        assert self._path is not None
+        if self._path is None:
+            raise ExperimentIntegrityError("Persistent ledger path is not configured.")
         try:
             raw_lines = self._path.read_bytes().splitlines()
             if self._path.stat().st_size and not self._path.read_bytes().endswith(b"\n"):
@@ -902,7 +914,7 @@ class ExperimentRegistry:
                 if destination.read_bytes() != payload:
                     raise ExperimentIntegrityError(
                         "Concurrent immutable write produced conflicting bytes."
-                    )
+                    ) from None
                 return False
         finally:
             if staged.exists():
@@ -973,9 +985,10 @@ def _require_sha(*, code: str, name: str, length: int) -> None:
 
 
 def _require_aware_utc(value: datetime, name: str) -> None:
-    if value.tzinfo is None or value.utcoffset() is None:
+    offset = value.utcoffset()
+    if value.tzinfo is None or offset is None:
         raise ValueError(f"{name} must be timezone-aware.")
-    if value.utcoffset().total_seconds() != 0:
+    if offset.total_seconds() != 0:
         raise ValueError(f"{name} must be expressed in UTC.")
 
 

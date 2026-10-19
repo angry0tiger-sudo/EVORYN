@@ -14,7 +14,6 @@ from evoryn.adapters.data.license_registry import SourceLicenseRegistry
 from evoryn.adapters.network.json_http import JsonApiTransport
 from evoryn.domain.external_data import DataUse, ExternalMarketQuote, require_aware_utc
 
-
 _CMC_BASE_URL = "https://pro-api.coinmarketcap.com"
 _COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 _SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,127}$")
