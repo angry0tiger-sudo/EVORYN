@@ -914,6 +914,7 @@ class ShadowRunner:
             halted = self._auto_halt_status()
             regime = self._regime_classifier.classify(rows, now=received)
             exposure = self._strategy.target_exposure(rows)
+            baseline_exposure = self._baseline_strategy.target_exposure(rows)
         except Exception as exc:
             raise ShadowSafetyError("Reconciliation prerequisites could not be evaluated.") from exc
         if type(halted) is not bool or halted:
@@ -928,12 +929,28 @@ class ShadowRunner:
             or exposure > 1
         ):
             raise ShadowSafetyError("Reconciliation strategy output is invalid.")
+        if (
+            not isinstance(baseline_exposure, Decimal)
+            or not baseline_exposure.is_finite()
+            or baseline_exposure < 0
+            or baseline_exposure > 1
+        ):
+            raise ShadowSafetyError("Reconciliation Paper baseline output is invalid.")
         last = rows[-1]
         target_quantity = _floor_step(
             (
                 self._config.virtual_capital
                 * self._config.allocation_fraction
                 * exposure
+            )
+            / last.close,
+            self._config.quantity_step,
+        )
+        baseline_target_quantity = _floor_step(
+            (
+                self._config.virtual_capital
+                * self._config.allocation_fraction
+                * baseline_exposure
             )
             / last.close,
             self._config.quantity_step,
@@ -953,6 +970,11 @@ class ShadowRunner:
                 "last_candle_at": _iso(last.timestamp),
                 "target_exposure": str(exposure),
                 "target_quantity": str(target_quantity),
+                "paper_baseline": {
+                    "experiment_id": self._baseline_spec.experiment_id,
+                    "target_exposure": str(baseline_exposure),
+                    "target_quantity": str(baseline_target_quantity),
+                },
                 "regime_model_fingerprint": regime.model_fingerprint,
                 "execution_authorized": False,
             },
@@ -961,6 +983,7 @@ class ShadowRunner:
         self._history.extend(rows[-self._config.max_history_candles :])
         self._last_candle_at = last.timestamp
         self._target_quantity = target_quantity
+        self._baseline_target_quantity = baseline_target_quantity
         self._continuity_blocked = False
         self._remember_regime_identity(regime)
 
@@ -1051,6 +1074,16 @@ class ShadowRunner:
         quantity_delta: Decimal | None,
         estimated_notional_delta: Decimal | None,
         auto_halt_status: str,
+        baseline_experiment_id: str,
+        baseline_model_id: str,
+        baseline_model_version: str,
+        baseline_model_fingerprint: str,
+        baseline_strategy_id: str,
+        baseline_strategy_version: str,
+        baseline_strategy_fingerprint: str,
+        baseline_target_exposure: Decimal | None,
+        baseline_target_quantity: Decimal | None,
+        baseline_quantity_delta: Decimal | None,
     ) -> ShadowDecisionSnapshot:
         return ShadowDecisionSnapshot(
             event_id=uuid.uuid4().hex,
@@ -1073,6 +1106,16 @@ class ShadowRunner:
             model_version=self._spec.model_version,
             model_fingerprint=self._spec.model_fingerprint,
             feature_schema_version=self._spec.feature_schema_version,
+            baseline_experiment_id=baseline_experiment_id,
+            baseline_model_id=baseline_model_id,
+            baseline_model_version=baseline_model_version,
+            baseline_model_fingerprint=baseline_model_fingerprint,
+            baseline_strategy_id=baseline_strategy_id,
+            baseline_strategy_version=baseline_strategy_version,
+            baseline_strategy_fingerprint=baseline_strategy_fingerprint,
+            baseline_target_exposure=baseline_target_exposure,
+            baseline_target_quantity=baseline_target_quantity,
+            baseline_quantity_delta=baseline_quantity_delta,
             regime_label=regime.label.value if regime is not None else RegimeLabel.UNKNOWN.value,
             regime_confidence=regime.confidence if regime is not None else None,
             regime_as_of=regime.as_of if regime is not None else None,
