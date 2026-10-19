@@ -59,7 +59,6 @@ def prediction(
         }
         rest[label] = value
         # The remaining three values are normalized to sum to one.
-        remaining = Decimal("0.1")
         other_labels = [candidate for candidate in rest if candidate is not label]
         rest[other_labels[0]] = Decimal("0.04")
         rest[other_labels[1]] = Decimal("0.03")
@@ -276,6 +275,11 @@ def test_hysteresis_requires_distinct_evidence_stability_and_minimum_hold() -> N
     assert switched_flat.selected_strategy_id == "flat-no-position"
     assert switched_flat.evidence_count == 6
     assert len(ledger.strategy_selections) == 9
+    assert ledger.strategy_selections[-1].previous_strategy_id == "sma-crossover-long-flat"
+    assert ledger.strategy_selections[-1].regime_as_of == selection_time(9)
+    assert ledger.strategy_selections[-1].maximum_prediction_age_seconds == 7200
+    assert ledger.strategy_selections[-1].routing_fingerprint == selector.routing_fingerprint
+    assert ledger.strategy_selections[-1].evidence_count == 6
     assert all(
         entry.market_symbol == MARKET.symbol
         for entry in ledger.strategy_selections
@@ -309,6 +313,24 @@ def test_duplicate_evidence_cannot_increment_hysteresis_and_is_logged() -> None:
     assert duplicate.evidence_count == 1
     assert not duplicate.allow_new_signals
     assert len(ledger.strategy_selections) == 2
+
+
+def test_invalid_duplicate_regime_evidence_clears_a_pending_candidate() -> None:
+    selector = RegimeStrategySelector(build_baseline_registry())
+    first = select_at(selector, RegimeLabel.BULL_TREND, 1)
+    invalid_duplicate = selector.select(
+        prediction(RegimeLabel.UNKNOWN, selection_time(1), abstained=True),
+        now=selection_time(1),
+        correlation_id="selector:BTC-USDT:unknown-duplicate",
+        market_symbol=MARKET.symbol,
+    )
+    next_observation = select_at(selector, RegimeLabel.BULL_TREND, 2)
+
+    assert first.evidence_count == 1
+    assert invalid_duplicate.status is SelectionStatus.DUPLICATE_EVIDENCE
+    assert not invalid_duplicate.allow_new_signals
+    assert next_observation.evidence_count == 1
+    assert next_observation.candidate_since == selection_time(2)
 
 
 def test_unknown_low_confidence_stale_or_uncalibrated_scores_abstain() -> None:
