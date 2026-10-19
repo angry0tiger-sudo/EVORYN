@@ -632,7 +632,7 @@ def test_release_gate_requires_approved_risk_fingerprint_and_blocks_live(tmp_pat
 
     assert approved.is_approved
     assert approved.promotion_decision_id == decision.decision_id
-    assert ledger.events[-1].event_type is LearningEventType.RELEASE_APPROVED
+    assert reloaded_ledger.events[-1].event_type is LearningEventType.RELEASE_APPROVED
 
 
 def test_release_gate_rejects_risk_policy_drift_at_creation_and_approval(
