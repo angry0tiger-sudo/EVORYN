@@ -404,6 +404,18 @@ class LearningLabLedgerEvent:
         if _sha256(self.payload_json.encode("utf-8")) != self.payload_sha256:
             raise ValueError("Ledger payload hash is invalid.")
 
+    def identity_material(self) -> dict[str, Any]:
+        """Return fields used to derive the stable event ID before adding the event hash."""
+        return {
+            "sequence": self.sequence,
+            "event_type": self.event_type.value,
+            "experiment_id": self.experiment_id,
+            "correlation_id": self.correlation_id,
+            "occurred_at": _iso_utc(self.occurred_at),
+            "payload_sha256": self.payload_sha256,
+            "previous_event_hash": self.previous_event_hash,
+        }
+
     def hash_material(self) -> dict[str, Any]:
         return {
             "schema_version": _SCHEMA_VERSION,
@@ -540,6 +552,11 @@ class LearningLabLedger:
                     raise ExperimentIntegrityError(
                         "Learning Lab hash-chain sequence/link mismatch."
                     )
+                expected_event_id = _sha256(
+                    _canonical_json_bytes(event.identity_material())
+                )
+                if expected_event_id != event.event_id:
+                    raise ExperimentIntegrityError("Learning Lab event identity hash mismatch.")
                 if _sha256(_canonical_json_bytes(event.hash_material())) != event.event_hash:
                     raise ExperimentIntegrityError("Learning Lab event hash mismatch.")
                 previous_hash = event.event_hash
@@ -548,7 +565,7 @@ class LearningLabLedger:
     def _append_persisted(self, event: LearningLabLedgerEvent) -> None:
         assert self._path is not None
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        line = _canonical_json_bytes(event.to_dict()) + b"\n"
+        line = _canonical_json_bytes(event.to_dict())
         descriptor = os.open(self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             view = memoryview(line)
@@ -836,11 +853,16 @@ class ExperimentRegistry:
             "data_quality_pass": evidence.data_quality_pass,
             "risk_gate_denial_count": evidence.risk_gate_denial_count,
         }
-        if not any(
-            event.event_type is LearningEventType.EVIDENCE_RECORDED
-            and event.experiment_id == evidence.experiment_id
-            and json.loads(event.payload_json) == expected_payload
+        matching_events = tuple(
+            event
             for event in self._ledger.events
+            if event.event_type is LearningEventType.EVIDENCE_RECORDED
+            and json.loads(event.payload_json).get("evidence_id") == evidence.evidence_id
+        )
+        if not matching_events or any(
+            event.experiment_id != evidence.experiment_id
+            or json.loads(event.payload_json) != expected_payload
+            for event in matching_events
         ):
             raise ExperimentIntegrityError(
                 "Experiment evidence is not backed by a matching Learning Lab Ledger event."
