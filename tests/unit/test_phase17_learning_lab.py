@@ -589,7 +589,15 @@ def test_release_gate_requires_approved_risk_fingerprint_and_blocks_live(tmp_pat
         created_at=NOW + timedelta(hours=3),
         correlation_id="release:paper-candidate",
     )
-    approved = release_gate.approve_candidate(
+    # Reconstruct the ledger and release gate to prove candidate state survives process restart.
+    reloaded_ledger = LearningLabLedger(tmp_path / "learning-lab-ledger.jsonl")
+    reloaded_registry = ExperimentRegistry(tmp_path / "experiments", reloaded_ledger)
+    reloaded_gate = ReleasePipelineGate(
+        registry=reloaded_registry,
+        ledger=reloaded_ledger,
+        approved_risk_policy_sha256=risk_fingerprint,
+    )
+    approved = reloaded_gate.approve_candidate(
         candidate.candidate_id,
         approved_by="human-reviewer",
         approval_reference="approval-ticket-123",
