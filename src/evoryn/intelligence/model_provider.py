@@ -17,7 +17,7 @@ from decimal import Decimal
 from enum import StrEnum
 from threading import RLock
 from types import MappingProxyType
-from typing import Protocol, cast
+from typing import Callable, Protocol, cast
 from urllib.parse import urlsplit
 
 type JSONValue = (
@@ -703,8 +703,10 @@ class IntelligenceCore:
                 return self._abstain(request, now, input_fingerprint, "AUDIT_UNAVAILABLE")
             return self._abstain(request, now, input_fingerprint, reason)
 
-        assert provider is not None
-        assert schema_out is not None
+        if provider is None or schema_out is None:
+            return self._abstain(
+                request, now, input_fingerprint, "MODEL_POLICY_CONFIGURATION_INVALID"
+            )
         timeout_seconds = min(self._policy.max_timeout_seconds, remaining_seconds)
         if not self._audit(
             self._event(
@@ -774,7 +776,8 @@ class IntelligenceCore:
                 return self._abstain(request, now, input_fingerprint, "AUDIT_UNAVAILABLE")
             return self._abstain(request, now, input_fingerprint, invalid_reason, identity=provider.identity)
 
-        assert output_fingerprint is not None
+        if output_fingerprint is None:
+            return self._abstain(request, now, input_fingerprint, "OUTPUT_FINGERPRINT_UNAVAILABLE")
         if not self._audit(
             self._event(
                 request,
@@ -918,14 +921,6 @@ class IntelligenceCore:
         )
 
 
-class CredentialHeaderProvider(Protocol):
-    """Provider-owned credentials are resolved at call time and never stored in the request."""
-
-    def headers_for(self, provider_id: str) -> Mapping[str, str]:
-        """Return headers from the application's approved secret-management boundary."""
-        ...
-
-
 class OpenAICompatibleChatAdapter:
     """Provider-switchable JSON chat adapter using an injected transport and credential source.
 
@@ -941,7 +936,7 @@ class OpenAICompatibleChatAdapter:
         transport: JsonPostTransport,
         credentials: CredentialHeaderProvider,
         schemas: tuple[StructuredJsonSchema, ...],
-        clock: object | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         _validate_https_url(base_url, "base_url")
         if not schemas:
@@ -953,8 +948,6 @@ class OpenAICompatibleChatAdapter:
         self._schemas = {schema.schema_id: schema for schema in schemas}
         if len(self._schemas) != len(schemas):
             raise ValueError("Schema IDs must be unique.")
-        if clock is not None and not callable(clock):
-            raise ValueError("clock must be callable.")
         self._clock = clock
 
     @property
