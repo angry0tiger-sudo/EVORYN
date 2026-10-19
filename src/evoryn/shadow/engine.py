@@ -530,7 +530,10 @@ class ShadowRunner:
             raise ShadowSafetyError(
                 "Paper baseline and Shadow evaluation configurations differ."
             )
-        if baseline_experiment_spec.feature_schema_version != experiment_spec.feature_schema_version:
+        if (
+            baseline_experiment_spec.feature_schema_version
+            != experiment_spec.feature_schema_version
+        ):
             raise ShadowSafetyError("Paper baseline and Shadow feature schemas differ.")
         baseline_fingerprint = strategy_fingerprint(baseline_strategy)
         baseline_parameters = tuple(sorted(baseline_strategy.parameters().items()))
