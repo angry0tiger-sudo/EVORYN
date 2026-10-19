@@ -35,9 +35,9 @@ def test_strategy_port_has_no_execution_method() -> None:
 
 
 def test_risk_port_returns_structured_decision_contract() -> None:
-    """Risk contract accepts an intent and position context."""
+    """Risk contract accepts request, portfolio and market-data context."""
     parameters = tuple(inspect.signature(RiskPort.evaluate).parameters)
-    assert parameters == ("self", "intent", "positions")
+    assert parameters == ("self", "request", "portfolio", "market_data", "now")
 
 
 def test_execution_port_only_declares_prepare_and_reconcile() -> None:
