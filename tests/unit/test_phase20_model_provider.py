@@ -744,6 +744,63 @@ def test_huggingface_classifier_rejects_invalid_probability_distribution() -> No
     assert result.reason_code == "PROVIDER_ERROR"
 
 
+def test_remote_llm_requires_explicit_policy_and_can_return_only_advisory_output() -> None:
+    model_identity = identity("llm-compatible", "fixture-llm", "fixture-snapshot-1")
+    response_body = {
+        "model": "fixture-llm",
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {"summary": "bounded advisory", "suggestion": "wait for deterministic gates"}
+                    )
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 15,
+            "completion_tokens": 9,
+            "estimated_cost_usd": "0.002",
+        },
+    }
+    transport = FakeJsonTransport(response_body)
+    clock_values = iter((NOW, NOW + timedelta(milliseconds=150)))
+    adapter = OpenAICompatibleChatAdapter(
+        identity=model_identity,
+        base_url="https://gateway.example.test/v1",
+        transport=transport,  # type: ignore[arg-type]
+        credentials=FakeCredentials(),
+        schemas=(OUTPUT_SCHEMA,),
+        clock=lambda: next(clock_values),
+    )
+    policy = ModelPolicy(
+        allowed_tasks=frozenset({ModelTask.LLM_ADVISORY}),
+        allowed_data_classifications=frozenset({DataClassification.PUBLIC}),
+        allowed_identities=(model_identity,),
+        allow_remote_providers=True,
+        max_cost_usd=Decimal("0.01"),
+    )
+    audit = InMemoryModelAuditSink()
+    core = IntelligenceCore(
+        providers=(adapter,),
+        policy=policy,
+        schemas=(INPUT_SCHEMA, OUTPUT_SCHEMA),
+        audit_sink=audit,
+    )
+
+    result = core.evaluate(request_for("llm-compatible"), now=NOW)
+
+    assert result.abstained is False
+    assert result.recommendation is not None
+    assert result.recommendation["summary"] == "bounded advisory"
+    assert result.reason_code == "ADVISORY_VALIDATED"
+    assert audit.events[-1].event_type is ModelAuditEventType.RESPONSE_VALIDATED
+    assert audit.events[-1].input_tokens == 15
+    assert audit.events[-1].output_tokens == 9
+    assert "fake-secret-token" not in repr(audit.events)
+
+
 def test_model_request_payload_is_immutable_and_non_finite_json_is_rejected() -> None:
     original = {"text": "before"}
     request = request_for(payload=original)
