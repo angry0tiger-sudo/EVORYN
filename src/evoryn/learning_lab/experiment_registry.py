@@ -914,7 +914,7 @@ class ExperimentRegistry:
                 if destination.read_bytes() != payload:
                     raise ExperimentIntegrityError(
                         "Concurrent immutable write produced conflicting bytes."
-                    )
+                    ) from None
                 return False
         finally:
             if staged.exists():
