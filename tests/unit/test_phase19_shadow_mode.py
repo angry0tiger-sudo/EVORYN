@@ -301,6 +301,7 @@ def test_shadow_runner_records_hypothetical_entry_to_persistent_learning_ledger(
     assert snapshot.mode is ExperimentMode.SHADOW
     assert snapshot.run_id == fixture.runner.run_id
     assert snapshot.evaluation_config_fingerprint == fixture.spec.evaluation_config_fingerprint
+    assert snapshot.evaluation_config_fingerprint != fixture.config.projection_config_fingerprint
     assert snapshot.projection_config_fingerprint == fixture.config.projection_config_fingerprint
     assert snapshot.feed_manifest_fingerprint == fixture.config.feed_manifest_fingerprint
     assert snapshot.outcome is ShadowOutcome.ENTER_LONG
@@ -595,6 +596,43 @@ def test_wrong_market_and_interval_are_rejected(tmp_path: Path) -> None:
     rejected = fixture.runner.process_candle(wrong_market, received_at=fixture.now)
     assert rejected.reason_code == "MARKET_IDENTITY_MISMATCH"
     assert rejected.outcome is ShadowOutcome.ABSTAIN
+
+
+def test_registered_model_fingerprint_must_match_strategy_implementation(
+    tmp_path: Path,
+) -> None:
+    fixture = Fixture(tmp_path)
+    mismatch = ExperimentSpec(
+        code_revision=fixture.spec.code_revision,
+        dataset_version=fixture.spec.dataset_version,
+        feature_schema_version=fixture.spec.feature_schema_version,
+        evaluation_config_fingerprint=fixture.spec.evaluation_config_fingerprint,
+        model_id=fixture.spec.model_id,
+        model_version=fixture.spec.model_version,
+        model_fingerprint="9" * 64,
+        parameters=fixture.spec.parameters,
+        random_seed=fixture.spec.random_seed,
+        train_range=fixture.spec.train_range,
+        validation_range=fixture.spec.validation_range,
+        test_range=fixture.spec.test_range,
+        mode=ExperimentMode.SHADOW,
+        created_at=fixture.now + timedelta(seconds=1),
+    )
+    fixture.registry.register(mismatch, correlation_id="test:register-wrong-model-fingerprint")
+    with pytest.raises(ShadowSafetyError, match="identity/parameters"):
+        ShadowRunner(
+            config=fixture.config,
+            experiment_spec=mismatch,
+            baseline_experiment_spec=fixture.baseline_spec,
+            registry=fixture.registry,
+            strategy=fixture.strategy,
+            baseline_strategy=fixture.baseline_strategy,
+            champion_controller=fixture.champion_controller,
+            regime_classifier=fixture.regime,
+            risk_assessor=fixture.risk_assessor,
+            auto_halt_status=lambda: False,
+            utcnow=lambda: fixture.now,
+        )
 
 
 def test_runner_rejects_non_shadow_experiment(tmp_path: Path) -> None:
