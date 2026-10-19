@@ -21,8 +21,8 @@ from evoryn.adapters.exchanges.nobitex_instrument_rules import (
     NobitexSpotInstrumentRulesProvider,
     SpotInstrumentRules,
 )
-from evoryn.adapters.exchanges.nobitex_transport import NobitexHTTPTransport
 from evoryn.adapters.exchanges.nobitex_spot_trading import NobitexSpotTradingTransport
+from evoryn.adapters.exchanges.nobitex_transport import NobitexHTTPTransport
 from evoryn.config import (
     MarketPolicy,
     NobitexReadOnlyConfig,
