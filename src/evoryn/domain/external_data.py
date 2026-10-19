@@ -307,7 +307,7 @@ class NewsArticleRecord:
         _require_sha256(self.content_sha256, "content_sha256")
         _require_sha256(self.payload_sha256, "payload_sha256")
         expected_content_hash = hashlib.sha256(
-            f"{self.title.strip()}\\n{self.summary.strip()}".strip().encode("utf-8")
+            f"{self.title.strip()}\n{self.summary.strip()}".strip().encode("utf-8")
         ).hexdigest()
         if self.content_sha256 != expected_content_hash:
             raise ValueError("Accepted article content hash does not match title/summary bytes.")
