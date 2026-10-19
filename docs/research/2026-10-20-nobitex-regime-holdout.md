@@ -5,13 +5,13 @@
 
 ## Reproducible evidence
 
-- Repository commit under test: `f9f634553f8c6edb2b173b7b885ad2d9cf34330c`
-- Standard six-gate CI: [Run #39328332810](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39328332810), all six jobs succeeded.
-- Real-history training and backtest: [Research Run #4](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39328332540), successful on the same commit. The workflow's offline ML integration suite reported **380 passed in 7.78s**, the full research dependency audit passed, and the public-history download/model/backtest/report steps succeeded.
-- Retained model/data/backtest artifact (90-day retention): [nobitex-regime-research-39328332540-1](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39328332540/artifacts/12223262662).
-- Artifact ZIP SHA-256: `f20fa79d7998e989f6605124ce7fd7cdb87a05eaab86ebb642f89405a4d94416`.
+- Repository commit under test: `5639f9ad6a1133be814251db0d958fe4d463d06d`
+- Standard six-gate CI: push [Run #39329776104](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776104) and PR [Run #39329781455](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329781455), all six jobs succeeded on the same code/test SHA.
+- Real-history training and backtest: [Research Run #5](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776038), successful on the same commit. The workflow's offline ML integration suite reported **381 passed in 12.74s**, the full research dependency audit passed, and the public-history download/model/backtest/report steps succeeded.
+- Retained model/data/backtest artifact (90-day retention): [nobitex-regime-research-39329776038-1](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776038/artifacts/12224231419).
+- Artifact ZIP SHA-256: `9ae0c56564cf7ac6eca66929ed7d6b491e60e44638fae0070455f84639959224`.
 
-The latest artifact contains the JSON training report, model manifest, fitted estimator, content-addressed candle CSV and manifest, three per-strategy backtest reports/checksums, test logs and the full research environment audit log. Its SHA-256 is `f20fa79d7998e989f6605124ce7fd7cdb87a05eaab86ebb642f89405a4d94416`. The raw dataset and binary model are intentionally **not committed to Git**; public-data rights have not been independently cleared. Historical Run #3 (4,319 candles) remains at [its original run and artifact](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277).
+The latest artifact contains the JSON training report, model manifest, fitted estimator, content-addressed candle CSV and manifest, three per-strategy backtest reports/checksums, test logs and the full research environment audit log. Its SHA-256 is `9ae0c56564cf7ac6eca66929ed7d6b491e60e44638fae0070455f84639959224` and it expires on 2027-01-17. The raw dataset and binary model are intentionally **not committed to Git**; public-data rights have not been independently cleared. Historical Run #3 (4,319 candles) remains at [its original run and artifact](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39326092277).
 
 ## Data provenance
 
@@ -25,11 +25,11 @@ The latest artifact contains the JSON training report, model manifest, fitted es
 | Candle opens, UTC | 2026-04-22 21:30 through 2026-10-19 20:30 |
 | Detected time gaps | 0 |
 | Pages retrieved | 9 |
-| Dataset version | `c1a13b3533f3777fa743a8fd6632d73b1760b355341fa1537b7a5ef6ab24a616` |
+| Dataset version | `5a9e1d165b1a9688a726563a1c06bfa96bde3abf8bd6193fa43664227ff67728` |
 | Candle CSV SHA-256 | `0d976abd6772fc8dce0578b55d69c9686aabe7ffa0a9329cc46c600349297d84` |
-| Dataset manifest SHA-256 | `6054e2276864a69497a57f7953ab66b43b9f04bb192a3466303d9fa9d5905651` |
+| Dataset manifest SHA-256 | `b769326d0d2b686b2eb91b92910d644e05304a4fc3d8e76d4cddcd7848ddce9b` |
 | Model artifact SHA-256 | `38799b767b2aa6c2910c07383c3e213db090d5b8d5c1a1e401ee963173c17f2c` |
-| Model manifest SHA-256 | `8a95d43eabff57cbf25ebbd8ab92d01db511c2a9359c66efa4ed3462f69bfa00` |
+| Model manifest SHA-256 | `6491232c7d0b0f475d24887406f71bd008a32424430c2e50fa60387a01f46157` |
 | Weak-label horizon | 6 candles |
 | Partitions | Chronological 60% train / 20% validation-calibration / 20% final holdout |
 | Final holdout samples | 858 |
@@ -78,7 +78,7 @@ The trained regime strategy had only one closed trade and spent approximately 0.
 
 ## Latest-run identity and limitations
 
-- The current values above are from Research Run #4 on code/test SHA `f9f634553f8c6edb2b173b7b885ad2d9cf34330c`, not copied from earlier Run #3.
-- Source revision: `udf-history:BTCUSDT:60:1776891600:1792445610`; 4,320 bars were written, reloaded and checksum-verified as `content_addressed_and_verified`.
+- The current values above are from Research Run #5 on code/test SHA `5639f9ad6a1133be814251db0d958fe4d463d06d`, not copied from earlier Runs #3 or #4.
+- Source revision: `udf-history:BTCUSDT:60:1776891600:1792446311`; 4,320 bars were written, reloaded and checksum-verified as `content_addressed_and_verified`.
 - The optional-ML integration suite reported 380 passed. Research `pip-audit` reported no known vulnerabilities; the local `evoryn` distribution itself is not present on PyPI and is not audited as a published PyPI package.
-- The latest 90-day artifact is [#12223262662](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39328332540/artifacts/12223262662). No authenticated account request or real order was made.
+- The latest 90-day artifact is [#12224231419](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776038/artifacts/12224231419), ZIP SHA-256 `9ae0c56564cf7ac6eca66929ed7d6b491e60e44638fae0070455f84639959224`; `pytest.log` SHA-256 `133ee3b4290cc8328991f188fdcd18764737178427b0d2d43b39a5f7c8e8f99a`, `research-run.log` SHA-256 `3f416fab7d1589d0cddd3379b69488e7e6a3267726cd15a3f0ce81127380400e`, `pip-audit.log` SHA-256 `d9e3864027f8eb834f89f67998363e1bc6dc66edcd9a5327c71fa616e9fb3df1`. No authenticated account request or real order was made.
