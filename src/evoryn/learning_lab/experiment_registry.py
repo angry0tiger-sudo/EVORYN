@@ -21,7 +21,6 @@ from typing import Any
 
 from evoryn.learning_lab.backtest import BacktestResult, IndexRange
 
-
 _SCHEMA_VERSION = 1
 
 

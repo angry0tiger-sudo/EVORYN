@@ -9,7 +9,6 @@ from evoryn.domain.models import Market, MarketSnapshot, OrderRequest, OrderType
 from evoryn.risk.engine import RiskEngine
 from evoryn.risk.models import PortfolioSnapshot, RiskAction, RiskLimits
 
-
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 

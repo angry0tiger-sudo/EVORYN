@@ -18,7 +18,7 @@ from evoryn.adapters.data.market_aggregators import (
 )
 from evoryn.adapters.data.news_connector import LicensedNewsJsonConnector, NewsFieldMapping
 from evoryn.adapters.data.news_corpus import NewsEventCorpus
-from evoryn.adapters.data.news_quality import NewsQualityGate, NewsQualityPolicy
+from evoryn.adapters.data.news_quality import NewsQualityGate
 from evoryn.adapters.network.json_http import HttpsJsonTransport, JsonApiError
 from evoryn.domain.external_data import (
     DataUse,
@@ -43,7 +43,6 @@ from evoryn.learning_lab.news_ablation import (
     evaluate_news_ablation,
 )
 from evoryn.strategies.baseline import SmaTrendBaseline
-
 
 NOW = datetime(2026, 10, 19, 12, tzinfo=UTC)
 DATA_START = datetime(2026, 10, 1, tzinfo=UTC)
@@ -498,7 +497,7 @@ def test_licensed_news_json_connector_records_provider_and_retrieval_provenance(
     assert item.related_asset_ids == ("BTC-USDT",)
     assert transport.calls[0]["url"] == "https://newsapi.org/v2/everything"
     assert "secret-news-key" not in transport.calls[0]["url"]
-    assert "secret-news-key" == transport.calls[0]["headers"]["X-NEWS-KEY"]
+    assert transport.calls[0]["headers"]["X-NEWS-KEY"] == "secret-news-key"
 
 
 def test_news_connector_language_fallback_must_match_explicit_request_filter() -> None:

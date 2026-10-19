@@ -22,7 +22,6 @@ from urllib.parse import urlsplit
 
 from evoryn.adapters.network.json_http import JsonApiError, JsonApiTransport
 
-
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _TRANSIENT_STATUS_CODES = frozenset({408, 425, 500, 502, 503, 504})

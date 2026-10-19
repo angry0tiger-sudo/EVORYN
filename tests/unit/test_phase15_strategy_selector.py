@@ -25,7 +25,6 @@ from evoryn.learning_lab.strategy_selection import (
 from evoryn.strategies.baseline import FlatBaseline, SmaCrossoverBaseline
 from evoryn.strategies.plugins import (
     StrategyPluginRegistration,
-    StrategyPluginRegistry,
     build_baseline_registry,
 )
 from evoryn.strategies.selector import (
@@ -33,7 +32,6 @@ from evoryn.strategies.selector import (
     SelectionStatus,
     StrategySelectionPolicy,
 )
-
 
 BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
 INTERVAL = timedelta(hours=1)

@@ -36,7 +36,6 @@ from evoryn.learning_lab.backtest import (
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.strategies.contracts import CausalTargetStrategy
 
-
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _ZERO = Decimal("0")
 _ONE = Decimal("1")

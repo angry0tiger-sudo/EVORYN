@@ -16,7 +16,6 @@ from evoryn.domain.external_data import (
     require_aware_utc,
 )
 
-
 ArticleKey = tuple[str, str, str, str | None]
 SentimentKey = tuple[ArticleKey, str, str]
 

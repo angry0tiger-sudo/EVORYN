@@ -19,7 +19,6 @@ from evoryn.learning_lab.backtest import (
     run_backtest,
 )
 from evoryn.learning_lab.experiment_registry import (
-    configuration_fingerprint,
     ExperimentIntegrityError,
     ExperimentMode,
     ExperimentRegistry,
@@ -27,6 +26,7 @@ from evoryn.learning_lab.experiment_registry import (
     ExperimentSpec,
     LearningEventType,
     LearningLabLedger,
+    configuration_fingerprint,
 )
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.learning_lab.promotion import (
@@ -42,7 +42,6 @@ from evoryn.learning_lab.promotion import (
     RollbackTrigger,
 )
 from evoryn.strategies.baseline import SmaTrendBaseline
-
 
 NOW = datetime(2026, 1, 1, 12, tzinfo=UTC)
 DATASET_VERSION = "d" * 64

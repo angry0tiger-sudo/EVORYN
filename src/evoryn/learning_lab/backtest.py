@@ -14,15 +14,14 @@ import json
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from decimal import Decimal, ROUND_FLOOR
+from datetime import UTC, datetime
+from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
 from typing import Any
 
-from evoryn.domain.models import MarketCandle, Side
+from evoryn.domain.models import Side
 from evoryn.learning_lab.historical_data import HistoricalDataset
 from evoryn.strategies.contracts import CausalTargetStrategy
-
 
 BACKTEST_ENGINE_VERSION = "1.0.0"
 _BPS_DENOMINATOR = Decimal("10000")

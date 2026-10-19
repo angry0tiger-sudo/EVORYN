@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
@@ -25,7 +25,6 @@ from evoryn.domain.external_data import (
     SentimentLabel,
     require_aware_utc,
 )
-
 
 FINANCIAL_NEWS_MODEL_ID = (
     "mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"

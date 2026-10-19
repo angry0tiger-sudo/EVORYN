@@ -16,7 +16,6 @@ from typing import Any, Protocol
 
 from evoryn.domain.models import MarketCandle
 
-
 REGIME_FEATURE_SCHEMA_VERSION = "1.0.0"
 REGIME_MODEL_OUTPUTS = (
     "bull_trend",

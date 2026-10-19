@@ -6,12 +6,12 @@ network client and cannot place real exchange orders.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from threading import RLock
-from typing import Callable
 
 from evoryn.domain.models import Fill, Market, MarketSnapshot, OrderRequest, Side
 from evoryn.domain.strategy_decisions import StrategySelectionLedgerEntry

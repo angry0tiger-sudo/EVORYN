@@ -22,7 +22,6 @@ from evoryn.strategies.plugins import (
     StrategyPluginRegistry,
 )
 
-
 STRATEGY_SELECTOR_VERSION = "1.0.0"
 
 
@@ -658,7 +657,7 @@ class RegimeStrategySelector:
     ) -> StrategySelectionDecision:
         self._decision_sequence += 1
         decision_id = hashlib.sha256(
-            f"{correlation_id}|{self._decision_sequence}|{reason_code}".encode("utf-8")
+            f"{correlation_id}|{self._decision_sequence}|{reason_code}".encode()
         ).hexdigest()
         decision = StrategySelectionDecision(
             decision_id=decision_id,

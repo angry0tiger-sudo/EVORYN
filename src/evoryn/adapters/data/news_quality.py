@@ -21,7 +21,6 @@ from evoryn.domain.external_data import (
     require_aware_utc,
 )
 
-
 _TRACKING_QUERY_KEYS = frozenset(
     {"fbclid", "gclid", "ref", "ref_src", "source", "mc_cid", "mc_eid"}
 )

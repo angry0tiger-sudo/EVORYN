@@ -716,9 +716,7 @@ class ChampionChallengerController:
                 decision, experiment_id=evidence.experiment_id, correlation_id=correlation_id
             )
 
-        if evidence.experiment_id != self._active_champion_id:
-            trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
-        elif evidence.mode is not ExperimentMode.PAPER:
+        if evidence.experiment_id != self._active_champion_id or evidence.mode is not ExperimentMode.PAPER:
             trigger = RollbackTrigger.MODEL_OR_DATA_IDENTITY_MISMATCH
         elif not self._has_trusted_telemetry(evidence):
             trigger = RollbackTrigger.TELEMETRY_ATTESTATION_FAILED

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from threading import RLock
-from typing import Iterable
 
 from evoryn.domain.external_data import DataUse, SourceLicenseAuthorization
 

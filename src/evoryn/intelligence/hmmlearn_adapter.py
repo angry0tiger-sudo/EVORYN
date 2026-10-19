@@ -23,7 +23,6 @@ from evoryn.intelligence.regime import RegimeFeatureExtractor, RegimeLabel
 from evoryn.learning_lab.backtest import TemporalPartitions
 from evoryn.learning_lab.historical_data import HistoricalDataset
 
-
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 class RegimeDependencyUnavailable(RuntimeError):
     """Raised when optional HMM dependencies are not installed."""
