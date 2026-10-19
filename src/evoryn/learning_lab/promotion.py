@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from typing import Any, Protocol
 
 from evoryn.learning_lab.experiment_registry import (
     ExperimentIntegrityError,
@@ -432,6 +432,23 @@ class RollbackDecision:
             raise ValueError("Rollback assessment must include a reason.")
 
 
+class EvidenceTrustVerifier(Protocol):
+    """Trusted adapter that authenticates Paper/Shadow telemetry provenance.
+
+    Implementations should verify a signed collector attestation and bind it to evidence ID,
+    experiment identity, telemetry mode and collection window. A self-declared origin string is
+    never sufficient proof of telemetry authenticity.
+    """
+
+    def verify(
+        self,
+        evidence: ExperimentRunEvidence,
+        spec: ExperimentSpec,
+    ) -> bool:
+        """Return true only if a trusted external telemetry attestation validates."""
+        ...
+
+
 class ChampionChallengerController:
     """Coordinate paper-champion changes and automatic rollback; never touches Live."""
 
@@ -443,6 +460,7 @@ class ChampionChallengerController:
         champion_experiment_id: str,
         gate: ChampionChallengerGate | None = None,
         rollback_policy: RollbackPolicy | None = None,
+        evidence_trust_verifier: EvidenceTrustVerifier | None = None,
     ) -> None:
         spec = registry.get(champion_experiment_id)
         if spec.mode is not ExperimentMode.PAPER:
@@ -451,6 +469,7 @@ class ChampionChallengerController:
         self._ledger = ledger
         self._gate = gate or ChampionChallengerGate()
         self._rollback_policy = rollback_policy or RollbackPolicy()
+        self._evidence_trust_verifier = evidence_trust_verifier
         self._active_champion_id: str | None = champion_experiment_id
         self._previous_champion_id: str | None = None
         self._approved_shadow_candidate_id: str | None = None
@@ -556,6 +575,30 @@ class ChampionChallengerController:
             raise ValueError("Champion evaluation evidence is required.")
         champion_evidence = self._registry.get_evidence(champion_evidence_id)
         challenger_evidence = self._registry.get_evidence(challenger_evidence_id)
+        verifier = self._evidence_trust_verifier
+        if verifier is None or not verifier.verify(champion_evidence, champion_spec) or not (
+            verifier.verify(challenger_evidence, challenger_spec)
+        ):
+            self._ledger.append(
+                LearningEventType.PROMOTION_REJECTED,
+                experiment_id=challenger_experiment_id,
+                correlation_id=correlation_id,
+                occurred_at=evaluated_at,
+                payload={
+                    "reason_code": (
+                        "TRUSTED_TELEMETRY_VERIFIER_NOT_CONFIGURED"
+                        if verifier is None
+                        else "TELEMETRY_ATTESTATION_REJECTED"
+                    ),
+                    "champion_evidence_id": champion_evidence_id,
+                    "challenger_evidence_id": challenger_evidence_id,
+                    "target_mode": target_mode.value,
+                    "promotion_or_release": False,
+                },
+            )
+            raise PermissionError(
+                "Champion/Challenger promotion requires a trusted Paper/Shadow evidence verifier."
+            )
         prior_comparison_count = sum(
             1
             for event in self._ledger.events
