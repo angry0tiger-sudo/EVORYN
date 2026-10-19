@@ -1,66 +1,48 @@
 # Phase 19 Verification Status — Shadow Mode
 
-- Date: 2026-10-19
+- Updated: 2026-10-19
 - Pull request: [#19 — Read-only Shadow Mode](https://github.com/angry0tiger-sudo/EVORYN/pull/19)
-- PR state at last check: draft, open, not merged.
-- Scope: evidence inventory only; not a Phase 19 acceptance certificate.
+- Candidate code HEAD validated by CI: `fad5154e92b9b91319006f64390299b9492a3794`
+- Verification result: **all six required CI jobs passed**.
+- Acceptance caveat: green automated CI is necessary evidence, not an independent architecture/risk review or production-activation authorization.
 
-## Source snapshot
+## Authoritative CI evidence
 
-The current Phase 19 review snapshot is HEAD `cff91e9cda982c4032c7462db35d44289ac58203`, tree SHA `3de352dae126be2d0d1806af3e997919a3e42591`. The latest commits update only evidence/technical-debt documentation; the Phase 19 Python source/test blobs listed below remain unchanged.
+GitHub Actions [Run #787](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39228082016) ran against the exact Phase 19 candidate code HEAD `fad5154e92b9b91319006f64390299b9492a3794`. All jobs received hosted runners, executed, and concluded success:
 
-The Git tree recorded these exact source blobs:
-- `src/evoryn/shadow/engine.py`: `d1e1c968268b853e0e763aaed2a516003a9368c4`
-- `tests/unit/test_phase19_shadow_mode.py`: `3427a5b8824e8727142e7aa3d7406f13bb21fbd4`
-- `src/evoryn/learning_lab/experiment_registry.py`: `06536f57c3db82ccf1802eb3619899f24356c81f`
-- `src/evoryn/learning_lab/promotion.py`: `f2a8115d9013ab025d3c959db486079debe0a50f`
-- `src/evoryn/shadow/__init__.py`: `8b2fc7c18ba3680a1cccb35ede5e55618884a17e`
-- `docs/adr/0012-shadow-mode-observation-only.md`: `bb3b18edcabc1641ad930d4f5bdeb96b20e2aba5`
-- `docs/operations/phase-19-shadow-mode.md`: `b777b4242965e6fb93aecf7cb206c102b2b230aa`
-- `TECHNICAL_DEBT.md`: `89d27c0abece658200ceb95b4beb27a8412ec318`
+| Gate | Job ID | Result |
+|---|---:|---|
+| Full unit test suite | `117979182820` | **PASS — 218 passed in 1.46s** |
+| Ruff | `117979182770` | **PASS** |
+| Strict mypy (`mypy src tests`) | `117979182627` | **PASS** |
+| Bandit (`bandit -q -r src`) | `117979182778` | **PASS** |
+| Runner/dependency preflight, package install, `compileall` | `117979182809` | **PASS** |
+| pip-audit | `117979182858` | **PASS** |
 
-These are Git blob identifiers from the repository tree, not claims that Python executed them.
+The workflow used Python 3.12. The pytest output reports `collected 218 items` and `218 passed in 1.46s`. The run summary and per-job records are the execution evidence; the existence of test files alone is not treated as a pass.
 
-## Static structural checks performed
+The CI run was on source candidate HEAD `fad5154e92b9b91319006f64390299b9492a3794`. The subsequent commits updating this status document and the debt ledger affect documentation only; all Phase 19 source and test files remain unchanged. The latest workflow run must still be checked for those final documentation commits before merging.
 
-- `ShadowDecisionSnapshot` declares 54 dataclass fields; a source-level structural check matched all 54 to the `_build_snapshot` constructor keywords, with no missing, extra or duplicate keywords.
-- All six `ShadowRunner(...)` call sites in `tests/unit/test_phase19_shadow_mode.py` include the required candidate, registered Paper Champion, champion controller, regime classifier, read-only risk assessor, Auto-Halt reader, and configuration arguments.
-- The touched Python source/test files were inspected for Ruff's configured 100-character line width; no over-width lines remained in `engine.py`, `__init__.py` and `test_phase19_shadow_mode.py` in that check.
-- The read-only Nobitex candle-feed method signature was checked against the canonical adapter: `get_market_candles(market, *, interval, start, end)`; source identity is normalized to `nobitex`.
+## Earlier runner-allocation failure and current interpretation
 
-These are static source/structure checks. **They are not a Python compile, pytest run, lint run, type-check run, or security scan.**
+Before the repository's visibility changed to public, several workflow runs ended within about three seconds with `runner_id=0`, empty `runner_name`, and `steps=[]`; logs were unavailable (`BlobNotFound`). This confirmed that no job commands ran in those attempts. It did **not** prove that exhausted quota or billing was the underlying account-level cause.
 
-## CI execution evidence
+After the repository became public, hosted runners were assigned normally. Run #787 is now direct evidence that the current Phase 19 candidate passed the complete configured workflow. Do not retrofit a definitive cause to the earlier infrastructure failures without additional account-level evidence.
 
-Latest CI evidence for the unchanged Phase 19 Python source snapshot:
-- Run #683 / ID `39219341686` (push), head `cff91e9cda982c4032c7462db35d44289ac58203`.
-- Run #684 / ID `39219348790` (pull request), same head.
-- Earlier runs #681 / ID `39219317469` and #682 / ID `39219324682` failed on the preceding evidence-documentation commit. Runs #679 / ID `39219231822` and #680 / ID `39219239566` had the same outcome on the Phase 19 code snapshot `2ac41e6b10942a3f78f2f1a84610dabf8a0b3669`.
+## Local versus hosted execution
 
-All six jobs in runs #683 and #684 (preflight, pytest, Ruff, mypy, Bandit, pip-audit) concluded `failure` in approximately three seconds. Every job reported `runner_id=0`, empty `runner_name` and `steps=[]`. Fetching preflight job logs returned `BlobNotFound`; no diagnostic artifact was available. These jobs did not execute the configured commands. The later commits changed only verification/technical-debt documentation, not the Phase 19 Python source/test blobs.
+The local sandbox did not contain a complete EVORYN checkout and could not resolve `github.com`; Ruff, mypy, Bandit and pip-audit were not installed there. No claim of a local full-suite run is made. The passing evidence in this report comes from the real GitHub-hosted runner workflow above.
 
-The reason GitHub did not allocate a hosted runner remains unconfirmed. Quota exhaustion is still a diagnostic hypothesis, not a fact established by the API.
+## Implementation scope verified by this run
 
-## Local execution status
+The validated candidate contains the read-only Shadow engine/API, bounded REST candle polling over the existing Nobitex read-only adapter, persistent Learning Lab events, candidate versus registered active Paper Champion target comparison, data/model/strategy identity checks, stale/duplicate/gap handling, Auto-Halt-state gating, observational risk-assessor gating, mock tests, ADR 0012 and operating guidance.
 
-- Full canonical repository checkout in the available sandbox: **not available**. The inspected `/mnt/data/evoryn-local` contained only `README.md`; it had no `.git` directory or EVORYN source tree.
-- Direct `git ls-remote https://github.com/angry0tiger-sudo/EVORYN.git` attempt: **blocked**, because this sandbox could not resolve `github.com`.
-- Available local runtime: Python `3.13.5` and pytest `9.0.2`; `ruff`, `mypy`, `bandit` and `pip-audit` executables were not installed.
-- Phase 19 `compileall`: **not run**, because the source tree was unavailable.
-- Phase 19 canonical pytest suite: **not run**, because the source tree was unavailable.
-- Ruff, strict mypy, Bandit and pip-audit: **not run**, because the tools were absent.
-- Authorized remote workstation execution was unavailable within the current remote-execution usage allowance; it was not retried.
-- Live market request: **not performed**.
-- Real exchange order: **not sent**.
+This is a library/API with a bounded `poll_once` operation. This development session did **not** issue a live-market request, activate an external scheduler, provision a production Auto-Halt or risk-assessor provider, or send an exchange order. No profitability or real-fill claim is supported.
 
-The nine passing local smoke tests documented for Phase 18 are separate narrow evidence, from a different source snapshot and harness. They must not be cited as Phase 19 test results.
+## Remaining release gates
 
-## Required acceptance gates
-
-1. Obtain a real runner or equivalent trusted full checkout and run the exact current candidate.
-2. Record passing `python -m pytest -vv`, `ruff check .`, `mypy src tests`, `bandit -q -r src` and `pip-audit` outputs or artifacts.
-3. Complete independent architecture/risk review.
-4. Provide real registered SHADOW and active PAPER Champion experiment specs, a reviewed read-only risk assessor, a read-only Auto-Halt provider, persistent access-controlled storage and an approved feed.
-5. Verify external scheduler supervision and that Phase 18 connectivity/route policies are properly integrated in the intended runtime.
-
-Until those gates are met, PR #19 is a draft and Phase 19 is **implemented as an unverified read-only library/API**, not accepted, scheduled or production-active.
+1. Independent architecture/risk review of the Shadow state machine, Paper Champion pointer, input/reconciliation behavior, risk-assessor contract, ledger failure behavior, and absence of any order-routing path.
+2. Production provisioning and review of immutable SHADOW/PAPER experiment specifications, durable/access-controlled audit storage, read-only Auto-Halt state, an approved feed/permission scope, a concrete reviewed `ShadowRiskAssessmentPort`, and one canonical/synchronized Paper Champion controller.
+3. Configure and supervise an external scheduler for `poll_once` only after the preceding gates pass; validate cancellation, monitoring, storage recovery, and provider-specific limits.
+4. Keep the Phase 18 original-merge-SHA review and runtime ConnectivityManager wiring obligations in `TECHNICAL_DEBT.md`; the green run above covers the later Phase 19 superset, not an independent historical certification of every deployment path.
+5. Do not treat SHADOW telemetry as PAPER evidence or execution fills. No live-order authority is added by this phase.
