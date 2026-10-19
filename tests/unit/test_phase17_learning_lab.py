@@ -425,6 +425,20 @@ def test_automatic_rollback_restores_last_known_good_paper_champion(tmp_path: Pa
     )
     assert promoted.status is PromotionStatus.PROMOTED_TO_PAPER
 
+    reloaded_ledger = LearningLabLedger(tmp_path / "learning-lab-ledger.jsonl")
+    reloaded_registry = ExperimentRegistry(tmp_path / "experiments", reloaded_ledger)
+    reloaded_controller = ChampionChallengerController(
+        registry=reloaded_registry,
+        ledger=reloaded_ledger,
+        champion_experiment_id=champion_spec.experiment_id,
+        gate=ChampionChallengerGate(
+            PromotionPolicy(minimum_observations=100, minimum_closed_trades=10)
+        ),
+        rollback_policy=RollbackPolicy(minimum_observations=10),
+    )
+    assert reloaded_controller.active_champion_id == challenger_spec.experiment_id
+    assert reloaded_controller.previous_champion_id == champion_spec.experiment_id
+
     bad_paper_telemetry = make_evidence(
         challenger_spec,
         net_return="-0.10",
@@ -446,6 +460,16 @@ def test_automatic_rollback_restores_last_known_good_paper_champion(tmp_path: Pa
     assert controller.active_champion_id == champion_spec.experiment_id
     assert ledger.events[-2].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
     assert ledger.events[-1].event_type is LearningEventType.CHAMPION_HEALTH_CHECKED
+
+    final_ledger = LearningLabLedger(tmp_path / "learning-lab-ledger.jsonl")
+    final_registry = ExperimentRegistry(tmp_path / "experiments", final_ledger)
+    final_controller = ChampionChallengerController(
+        registry=final_registry,
+        ledger=final_ledger,
+        champion_experiment_id=challenger_spec.experiment_id,
+    )
+    assert final_controller.active_champion_id == champion_spec.experiment_id
+    assert final_controller.previous_champion_id is None
 
 
 def test_shadow_promotion_requires_matching_shadow_champion_and_never_changes_paper(
@@ -703,6 +727,15 @@ def test_rollback_distinguishes_insufficient_window_from_safe_hold(tmp_path: Pat
     assert controller.active_champion_id is None
     assert ledger.events[-2].event_type is LearningEventType.AUTO_ROLLBACK_TRIGGERED
     assert ledger.events[-1].event_type is LearningEventType.CHAMPION_HEALTH_CHECKED
+
+    restarted_ledger = LearningLabLedger(tmp_path / "learning-lab-ledger.jsonl")
+    restarted_registry = ExperimentRegistry(tmp_path / "experiments", restarted_ledger)
+    restarted_controller = ChampionChallengerController(
+        registry=restarted_registry,
+        ledger=restarted_ledger,
+        champion_experiment_id=spec.experiment_id,
+    )
+    assert restarted_controller.active_champion_id is None
 
 
 def test_orphaned_spec_and_evidence_files_require_audit_reconciliation(
