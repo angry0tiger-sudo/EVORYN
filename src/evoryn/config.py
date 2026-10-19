@@ -58,7 +58,7 @@ class MarketPolicy:
         return cls.from_mapping(os.environ)
 
     @staticmethod
-    def quote_currency_for_symbol(symbol: str) -> str | None:
+    def quote_currency_for_symbol(symbol: object) -> str | None:
         """Resolve an explicitly delimited BASE/QUOTE pair or compact BASEUSDT symbol."""
         if not isinstance(symbol, str):
             return None
@@ -88,7 +88,7 @@ class MarketPolicy:
         base = normalized[: -len(compact_quotes[0])]
         return compact_quotes[0] if base.isalnum() else None
 
-    def rejection_reason(self, market: Market) -> str | None:
+    def rejection_reason(self, market: object) -> str | None:
         """Return a stable reason code if market identity is outside the hard whitelist."""
         if not isinstance(market, Market):
             return "invalid_market"
@@ -103,7 +103,7 @@ class MarketPolicy:
             return "quote_currency_not_allowed"
         return None
 
-    def allows_market(self, market: Market) -> bool:
+    def allows_market(self, market: object) -> bool:
         """Return true only when venue, market type, and quote currency all pass."""
         return self.rejection_reason(market) is None
 
