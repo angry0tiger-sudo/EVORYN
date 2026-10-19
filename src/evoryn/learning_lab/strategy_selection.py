@@ -45,10 +45,15 @@ _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 class TrainingManifestPort(Protocol):
     """Minimum immutable evidence required before OOS selection may run."""
 
+    model_id: str
+    model_version: str
+    feature_schema_version: str
     training_dataset_version: str
     training_split: str
     train_start_index: int
     train_end_index_exclusive: int
+    train_start_at: datetime
+    train_end_at: datetime
     model_fingerprint: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -275,6 +280,8 @@ def evaluate_strategy_selector_out_of_sample(
     test period is simulated. Do not tune on the returned test metrics and continue calling this
     result out-of-sample.
     """
+    if not isinstance(registry, StrategyPluginRegistry):
+        raise TypeError("registry must be a validated StrategyPluginRegistry.")
     if partitions.dataset_version != dataset.version:
         raise ValueError("Train/validation/test partitions belong to a different dataset version.")
     if partitions.total_bars != len(dataset.candles):
@@ -288,18 +295,31 @@ def evaluate_strategy_selector_out_of_sample(
         raise ValueError("Regime model was trained on a different dataset version.")
     if manifest.training_split != "train":
         raise ValueError("OOS selector evaluation requires a model fitted only on train.")
-    if detector.model_metadata.get("model_fingerprint") != manifest.model_fingerprint:
-        raise ValueError("Model metadata fingerprint does not match its training manifest.")
+    metadata_at_start = dict(detector.model_metadata)
+    if (
+        metadata_at_start.get("model_id") != manifest.model_id
+        or metadata_at_start.get("model_version") != manifest.model_version
+        or metadata_at_start.get("model_fingerprint") != manifest.model_fingerprint
+        or metadata_at_start.get("feature_schema_version") != manifest.feature_schema_version
+    ):
+        raise ValueError("Regime-model identity metadata does not match its training manifest.")
     if (
         manifest.train_start_index < partitions.train.start
         or manifest.train_end_index_exclusive > partitions.train.end
         or manifest.train_end_index_exclusive <= manifest.train_start_index
     ):
         raise ValueError("Regime model training range is not contained in the train partition.")
+    if (
+        manifest.train_start_at != dataset.candles[manifest.train_start_index].timestamp
+        or manifest.train_end_at
+        != dataset.candles[manifest.train_end_index_exclusive - 1].timestamp
+        + dataset.interval
+    ):
+        raise ValueError(
+            "Regime-model training timestamps do not match the declared train indices."
+        )
     if partitions.test.size <= 0:
         raise ValueError("Out-of-sample test partition must be non-empty.")
-    if not isinstance(registry, StrategyPluginRegistry):
-        raise TypeError("registry must be a validated StrategyPluginRegistry.")
     if not getattr(fixed_baseline, "strategy_id", "").strip():
         raise ValueError("Fixed comparison strategy requires strategy_id.")
     if not getattr(fixed_baseline, "strategy_version", "").strip():
