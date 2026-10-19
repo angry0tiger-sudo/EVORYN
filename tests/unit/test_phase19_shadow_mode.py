@@ -11,18 +11,17 @@ import pytest
 
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.regime import RegimeLabel, RegimePrediction
+from evoryn.learning_lab.backtest import IndexRange
 from evoryn.learning_lab.experiment_registry import (
     ExperimentMode,
     ExperimentRegistry,
     ExperimentSpec,
     LearningEventType,
     LearningLabLedger,
-    configuration_fingerprint,
 )
 from evoryn.shadow.engine import (
     NobitexRestCandleFeed,
     ShadowConfig,
-    ShadowLedgerUnavailable,
     ShadowOutcome,
     ShadowPollStatus,
     ShadowPollingService,
@@ -30,7 +29,6 @@ from evoryn.shadow.engine import (
     ShadowSafetyError,
     strategy_fingerprint,
 )
-from evoryn.strategies.contracts import CausalTargetStrategy
 
 
 class FixedExposureStrategy:
@@ -125,7 +123,12 @@ class FakeFeed:
     source_id = "nobitex"
     source_version = "nobitex-rest-ohlcv/v1"
 
-    def __init__(self, market: Market, interval: timedelta, candles: Sequence[MarketCandle]) -> None:
+    def __init__(
+        self,
+        market: Market,
+        interval: timedelta,
+        candles: Sequence[MarketCandle],
+    ) -> None:
         self.market = market
         self.interval = interval
         self.candles = tuple(candles)
@@ -217,9 +220,7 @@ class Fixture:
         )
 
 
-def _index_range(start: int, end: int):
-    from evoryn.learning_lab.backtest import IndexRange
-
+def _index_range(start: int, end: int) -> IndexRange:
     return IndexRange(start, end)
 
 
@@ -461,7 +462,7 @@ def test_rest_feed_filters_forming_candle_and_poll_bootstraps_history(tmp_path: 
     fetched = feed.fetch_completed(now=fixture.now)
     assert len(fetched) == 3
 
-    # The poller gets a fresh sequence that can be bootstrapped without treating history as live signals.
+    # Bootstrap the initial feed window without logging historic candles as live decisions.
     poll_feed = FakeFeed(fixture.market, fixture.interval, fetched)
     poller = ShadowPollingService(
         feed=poll_feed,
