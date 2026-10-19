@@ -177,12 +177,12 @@ class Fixture:
         parameters = tuple(sorted(self.strategy.parameters().items()))
         self.spec = ExperimentSpec(
             code_revision="a" * 40,
-            dataset_version=self.config.dataset_version,
+            dataset_version="b" * 64,
             feature_schema_version="shadow-market-candle/v1",
             evaluation_config_fingerprint=self.config.evaluation_config_fingerprint,
             model_id=self.strategy.strategy_id,
             model_version=self.strategy.strategy_version,
-            model_fingerprint=strategy_fingerprint(self.strategy),
+            model_fingerprint="c" * 64,
             parameters=parameters,
             random_seed=0,
             train_range=_index_range(0, 1),
