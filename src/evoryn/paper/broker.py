@@ -22,6 +22,11 @@ from evoryn.ports.contracts import MarketDataPort, RiskPort
 from evoryn.risk.models import PortfolioSnapshot, RiskAction, RiskResult
 
 
+def _runtime_is_instance(value: object, expected: type[object]) -> bool:
+    """Runtime guard for dynamically supplied port implementations."""
+    return isinstance(value, expected)
+
+
 class PaperOrderStatus(StrEnum):
     """Exact external paper lifecycle labels; no live venue status is implied."""
 
@@ -175,7 +180,7 @@ class PaperBroker:
                 self._risk_port.emergency_halt("risk_engine_failure")
                 return self._store_rejected(order_id, request, now, "risk_engine_failure")
 
-            if not isinstance(decision, RiskResult):
+            if not _runtime_is_instance(decision, RiskResult):
                 self._risk_port.emergency_halt("invalid_risk_decision")
                 return self._store_rejected(order_id, request, now, "invalid_risk_decision")
             self._risk_decisions[request.client_order_id] = decision
@@ -513,7 +518,7 @@ class PaperBroker:
             return "invalid_paper_clock"
         if snapshot.market != self._market:
             return "paper_market_mismatch"
-        if not isinstance(snapshot.observed_at, datetime) or (
+        if _runtime_is_instance(snapshot.observed_at, datetime) is False or (
             snapshot.observed_at.tzinfo is None
             or snapshot.observed_at.utcoffset() is None
         ):
@@ -523,11 +528,11 @@ class PaperBroker:
             return "stale_market_data"
         if not isinstance(snapshot.source, str) or not snapshot.source.strip():
             return "market_data_quality_failure"
-        if not isinstance(snapshot.quality_flags, tuple):
+        if not _runtime_is_instance(snapshot.quality_flags, tuple):
             return "invalid_market_quality_metadata"
         if snapshot.quality_flags:
             return "market_data_quality_failure"
-        if not isinstance(snapshot.values, dict):
+        if not _runtime_is_instance(snapshot.values, dict):
             return "invalid_market_values"
         required = ("bid", "ask", "last", "bid_size", "ask_size")
         for name in required:
