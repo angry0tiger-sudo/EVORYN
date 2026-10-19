@@ -74,6 +74,7 @@ class LicensedNewsJsonConnector:
         base_params: dict[str, str] | None = None,
         secret_header_name: str | None = None,
         secret_value: str | None = None,
+        language_fallback: str | None = None,
     ) -> None:
         if not source_id.strip():
             raise ValueError("source_id must not be empty.")
@@ -97,6 +98,8 @@ class LicensedNewsJsonConnector:
             raise ValueError("secret_header_name is invalid.")
         if secret_value is not None and not secret_value.strip():
             raise ValueError("secret_value must not be empty.")
+        if language_fallback is not None and not language_fallback.strip():
+            raise ValueError("language_fallback must be None or a non-empty language code.")
         self._source_id = source_id
         self._endpoint_path = endpoint_path
         self._mapping = field_mapping
@@ -105,6 +108,9 @@ class LicensedNewsJsonConnector:
         self._base_params = dict(base_params or {})
         self._secret_header_name = secret_header_name
         self._secret_value = secret_value
+        self._language_fallback = (
+            None if language_fallback is None else language_fallback.strip().lower()
+        )
 
     def fetch_candidates(
         self,
@@ -150,7 +156,19 @@ class LicensedNewsJsonConnector:
             published_text = _string_at(row, self._mapping.published_at_path, required=False)
             published_at = _optional_timestamp(published_text)
             revision = _string_at(row, self._mapping.revision_path, required=False)
-            language = _string_at(row, self._mapping.language_path, required=True)
+            language = _string_at(row, self._mapping.language_path, required=False)
+            language_evidence = "provider_field"
+            if not language:
+                request_language = request_params.get("language", "").strip().lower()
+                if (
+                    self._language_fallback is None
+                    or request_language != self._language_fallback
+                ):
+                    raise NewsConnectorError(
+                        "Per-item language is missing and no matching explicit request filter exists."
+                    )
+                language = self._language_fallback
+                language_evidence = "request_filter"
             related_ids: tuple[str, ...] = ()
             if self._mapping.related_asset_ids_path is not None:
                 raw_related = _json_path(row, self._mapping.related_asset_ids_path)
@@ -191,6 +209,7 @@ class LicensedNewsJsonConnector:
                     payload_sha256=hashlib.sha256(row_bytes).hexdigest(),
                     declared_content_sha256=declared_hash,
                     related_asset_ids=related_ids,
+                    language_evidence=language_evidence,
                 )
             )
         return tuple(normalized)
