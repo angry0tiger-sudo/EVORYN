@@ -112,6 +112,12 @@ The controller counts earlier comparisons recorded in the ledger for the same da
 and mode. Once the comparison cap is reached, it returns `INSUFFICIENT_EVIDENCE`. Do not keep tuning
 against the same holdout; register a new preregistered experiment and independent holdout instead.
 
+Before any comparison can result in promotion, the controller must be configured with a trusted
+`EvidenceTrustVerifier` implementation that authenticates the Paper/Shadow telemetry collector or
+validates its signed attestation bound to evidence ID, experiment, mode and collection window. If the
+verifier is omitted or rejects either arm, the controller writes a rejection to the Learning Lab Ledger
+and refuses promotion. The synthetic verifier used in unit tests is not a production trust source.
+
 The active Champion pointer must reference a PAPER spec:
 - SHADOW comparison requires a separate SHADOW-mode copy of the Champion with all other inputs equal.
   Approval records the candidate but leaves the Paper Champion pointer untouched.
