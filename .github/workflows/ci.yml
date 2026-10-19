@@ -13,69 +13,166 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  quality:
-    name: Tests, lint, and type-check
+  unit-tests:
+    name: Unit tests (pytest)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-
       - name: Install package and development tools
         run: |
           set -o pipefail
-          {
-            python -m pip install --upgrade pip
-            python -m pip install -e ".[dev]"
-          } 2>&1 | tee install.log
-
+          python -m pip install --upgrade pip 2>&1 | tee pip-install.log
+          python -m pip install -e ".[dev]" 2>&1 | tee package-install.log
       - name: Run unit tests
         run: |
           set -o pipefail
           python -m pytest -vv 2>&1 | tee pytest.log
-
-      - name: Run Ruff
-        if: always()
-        run: |
-          set -o pipefail
-          ruff check . 2>&1 | tee ruff.log
-
-      - name: Run mypy
-        if: always()
-        run: |
-          set -o pipefail
-          mypy src tests 2>&1 | tee mypy.log
-
-      - name: Run Bandit security scan
-        if: always()
-        run: |
-          set -o pipefail
-          bandit -q -r src 2>&1 | tee bandit.log
-
-      - name: Audit installed dependencies
-        if: always()
-        run: |
-          set -o pipefail
-          python -m pip install pip-audit 2>&1 | tee pip-audit-install.log
-          pip-audit 2>&1 | tee pip-audit.log
-
-      - name: Upload CI diagnostics
+      - name: Upload unit-test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ci-diagnostics-pytest-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            install.log
+            pip-install.log
+            package-install.log
             pytest.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  ruff:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install package and development tools
+        run: |
+          set -o pipefail
+          python -m pip install -e ".[dev]" 2>&1 | tee package-install.log
+      - name: Run Ruff
+        run: |
+          set -o pipefail
+          ruff check . 2>&1 | tee ruff.log
+      - name: Upload Ruff diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-ruff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            package-install.log
             ruff.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  mypy:
+    name: Strict type check (mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install package and development tools
+        run: |
+          set -o pipefail
+          python -m pip install -e ".[dev]" 2>&1 | tee package-install.log
+      - name: Run mypy
+        run: |
+          set -o pipefail
+          mypy src tests 2>&1 | tee mypy.log
+      - name: Upload mypy diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-mypy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            package-install.log
             mypy.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  bandit:
+    name: Security scan (Bandit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install package and development tools
+        run: |
+          set -o pipefail
+          python -m pip install -e ".[dev]" 2>&1 | tee package-install.log
+      - name: Run Bandit security scan
+        run: |
+          set -o pipefail
+          bandit -q -r src 2>&1 | tee bandit.log
+      - name: Upload Bandit diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-bandit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            package-install.log
             bandit.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  dependency-audit:
+    name: Dependency vulnerability audit (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install package and audit tool
+        run: |
+          set -o pipefail
+          python -m pip install --upgrade pip 2>&1 | tee pip-install.log
+          python -m pip install -e ".[dev]" 2>&1 | tee package-install.log
+          python -m pip install pip-audit 2>&1 | tee pip-audit-install.log
+      - name: Audit installed dependencies
+        run: |
+          set -o pipefail
+          pip-audit 2>&1 | tee pip-audit.log
+      - name: Upload dependency-audit diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-pip-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            pip-install.log
+            package-install.log
             pip-audit-install.log
             pip-audit.log
           if-no-files-found: warn
