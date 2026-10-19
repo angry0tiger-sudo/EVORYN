@@ -253,6 +253,7 @@ class RegimeStrategySelector:
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.ABSTAINED,
                 reason_code="STALE_REGIME_PREDICTION",
                 reason="The regime prediction exceeded the selector's maximum allowed age.",
@@ -268,6 +269,7 @@ class RegimeStrategySelector:
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.REGISTRY_CHANGED,
                 reason_code="REGISTRY_FINGERPRINT_CHANGED",
                 reason="The plugin registry changed; selection state was cleared for revalidation.",
@@ -289,6 +291,7 @@ class RegimeStrategySelector:
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.MODEL_IDENTITY_CHANGED,
                 reason_code="MODEL_FINGERPRINT_CHANGED",
                 reason="The model identity changed; the incumbent was cleared for revalidation.",
@@ -303,6 +306,7 @@ class RegimeStrategySelector:
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.DUPLICATE_EVIDENCE,
                 reason_code="NON_INCREASING_REGIME_TIMESTAMP",
                 reason="This prediction is duplicate or older and cannot satisfy new evidence.",
@@ -330,6 +334,7 @@ class RegimeStrategySelector:
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.ABSTAINED,
                 reason_code=reason_code,
                 reason="No new strategy signal is permitted for this uncertain regime output.",
@@ -346,6 +351,7 @@ class RegimeStrategySelector:
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.NO_COMPATIBLE_PLUGIN,
                 reason_code="NO_ENABLED_STRATEGY_FOR_REGIME",
                 reason="No enabled plugin explicitly supports the detected regime.",
@@ -362,6 +368,7 @@ class RegimeStrategySelector:
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.RETAINED,
                 reason_code="CURRENT_STRATEGY_COMPATIBLE",
                 reason="The current plugin remains the configured choice for this regime.",
@@ -386,11 +393,11 @@ class RegimeStrategySelector:
             previous = self._current_strategy_id
             self._current_strategy_id = desired
             self._last_switch_at = now
-            self._clear_candidate()
-            return self._make_decision(
+            decision = self._make_decision(
                 prediction,
                 now=now,
                 correlation_id=correlation_id,
+                market_symbol=market_symbol,
                 status=SelectionStatus.SWITCHED,
                 reason_code="HYSTERESIS_REQUIREMENTS_MET",
                 reason=(
@@ -402,6 +409,8 @@ class RegimeStrategySelector:
                 allow_new_signals=True,
                 previous_strategy_id=previous,
             )
+            self._clear_candidate()
+            return decision
 
         reasons: list[str] = []
         if not evidence_ready:
@@ -423,6 +432,7 @@ class RegimeStrategySelector:
             prediction,
             now=now,
             correlation_id=correlation_id,
+            market_symbol=market_symbol,
             status=SelectionStatus.CANDIDATE_PENDING,
             reason_code="HYSTERESIS_PENDING",
             reason="Strategy switch withheld: " + "; ".join(reasons) + ".",
