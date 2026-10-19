@@ -17,7 +17,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from evoryn.adapters.network.json_http import JsonApiError, JsonApiTransport
@@ -84,7 +84,7 @@ class ConnectionEvent:
     evidence_ref: str | None = None
 
 
-class ConnectionAuditSink:
+class ConnectionAuditSink(Protocol):
     """Structural protocol without requiring a runtime dependency or a storage backend."""
 
     def record(self, event: ConnectionEvent) -> None:
@@ -297,14 +297,14 @@ class FeedFreshnessGuard:
     def reset_after_reconciliation(self, *, evidence_ref: str) -> None:
         """Reset continuity only after an upstream caller supplies reconciliation evidence."""
         ref = _validate_identifier(evidence_ref, "evidence_ref")
-        with self._lock:
-            self._last_observed_at = None
         self._emit(
             _correlation_id(None),
             ConnectionEventType.FEED_FRESHNESS_RESET,
             reason="explicit_reconciliation",
             evidence_ref=ref,
         )
+        with self._lock:
+            self._last_observed_at = None
 
     def _emit(
         self,
@@ -349,10 +349,10 @@ class ConnectivityManager:
         sleeper: Callable[[float], None] = time.sleep,
         random_value: Callable[[], float] = random.random,
     ) -> None:
-        if not route_authorized:
-            raise PermissionError("The configured network route has not been explicitly authorized.")
         if type(route_authorized) is not bool:
             raise ValueError("route_authorized must be an explicit boolean.")
+        if not route_authorized:
+            raise PermissionError("The configured network route has not been explicitly authorized.")
         if not allowed_hosts:
             raise ValueError("A non-empty destination host allowlist is required.")
         self._allowed_hosts = frozenset(_normalize_host(host) for host in allowed_hosts)
