@@ -122,7 +122,10 @@ def auth(
             if source_id.startswith("model-")
             else "https://pro.coinmarketcap.com/user-agreement-commercial/"
             if source_id == "coinmarketcap"
-            else "https://support.coingecko.com/articles/1043089972-what-are-the-differences-between-commercial-and-custom-licenses"
+            else (
+                "https://support.coingecko.com/articles/"
+                "1043089972-what-are-the-differences-between-commercial-and-custom-licenses"
+            )
             if source_id == "coingecko"
             else NEWS_API_URL
         ),
