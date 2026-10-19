@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from threading import RLock
 from typing import Iterable
 
@@ -20,7 +21,9 @@ class SourceLicenseRegistry:
     def register(self, authorization: SourceLicenseAuthorization) -> None:
         """Register one terms snapshot; replacement requires an explicit new registry instance."""
         if not isinstance(authorization, SourceLicenseAuthorization):
-            raise TypeError("Only validated SourceLicenseAuthorization records may be registered.")
+            raise TypeError(
+                "Only validated SourceLicenseAuthorization records may be registered."
+            )
         with self._lock:
             if authorization.source_id in self._authorizations:
                 raise ValueError(
@@ -43,7 +46,7 @@ class SourceLicenseRegistry:
         source_id: str,
         use: DataUse,
         *,
-        now,
+        now: datetime,
     ) -> SourceLicenseAuthorization:
         """Require current authorization for the exact requested use."""
         authorization = self.get(source_id)
