@@ -15,6 +15,11 @@ from evoryn.risk.models import (
 )
 
 
+def _runtime_is_instance(value: object, expected: type[object]) -> bool:
+    """Runtime guard for callers that can violate type hints through dynamic boundaries."""
+    return isinstance(value, expected)
+
+
 class RiskEngine:
     """Stateful, latched fail-closed gate for a single Spot market."""
 
@@ -71,9 +76,9 @@ class RiskEngine:
     ) -> RiskResult:
         """Return exactly ALLOW, REDUCE, REJECT, or HALT for this order request."""
         with self._lock:
-            if not isinstance(request, OrderRequest) or not isinstance(
-                portfolio, PortfolioSnapshot
-            ) or not isinstance(market_data, MarketSnapshot):
+            if not _runtime_is_instance(request, OrderRequest)
+            or not _runtime_is_instance(portfolio, PortfolioSnapshot)
+            or not _runtime_is_instance(market_data, MarketSnapshot):
                 self.emergency_halt("invalid_risk_input")
                 return self._result(
                     RiskAction.HALT,
@@ -199,9 +204,11 @@ class RiskEngine:
         now: datetime,
     ) -> tuple[str, str] | None:
         """Validate all data needed by both the risk calculation and fill simulator."""
-        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+        if _runtime_is_instance(now, datetime) is False
+            or now.tzinfo is None
+            or now.utcoffset() is None:
             return ("invalid_evaluation_time", "Evaluation time must include a timezone.")
-        if not isinstance(market_data.observed_at, datetime) or (
+        if _runtime_is_instance(market_data.observed_at, datetime) is False or (
             market_data.observed_at.tzinfo is None
             or market_data.observed_at.utcoffset() is None
         ):
@@ -210,7 +217,7 @@ class RiskEngine:
             return ("market_mismatch", "Risk input market does not match the requested market.")
         if not isinstance(market_data.source, str) or not market_data.source.strip():
             return ("missing_market_source", "Market data has no source identifier.")
-        if not isinstance(market_data.values, dict):
+        if not _runtime_is_instance(market_data.values, dict):
             return ("invalid_market_values", "Market data values must be a mapping.")
         if not isinstance(market_data.quality_flags, tuple):
             return ("invalid_quality_metadata", "Market quality flags must be a validated tuple.")
