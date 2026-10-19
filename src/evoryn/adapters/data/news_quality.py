@@ -332,6 +332,7 @@ class NewsQualityGate:
             related_asset_ids=candidate.related_asset_ids,
             source_trust_score=authorization.trust_score,
             language_evidence=candidate.language_evidence,
+            provider_id_evidence=candidate.provider_id_evidence,
         )
         self._dedup.commit(candidate, canonical_url=canonical_url)
         return NewsIngestionResult(
