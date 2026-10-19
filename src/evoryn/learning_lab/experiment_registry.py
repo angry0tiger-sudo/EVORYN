@@ -809,9 +809,9 @@ class ExperimentRegistry:
             and json.loads(event.payload_json).get("evidence_id") == evidence.evidence_id
         )
         if matches:
-            if not any(
-                event.experiment_id == evidence.experiment_id
-                and json.loads(event.payload_json) == expected_payload
+            if any(
+                event.experiment_id != evidence.experiment_id
+                or json.loads(event.payload_json) != expected_payload
                 for event in matches
             ):
                 raise ExperimentIntegrityError(
