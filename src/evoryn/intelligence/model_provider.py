@@ -218,7 +218,10 @@ class ModelIdentity:
                 raise ValueError(f"{name} must not be empty.")
         if self.revision.casefold() in _FLOATING_REVISIONS:
             raise ValueError("Model revision must be immutable; floating aliases are not accepted.")
-        if self.artifact_sha256 is not None and not _SHA256.fullmatch(self.artifact_sha256):
+        if self.artifact_sha256 is not None and (
+            not isinstance(self.artifact_sha256, str)
+            or not _SHA256.fullmatch(self.artifact_sha256)
+        ):
             raise ValueError("artifact_sha256 must be a lowercase SHA-256 digest.")
         if self.model_card_uri is not None:
             _validate_https_url(self.model_card_uri, "model_card_uri")
@@ -279,8 +282,8 @@ class StructuredJsonSchema:
         supported_types = {"string", "number", "integer", "boolean", "object", "array", "null"}
         if any(field_type not in supported_types for _, field_type in self.field_types):
             raise ValueError("field_types contains an unsupported JSON type.")
-        if self.max_bytes <= 0:
-            raise ValueError("max_bytes must be positive.")
+        if type(self.max_bytes) is not int or self.max_bytes <= 0:
+            raise ValueError("max_bytes must be a positive integer.")
 
     def validate(self, value: object) -> str | None:
         """Return a sanitized validation reason or None when the object satisfies this schema."""
@@ -437,8 +440,6 @@ class ModelResponse:
             raise ValueError("completed_at cannot precede started_at.")
         if type(self.truncated) is not bool:
             raise ValueError("truncated must be an explicit boolean.")
-        if self.identity is None and not self.abstained:
-            raise ValueError("A validated recommendation requires model provenance.")
         if self.confidence is not None and (
             not isinstance(self.confidence, Decimal)
             or not self.confidence.is_finite()
@@ -484,6 +485,23 @@ class AdvisoryResult:
             raise ValueError("input_fingerprint must be a SHA-256 digest.")
         if self.output_fingerprint is not None and not _SHA256.fullmatch(self.output_fingerprint):
             raise ValueError("output_fingerprint must be a SHA-256 digest.")
+        if not self.abstained and self.identity is None:
+            raise ValueError("A validated recommendation requires model provenance.")
+        if not isinstance(self.confidence_semantics, ConfidenceSemantics):
+            raise ValueError("Advisory confidence semantics must be canonical.")
+        if self.confidence is not None and (
+            not isinstance(self.confidence, Decimal)
+            or not self.confidence.is_finite()
+            or self.confidence < 0
+            or self.confidence > 1
+        ):
+            raise ValueError("confidence must be a finite Decimal in [0, 1].")
+        if self.confidence is None and self.confidence_semantics is not ConfidenceSemantics.UNAVAILABLE:
+            raise ValueError("Unavailable confidence must use UNAVAILABLE semantics.")
+        if self.confidence is not None and self.confidence_semantics is ConfidenceSemantics.UNAVAILABLE:
+            raise ValueError("Present confidence must declare its semantics.")
+        if not self.abstained and self.output_fingerprint is None:
+            raise ValueError("A validated recommendation requires an output fingerprint.")
         if self.recommendation is not None:
             frozen = _freeze_json(self.recommendation)
             if not isinstance(frozen, Mapping):
@@ -534,11 +552,14 @@ class ModelPolicy:
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f"{name} must be an explicit boolean.")
         if self.max_cost_usd is not None and (
-            not self.max_cost_usd.is_finite() or self.max_cost_usd < 0
+            not isinstance(self.max_cost_usd, Decimal)
+            or not self.max_cost_usd.is_finite()
+            or self.max_cost_usd < 0
         ):
             raise ValueError("max_cost_usd must be finite and non-negative.")
         if self.minimum_confidence is not None and (
-            not self.minimum_confidence.is_finite()
+            not isinstance(self.minimum_confidence, Decimal)
+            or not self.minimum_confidence.is_finite()
             or self.minimum_confidence < 0
             or self.minimum_confidence > 1
         ):
