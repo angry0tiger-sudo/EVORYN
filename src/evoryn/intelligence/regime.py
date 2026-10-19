@@ -316,10 +316,25 @@ class RegimePrediction:
 class RegimeProbabilityModel(Protocol):
     """Research model port. A model predicts regimes; it cannot authorize trading actions."""
 
-    model_id: str
-    model_version: str
-    model_fingerprint: str
-    confidence_semantics: str
+    @property
+    def model_id(self) -> str:
+        """Stable model identifier."""
+        ...
+
+    @property
+    def model_version(self) -> str:
+        """Immutable model version."""
+        ...
+
+    @property
+    def model_fingerprint(self) -> str:
+        """Fingerprint of model parameters and training manifest."""
+        ...
+
+    @property
+    def confidence_semantics(self) -> str:
+        """Meaning of the returned scores."""
+        ...
 
     @property
     def is_ready(self) -> bool:
