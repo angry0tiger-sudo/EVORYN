@@ -110,8 +110,8 @@ durable persistence and tamper-evident signatures are not claimed.
 It returns both complete Phase 13 backtest results plus differences in net profit, net return,
 maximum drawdown and expectancy where both runs close at least one trade. Its combined report
 contains the train/test index ranges, model manifest, selector engine version, registry/routing
-fingerprints and all strategy selection/abstention ledger rows. If the registry/model identity changes
-during the test run, the evaluator refuses to return a valid comparison.
+fingerprints and all strategy selection/abstention ledger rows. If the registry/model identity
+changes during the test run, the evaluator refuses to return a valid comparison.
 
 The net-profit and return deltas are adaptive minus fixed baseline. The drawdown delta is also
 adaptive minus fixed, so a positive drawdown delta means the adaptive run had a larger (worse)
