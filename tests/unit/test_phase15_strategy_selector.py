@@ -164,9 +164,12 @@ def test_routing_preferences_have_an_explicit_fingerprint() -> None:
     alternate = RegimeStrategySelector(
         registry,
         preferred_strategy_by_regime={
-            RegimeLabel.BULL_TREND: ("sma-trend-long-flat", "sma-crossover-long-flat"),
+            RegimeLabel.BULL_TREND: (
+                "sma-crossover-long-flat",
+                "sma-trend-long-flat",
+            ),
             RegimeLabel.BEAR_TREND: ("flat-no-position",),
-            RegimeLabel.RANGE_BOUND: ("sma-trend-long-flat", "flat-no-position"),
+            RegimeLabel.RANGE_BOUND: ("flat-no-position", "sma-trend-long-flat"),
             RegimeLabel.HIGH_VOLATILITY: ("flat-no-position",),
         },
     )
