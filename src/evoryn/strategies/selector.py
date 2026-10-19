@@ -23,6 +23,9 @@ from evoryn.strategies.plugins import (
 )
 
 
+STRATEGY_SELECTOR_VERSION = "1.0.0"
+
+
 class StrategySelectionLedgerSink(Protocol):
     """Minimal append-only decision sink; selection has no dependency on execution services."""
 
@@ -92,6 +95,7 @@ class StrategySelectionDecision:
 
     decision_id: str
     correlation_id: str
+    selector_version: str
     market_symbol: str
     recorded_at: datetime
     regime_as_of: datetime
@@ -124,6 +128,7 @@ class StrategySelectionDecision:
         for name in (
             "decision_id",
             "correlation_id",
+            "selector_version",
             "market_symbol",
             "confidence_semantics",
             "model_id",
@@ -172,6 +177,7 @@ class StrategySelectionDecision:
         return StrategySelectionLedgerEntry(
             event_id=self.decision_id,
             correlation_id=self.correlation_id,
+            selector_version=self.selector_version,
             recorded_at=self.recorded_at,
             regime_as_of=self.regime_as_of,
             market_symbol=self.market_symbol,
@@ -623,6 +629,7 @@ class RegimeStrategySelector:
         decision = StrategySelectionDecision(
             decision_id=decision_id,
             correlation_id=correlation_id,
+            selector_version=STRATEGY_SELECTOR_VERSION,
             market_symbol=market_symbol,
             recorded_at=now.astimezone(UTC),
             regime_as_of=prediction.as_of,
