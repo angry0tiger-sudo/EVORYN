@@ -209,7 +209,9 @@ def _json_path(value: Any, path: str) -> Any:
     for part in path.split("."):
         if isinstance(result, dict):
             if part not in result:
-                raise NewsConnectorError(f"Provider response omitted configured field path {path!r}.")
+                raise NewsConnectorError(
+                    f"Provider response omitted configured field path {path!r}."
+                )
             result = result[part]
         else:
             raise NewsConnectorError(f"Configured field path {path!r} is not a JSON object path.")
