@@ -19,9 +19,9 @@ from typing import Any
 
 from evoryn.domain.models import MarketCandle
 from evoryn.intelligence.regime import (
+    REGIME_FEATURE_SCHEMA_VERSION,
     AbstainingRegimeDetector,
     RegimeFeatureExtractor,
-    REGIME_FEATURE_SCHEMA_VERSION,
     RegimeLabel,
     RegimeProbabilityModel,
     RegimeThresholds,

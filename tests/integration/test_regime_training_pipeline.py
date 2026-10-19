@@ -124,14 +124,14 @@ def test_trainer_writes_versioned_model_and_three_reproducible_holdout_backtests
     manifest_path = output / "model-manifest.json"
     artifact_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
     manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    with pytest.raises(TrainedRegimeArtifactError, match="pinned artifact"):
+    with pytest.raises(TrainedRegimeArtifactError, match="independently pinned digest"):
         load_trained_regime_model(
             artifact_path,
             manifest_path,
             expected_artifact_sha256="0" * 64,
             expected_manifest_sha256=manifest_sha256,
         )
-    with pytest.raises(TrainedRegimeArtifactError, match="pinned manifest"):
+    with pytest.raises(TrainedRegimeArtifactError, match="independently pinned digest"):
         load_trained_regime_model(
             artifact_path,
             manifest_path,
