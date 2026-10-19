@@ -163,7 +163,8 @@ def test_retries_network_failure_with_bounded_backoff_then_succeeds() -> None:
     assert len(transport.calls) == 2
     assert clock.sleeps == [1.0]
     assert ConnectionEventType.RETRY_SCHEDULED in [event.event_type for event in sink.events]
-    assert manager.circuit_state is CircuitState.CLOSED
+    recovered_state = manager.circuit_state
+    assert recovered_state is CircuitState.CLOSED
 
 
 def test_rate_limit_retry_after_is_respected_and_logged() -> None:
@@ -227,7 +228,8 @@ def test_open_circuit_blocks_calls_and_half_open_probe_can_recover() -> None:
     for _ in range(2):
         with pytest.raises(JsonApiError):
             manager.get_json("https://api.example.test/v1/ping", headers={}, params={})
-    assert manager.circuit_state is CircuitState.OPEN
+    opened_state = manager.circuit_state
+    assert opened_state is CircuitState.OPEN
 
     with pytest.raises(CircuitOpenError):
         manager.get_json("https://api.example.test/v1/ping", headers={}, params={})
