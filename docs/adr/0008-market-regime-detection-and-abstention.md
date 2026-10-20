@@ -84,15 +84,27 @@ reproducible evaluation. No network inference endpoint is used in Phase 14.
 
 ## Feature schema and timing
 
-Version `1.0.0` contains:
-- Mean simple return over the trailing lookback.
-- Cumulative trend strength over the same lookback.
-- Population standard deviation of returns as realized-volatility proxy.
-- Relative last-candle volume versus its trailing-window mean.
+## Feature schemas and timing
 
-All inputs are canonical OHLCV candles. Timestamps represent candle-open time; each feature row
-is as-of the last candle's close time. The feature extractor rejects market/interval/source
-mixing, non-chronological timestamps and missing intervals. It never repairs gaps silently.
+The production-facing `RegimeFeatureExtractor` uses schema `2.0.0-price-only` by default.
+Its legacy four-slot vector retains the volume-ratio field as zero unless callers explicitly
+opt into the separate `2.0.0-price-plus-volume` schema; the Nobitex UDF workflow never enables
+that opt-in while volume units are unknown. Old model artifacts whose schema does not match the
+manifest are rejected.
+
+The offline challenger pipeline uses schema `3.0.0-price-technical-only` with 21 causal
+features: multi-horizon returns; 6/12/24-period realized volatility; SMA gaps; RSI-14; MACD
+line/signal/histogram; Bollinger %B/bandwidth; ATR-14; 48-bar trend return; 24-bar range
+position; and a short/long volatility ratio. These features are derived from trailing completed
+OHLC bars only. The schema contains no volume field. RSI is an internally defined simple
+14-delta variant, not a venue-provided indicator.
+
+Timestamps represent candle-open time; every feature row is as-of the last completed candle's
+close. Feature generation rejects insufficient or malformed price windows and never repairs
+gaps silently. Triple-Barrier labels use decision-time trailing volatility to set symmetric
+barriers, a six-bar horizon, and first future OHLC touch; same-candle double touches are
+conservatively labelled high volatility because OHLC cannot establish intrabar ordering.
+Label windows crossing train/validation/test boundaries are purged.
 
 ## Validation and acceptance gates
 
@@ -110,7 +122,33 @@ mixing, non-chronological timestamps and missing intervals. It never repairs gap
 
 ## Current evidence boundary
 
-The phase adds implementation and synthetic unit fixtures, not a real-market regime claim.
-No licensed real-market dataset is currently embedded, no HMM training run is asserted, and no
-backtest or CI test is reported as passed unless a verified runner output becomes available.
-The regime adapter is research-only; Spot/Margin execution and risk modules are unchanged.
+The challenger workflow is research-only. It compares Random Forest, HistGradientBoosting,
+XGBoost, LightGBM, a forward-filtered Gaussian HMM, and a compact CPU LSTM under two weak-label policies.
+Ten chronological test windows, per-policy fold objects, majority-class metrics, and same-fold
+portfolio simulations after assumed commission/spread/slippage costs are persisted.
+
+The recorded challenge produced no model passing the conjunctive acceptance gate: accuracy,
+balanced accuracy and macro-F1 improvements over the train-only majority baseline, positive
+net-return difference versus same-fold Buy-and-Hold, at least twenty closed trades, and full
+fold coverage. No selected model is wired into runtime. Even a future candidate that passes
+this gate needs an untouched confirmation period, a schema-compatible loader with independently
+pinned artifact/manifest digests, and independent review.
+
+Nobitex data-use rights remain unreviewed. OHLCV spread/slippage are assumptions; unknown volume
+units disable capacity caps. No account endpoint, live order, or exchange-write route is part of
+this workflow. Spot/Margin execution and hard risk modules remain unchanged.
+
+
+## Exact-head research result — 2026-10-20
+
+The final candidate SHA `c08096a8ff8c28d78a9879977cc5c30fde2d5f77` passed six-gate CI [#39397941134](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941134) and research run [#39397941187](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187). See [the complete report](../research/2026-10-20-regime-challenger-walk-forward.md). Train-only majority Accuracy averaged 63.062% for forward-threshold labels and 63.445% for Triple-Barrier labels; all five candidates had lower mean Accuracy than the Triple-Barrier baseline. No model passed the combined classification/economic gate; no model is wired into runtime. Research schema v3 remains separate from the production loader contract.
+
+
+## Six-model evaluation status — 2026-10-20
+
+LightGBM is included as an optional, pinned research challenger. The retrieved six-model artifact
+confirms that all six models have fold-level classification outputs, but its schema-version-2
+report omits policy-specific backtests for the forward-threshold label policy. Treat those
+economic comparisons as incomplete in that artifact. The schema-version-3 pipeline and a fresh
+exact-head artifact must be checked before closing the reporting gate. No model has been selected
+for runtime; `selected_model_for_runtime=null` remains mandatory.

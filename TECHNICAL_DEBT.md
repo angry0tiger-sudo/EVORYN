@@ -118,3 +118,109 @@ This ledger records open verification and runtime-integration obligations. Close
 - **Unconfirmed:** the available evidence does not establish the claimed cause or conclusion.
 
 No open item may be closed by inference. This ledger does not authorize live trading, provider-policy circumvention, or changes to deterministic risk limits.
+
+
+## Phase 25 — Volume Semantics, Walk-Forward Robustness and Windows Paper Supervision
+
+### Verified starting point — 2026-10-20
+
+- [x] **PR #30 merged.** Squash merge commit `db68a4c943a6300bf1be5718e03c99bc321a71dc`; post-merge six-gate CI passed on that exact SHA in [Run #39369939519](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39369939519).
+- [x] **Volume ambiguity is represented, not guessed.** The public UDF contract does not certify whether `v` is base-asset or quote-asset volume. The dataset uses `volume_unit="unknown"`; research excludes it and disables volume participation caps unless base units are verified.
+- [x] **Original Random Forest remains rejected.** Its final holdout accuracy was 33.92% versus 58.51% for the train-only majority baseline. The cost-adjusted holdout backtest did not establish a profitable edge.
+- [x] **Challenger stack and design gates recorded.** ADR 0018 documents Random Forest, HistGradientBoosting, XGBoost, forward-filtered Gaussian HMM and compact CPU LSTM; ADR 0019 records Windows Task Scheduler requirements.
+- [ ] **Provider semantics and data rights.** Keep Nobitex UDF volume unknown. Historical data retention/commercial-use terms remain unreviewed.
+- [ ] **Windows unattended execution.** At this Phase 25 checkpoint the OS task was not implemented. The Phase 28 changes below supersede that snapshot: an offline CSV runner, Windows Task Scheduler PowerShell helper and cross-process lock implementation now exist on PR #31; exact-head Windows CI and owner-host acceptance remain separate gates.
+- [ ] **Production runtime model integration.** Research schema v3 is not accepted by the current production loader. No challenger is connected or promoted.
+- [ ] **Independent model-risk review.** Required even if a future challenger passes empirical gates.
+
+
+
+## Phase 26 — Challenger exact-head evidence (2026-10-20)
+
+- [x] **Six standard CI gates passed on exact SHA** `c08096a8ff8c28d78a9879977cc5c30fde2d5f77`: [Run #39397941134](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941134). ML-enabled suite: 391 passed in 15.26s; dependency audit: no known vulnerabilities in the installed environment.
+- [x] **Exact-head research completed** on that same SHA: [Run #39397941187](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187), [artifact #12252633238](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187/artifacts/12252633238), ZIP SHA-256 `5d411b9ef13a0e31b5a602e4d03cbd570c0eada8530bcbc9137a552166724d8e`. Walk-forward report SHA-256 `5900b1c3465ad23b90bce58fcfbe020fbc6b4b8ce295b9d505bf3b0bdb1785a7`.
+- [x] **Walk-forward report defect corrected and ZIP audited.** Ten folds are present, each containing both label policies, five model families and fold-level validation/test/backtest metrics.
+- [x] **Dataset verified:** 4,319 gap-free hourly BTC-USDT candles, version `275bdf9bb7c5049e24b1a7e17944ec3a09db7e831465da56038fdf8daa766420`; candle SHA-256 `b68b69b0f5dfffbf0e373d97725923a7ba45612dd410b6da93810907ca5c958f`; manifest SHA-256 `ce4bfbf7a78a975e1f0148215e565e781af7772e4d3c942aa1ac4c245a64ec5b`.
+- [x] **No model passed the combined gate.** Train-only majority Accuracy averaged 63.062% for forward-threshold labels and 63.445% for Triple-Barrier labels; all five candidates' mean Triple-Barrier accuracies were lower than that policy's baseline. Macro-F1 improved for several candidates, but Accuracy confidence intervals remained negative and return-difference intervals versus Buy-and-Hold spanned zero with negative lower bounds. Report fields: `selected_model_for_runtime=null`, `runtime_promotion_allowed=false`.
+- [ ] **Fresh confirmation and independent model-risk review** before any possible future promotion.
+- [ ] **Volume semantics and data-use rights** remain unresolved; UDF volume stays unknown and unused, and capacity caps remain disabled.
+- [ ] **Windows unattended Paper runtime** remains open as a release gate. The Phase 26 checkpoint predates PR #31's offline runner, task registration helper and no-Champion composition root; see Phase 28 for the current implementation status. No user-machine task has been registered.
+- [ ] **Runtime schema integration** remains open. Research schema v3 does not match the production loader contract; no challenger is connected.
+- Full metric tables, confidence intervals, portfolio outcomes and digests: [`docs/research/2026-10-20-regime-challenger-walk-forward.md`](docs/research/2026-10-20-regime-challenger-walk-forward.md).
+
+
+## Phase 27 — Six-model evidence reconciliation and Windows supervision
+
+### Six-model Artifact audit — 2026-10-20
+
+- [x] **Artifact downloaded and ZIP hash recomputed.** Artifact ID `12256082280`; actual downloaded ZIP SHA-256
+  `806cc33bcc2b80746e8fa35ae08ca3886c352166bc6287589b5fb0db20475e84`. The digest transcribed
+  from the supplied screenshot differs; preserve the computed digest for the downloaded bytes.
+- [x] **Embedded report parsed.** Walk-forward report SHA-256
+  `702bcbba8fd69ddcf334bf8c8fb1b938d65428336744d96c12202adfb4ede4b8`; schema version 2;
+  4,320 hourly BTC-USDT candles, zero gaps, dataset version
+  `8aaf2e83e1aa68d8a4ed6deae9057626f3a0556467d7bd99a6f509fc6be2e384`.
+- [x] **Fold/model coverage checked.** Eleven unique logical folds, both label policies, and all six models
+  have EVALUATED classification outputs in each fold/policy. 91 embedded `.sha256` sidecars were
+  checked against their corresponding files; no sidecar mismatch was found.
+- [x] **No Champion.** Report records `selected_model_for_runtime=null`. Triple-Barrier mean train-only
+  majority accuracy recomputes to 64.3887%; every candidate mean accuracy is lower. Mean net return
+  is +0.5551% for Buy-and-Hold, +0.1249% for SMA, and negative or effectively zero for every challenger.
+- [ ] **Historical artifact reporting gap.** The schema-v2 artifact has no model backtest entries under
+  `forward_thresholds`, despite classification outputs for that policy. It is not sufficient to claim
+  economic acceptance across both label policies. Its exact source commit was not independently
+  linked to the artifact metadata in this audit.
+- [x] **Audit report published.** See [six-model artifact audit](docs/research/2026-10-20-six-model-artifact-audit.md) for recomputed classification/economic summaries, digest discrepancy, and the missing forward-policy backtests.
+- [ ] **Fresh schema-v3 exact-head research run.** Validate both-policy backtest coverage, all six models,
+  model artifact reloads, per-policy candidate gates, report checksum, and ZIP checksum on the new PR head.
+  Do not reuse the schema-v2 artifact as evidence for the newer source.
+- [ ] **Windows Task Scheduler remains a release blocker until evidence is complete.** PR #31 now adds
+  a strict offline CSV-only runner with a no-Champion classifier, PowerShell register/status/unregister
+  helper, current-user Limited privilege, IgnoreNew behavior, bounded restarts, rotating logs, credential-
+  environment scrubbing, cooperative stop handling, and an OS-level mutex plus journal lock. Windows CI
+  must pass on the exact final PR HEAD. No user-machine task was registered and no local host was accessed.
+- [ ] **No live connectivity or order activity.** All work remains GitHub-side; no local Windows action,
+  authenticated account request, exchange-write request, or real order was performed.
+
+
+## Phase 28 — Offline Windows Paper Task implementation (PR #31)
+
+### Implementation status — 2026-10-20
+
+- [x] **Strict offline runner added.** `scripts/windows_paper_task.py` accepts only an exact JSON allow-list,
+  `runtime_mode=paper_only`, `simulation_only=true`, BTC-USDT, local CSV, local journal and local log.
+  The CSV must have explicit UTC timestamps, contiguous bars, valid OHLC values, and a completed candle
+  no more than two configured intervals stale. UNC/network paths, unknown keys and model paths are rejected.
+- [x] **No-Champion boundary explicit.** The runner uses `NoChampionClassifier`, whose prediction is
+  `UNKNOWN` / `NO_CHAMPION_SELECTED`; no model artifact is loaded and no model is selected for Runtime.
+  `selected_model_for_runtime=null` remains the release decision.
+- [x] **Task Scheduler helper added.** `scripts/windows_paper_task.ps1` implements user-scoped register,
+  status, and unregister operations for the reserved EVORYN Paper namespace. Registration is at current-user
+  logon with Limited privilege, no stored password, `MultipleInstances=IgnoreNew`, and a bounded
+  three-restart/five-minute retry policy. Existing tasks are not overwritten.
+- [x] **Process / journal locking retained and integrated.** `PaperRuntimeLocks` is acquired before
+  constructing the SQLite Paper runtime. Duplicate processes exit before journal access. Environment
+  variables likely to contain EVORYN/Nobitex/Binance credentials or live-write acknowledgements are removed
+  before Paper composition. Logs rotate at 5 MiB with five backups, and SIGINT/SIGTERM requests cooperatively
+  stop the in-process scheduler.
+- [x] **Configuration template and runbook added.** See `config/windows-paper.example.json` and
+  `docs/operations/windows-paper-task-scheduler.md`.
+- [x] **Windows CI coverage defined.** `.github/workflows/ci.yml` parses the PowerShell helper and runs lock
+  tests plus a native Windows task register/status/unregister round trip using a temporary
+  `EVORYN-CI-PaperOnly-*` task; the test attempts cleanup in a `finally` block. Cross-platform unit tests
+  validate config, CSV freshness/gaps, UNC rejection and task-name scope.
+- [x] **Seven-gate checkpoint passed.** GitHub Actions [Run #1018](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39486110714) passed all seven configured jobs on checkpoint SHA `7eaaaacd2f2c38d91e0bd2cb87352410e08cb648`: pytest, Ruff, strict mypy, Bandit, preflight/compile, pip-audit, and Windows Paper/Task Scheduler. The Windows job parsed the PowerShell helper and reported **12 passed, 1 skipped** (`O_NOFOLLOW` is POSIX-only); the disposable CI task successfully completed register/status/unregister.
+- **Merge gate (always enforced):** merge only after all seven required CI jobs report `success` for the current PR HEAD; do not infer latest-head status from checkpoint Run #1018 or an earlier attempt.
+- [ ] **Fresh schema-v3 research artifact.** The historical six-model schema-v2 Artifact #12256082280 has
+  no model backtest entries under `forward_thresholds`. A new research run on the current source must confirm
+  six models, both policy backtests, per-policy candidate gates, model artifact checksums/reloads, and report
+  and ZIP digests. That is separate from the seven standard CI gates.
+- [ ] **Native owner-host acceptance.** No task has been registered on the user's Windows 11 host. Owner-host
+  ACL, logoff/shutdown, restart budget, disk-full/permission/journal-corruption fault drills, log rotation,
+  and explicit unregistration acceptance remain open. Linux/Windows CI cannot attest to the actual owner host.
+- [x] **No operator-host activity.** All changes were committed through GitHub APIs. No owner-local
+  Windows host was accessed, no credential or account/write endpoint was manually used, and no real order
+  was placed. The historical public-data research workflow had push triggers on this branch; those triggers
+  have now been removed from this branch to prevent subsequent infrastructure pushes from initiating a
+  new public-history research job. Any already-triggered automatic run must be distinguished from a manually
+  dispatched live session; no new research run was manually dispatched in this phase.

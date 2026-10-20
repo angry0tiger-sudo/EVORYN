@@ -145,3 +145,8 @@ This is a safety-oriented implementation candidate, not a launchable automated t
 - [Phase 24: Historical Regime Research and Process-Local Scheduler](docs/operations/phase-24-regime-training-supervisor.md)
 - [Nobitex Regime Model Holdout Research (real public OHLCV, research-only)](docs/research/2026-10-20-nobitex-regime-holdout.md)
 - [Technical debt and release gates](TECHNICAL_DEBT.md)
+
+
+## Follow-up research and Windows supervision
+
+The exact-head challenger on branch `research/walk-forward-labels-volume-audit-20261020` passed all six CI gates [#39397941134](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941134) and research [#39397941187](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187). No model passed the majority-baseline and cost-adjusted Buy-and-Hold gate, so no candidate is connected to Runtime. See [the final walk-forward evidence](docs/research/2026-10-20-regime-challenger-walk-forward.md). Nobitex UDF volume remains unknown and excluded. Windows Task Scheduler remains design-only; no OS task was registered and no owner Windows host was accessed.

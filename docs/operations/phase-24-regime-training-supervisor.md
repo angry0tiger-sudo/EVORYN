@@ -76,3 +76,10 @@ Save/reload/checksum verification of the content-addressed dataset, independentl
   an authenticity signature against an attacker who can replace both files.
 - The workflow makes no authenticated account request and sends no real orders. Model output remains
   advisory and the live order-write gate remains disabled.
+
+
+## Follow-up: Volume semantics and walk-forward validation
+
+The UDF history contract does not establish whether v is base-asset or quote-asset volume. Research data therefore uses an explicit unknown unit until verified. Price-only regime features and disabled volume-capacity simulation are the fail-closed default; those backtests must be described as liquidity-unconstrained. The follow-up workflow compares forward-threshold labels with volatility-scaled triple-barrier weak labels and Random Forest, HistGradientBoosting and a Gaussian HMM over rolling chronological folds. HMM test probabilities are forward-filtered, not backward-smoothed; training thresholds and feature scalers are fit on train only and calibration temperature on validation only. Each fold's metrics and backtests are kept separately.
+
+Windows Task Scheduler supervision is currently design-only. No task has been registered and no local Windows host has been touched. Production feed composition, account/reconciliation, trusted artifact delivery, independent risk/security review and owner-host acceptance remain prerequisites.

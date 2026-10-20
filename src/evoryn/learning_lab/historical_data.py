@@ -64,8 +64,8 @@ class HistoricalDataset:
                 raise ValueError(f"Market {name} must not be empty.")
         if self.interval <= timedelta(0):
             raise ValueError("Dataset interval must be positive.")
-        if self.volume_unit not in {"base_asset", "quote_asset"}:
-            raise ValueError("volume_unit must explicitly be base_asset or quote_asset.")
+        if self.volume_unit not in {"base_asset", "quote_asset", "unknown"}:
+            raise ValueError("volume_unit must be base_asset, quote_asset, or unknown.")
         _require_aware(self.collected_at, "collected_at")
         for name in ("source_name", "source_uri", "source_revision", "license_id", "license_uri"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():

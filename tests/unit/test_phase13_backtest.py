@@ -489,13 +489,29 @@ def test_backtest_rejects_non_spot_dataset_for_spot_only_accounting() -> None:
 
 def test_backtest_rejects_quote_volume_when_fill_cap_requires_base_volume() -> None:
     quote_volume_dataset = dataset(count=10, volume_unit="quote_asset")
-    with pytest.raises(ValueError, match="require base-asset volume"):
+    with pytest.raises(ValueError, match="confirmed base-asset volume semantics"):
         run_backtest(
             quote_volume_dataset,
             SmaTrendBaseline(window=2),
             config(),
             segment_name="invalid-volume-unit",
         )
+
+
+def test_unknown_volume_is_not_used_as_a_fill_capacity_cap() -> None:
+    unknown = dataset(count=12, volume_unit="unknown")
+    result = run_backtest(
+        unknown,
+        BuyAndHold(),
+        replace(config(), enforce_volume_participation=False),
+        segment_name="unknown-volume-unconstrained",
+    )
+    assert result.fills
+    assert all(fill.liquidity_reference_volume == Decimal("0") for fill in result.fills)
+    assert all(fill.volume_participation == Decimal("0") for fill in result.fills)
+
+    with pytest.raises(ValueError, match="confirmed base-asset volume semantics"):
+        run_backtest(unknown, BuyAndHold(), config(), segment_name="unknown-volume-must-fail")
 
 
 def test_gapped_dataset_requires_explicit_backtest_opt_in() -> None:

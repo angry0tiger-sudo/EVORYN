@@ -17,6 +17,43 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  windows-paper-locks:
+    name: Windows Paper process and journal locks
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install package and development tools
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Parse Windows Task Scheduler PowerShell helper
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $env:GITHUB_WORKSPACE "scripts/windows_paper_task.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Run Windows Paper lock and Task Scheduler lifecycle tests
+        shell: pwsh
+        run: |
+          python -m pytest -q tests/unit/test_paper_runtime_locks.py tests/unit/test_windows_paper_task.py
+
   runner-preflight:
     name: Runner and dependency preflight
     runs-on: ubuntu-latest

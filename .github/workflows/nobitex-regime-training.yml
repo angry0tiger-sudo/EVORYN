@@ -12,8 +12,17 @@ on:
   push:
     branches:
       - feat/nobitex-regime-training-supervisor-20261020
+      - research/walk-forward-labels-volume-audit-20261020
     paths:
       - "src/evoryn/learning_lab/nobitex_history.py"
+      - "src/evoryn/learning_lab/historical_data.py"
+      - "src/evoryn/learning_lab/backtest.py"
+      - "src/evoryn/intelligence/regime.py"
+      - "src/evoryn/intelligence/regime_walk_forward.py"
+      - "src/evoryn/intelligence/regime_research_models.py"
+      - "scripts/evaluate_regime_walk_forward.py"
+      - "pyproject.toml"
+      - "tests/unit/test_regime_walk_forward.py"
       - "src/evoryn/intelligence/regime_training.py"
       - "src/evoryn/intelligence/trained_regime.py"
       - "scripts/train_nobitex_regime.py"
@@ -52,7 +61,9 @@ jobs:
           set -o pipefail
           python --version 2>&1 | tee python-version.log
           python -m pip install --upgrade pip 2>&1 | tee pip-install.log
-          python -m pip install -e ".[dev,regime]" 2>&1 | tee package-install.log
+          python -m pip install -e ".[dev,regime,regime-upgrade]" 2>&1 | tee package-install.log
+          python -m pip install "filelock>=3.13" "typing-extensions>=4.10" "sympy>=1.13.3" "networkx>=3.0" "jinja2>=3.1" "fsspec>=2024.2" 2>&1 | tee torch-dependencies.log
+          python -m pip install --no-deps --index-url https://download.pytorch.org/whl/cpu "torch==2.12.0" 2>&1 | tee torch-install.log
           python -m pip install pip-audit 2>&1 | tee pip-audit-install.log
 
       - name: Run offline suite including estimator integration test
@@ -70,11 +81,16 @@ jobs:
           set -o pipefail
           DAYS="${{ inputs.lookback_days || '180' }}"
           python scripts/train_nobitex_regime.py --symbol BTCUSDT --resolution 60 --lookback-days "$DAYS" --max-pages 24 --output artifacts/nobitex-regime 2>&1 | tee research-run.log
+      - name: Run purged walk-forward model and label comparison
+        run: |
+          set -o pipefail
+          python scripts/evaluate_regime_walk_forward.py --output artifacts/nobitex-regime 2>&1 | tee walk-forward-run.log
 
       - name: Publish evidence summary
         if: always()
         run: |
           python - <<'PY'
+          import hashlib
           import json
           import os
           from pathlib import Path
@@ -115,7 +131,134 @@ jobs:
                       f"{values['max_drawdown_fraction']} | {values['closed_trade_count']} | "
                       f"{values['final_equity']} |\n"
                   )
-              output.write("\n**Disposition:** research only; not approved for Live trading.\n")
+              walk_forward_path = Path("artifacts/nobitex-regime/walk-forward/walk-forward-report.json")
+              output.write("\n## Rolling walk-forward comparison\n\n")
+              if walk_forward_path.is_file():
+                  walk_forward = json.loads(walk_forward_path.read_text(encoding="utf-8"))
+                  report_sha256 = hashlib.sha256(walk_forward_path.read_bytes()).hexdigest()
+                  output.write(f"- Experiment ID: `{walk_forward['experiment_id']}`\n")
+                  output.write(f"- Walk-forward report SHA-256: `{report_sha256}`\n")
+                  output.write(f"- Folds: **{walk_forward['protocol']['fold_count']}**\n")
+                  output.write(f"- Dataset version: `{walk_forward['dataset']['dataset_version']}`\n")
+                  output.write(f"- Candle SHA-256: `{walk_forward['dataset']['candles_sha256']}`\n")
+                  output.write(f"- Dataset volume semantics: {walk_forward['dataset']['volume_semantics_status']}\n")
+                  confirmation = walk_forward["protocol"].get("terminal_confirmation", {})
+                  output.write(
+                      "- Walk-forward terminal reserve: "
+                      f"{confirmation.get('status', 'NOT_REPORTED')} "
+                      f"(indices [{confirmation.get('start_index')}, "
+                      f"{confirmation.get('end_index_exclusive')}), "
+                      f"{confirmation.get('bar_count')} bars)\n"
+                  )
+                  output.write(
+                      "- Project-level confirmation independence verified: "
+                      f"{walk_forward['protocol'].get('project_level_confirmation_independence_verified', False)}\n\n"
+                  )
+                  def interval_text(gate, key):
+                      values = gate.get(key)
+                      if not isinstance(values, dict):
+                          return "n/a"
+                      return (
+                          f"{float(values['mean_difference']) * 100:.2f} "
+                          f"[{float(values['ci95_lower']) * 100:.2f}, "
+                          f"{float(values['ci95_upper']) * 100:.2f}]"
+                      )
+                  gates_by_policy = walk_forward.get("candidate_gates_by_policy", {})
+                  output.write("### Candidate gates by label policy\n\n")
+                  output.write(
+                      "| Policy | Model | Folds | Accuracy Δ vs majority (pp, 95% CI) | "
+                      "Balanced accuracy Δ (pp, 95% CI) | Macro-F1 Δ (pp, 95% CI) | "
+                      "Net return Δ vs B&H (pp, 95% CI) | Net return Δ vs SMA (pp, 95% CI) | "
+                      "Closed trades | Classification | Economic | Empirical |\n"
+                  )
+                  output.write("|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|\n")
+                  for policy_name, policy_gates in gates_by_policy.items():
+                      for model_name, gate in policy_gates.items():
+                          output.write(
+                              f"| {policy_name} | {model_name} | "
+                              f"{gate.get('evaluated_folds', 0)} | "
+                              f"{interval_text(gate, 'accuracy_difference_vs_majority')} | "
+                              f"{interval_text(gate, 'balanced_accuracy_difference_vs_majority')} | "
+                              f"{interval_text(gate, 'macro_f1_difference_vs_majority')} | "
+                              f"{interval_text(gate, 'net_return_difference_vs_buy_and_hold')} | "
+                              f"{interval_text(gate, 'net_return_difference_vs_sma')} | "
+                              f"{gate.get('closed_trades_total', 0)} | "
+                              f"{gate.get('classification_gate_passed', False)} | "
+                              f"{gate.get('economic_gate_passed', False)} | "
+                              f"{gate.get('empirical_candidate_gate_passed', False)} |\n"
+                          )
+                  output.write("\n**Runtime disposition remains research-only.**\n\n")
+                  output.write("| Label policy / model | Metric | Fold mean | Fold stddev | Min | Max |\n")
+                  output.write("|---|---|---:|---:|---:|---:|\n")
+                  for key, metric_map in walk_forward["per_fold_metric_summary"].items():
+                      for metric in ("balanced_accuracy", "macro_f1", "log_loss"):
+                          stat = metric_map[metric]
+                          output.write(f"| {key} | {metric} | {stat['mean']:.6f} | {stat['population_stddev']:.6f} | {stat['minimum']:.6f} | {stat['maximum']:.6f} |\n")
+                  output.write("\n### Per-policy economic results and execution costs\n\n")
+                  output.write(
+                      "| Policy | Strategy / model | Fold coverage | Mean net return | "
+                      "Mean max drawdown | Closed trades | Gross turnover (USDT) | "
+                      "Mean turnover multiple | Commission paid (USDT) | "
+                      "Assumed spread cost (USDT) | Assumed slippage cost (USDT) | "
+                      "Mean time in market |\n"
+                  )
+                  output.write("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+                  policy_names = walk_forward["protocol"]["label_policies"]
+                  strategy_names = [
+                      "buy-and-hold-reference",
+                      "sma-crossover-long-flat",
+                      *walk_forward["protocol"]["models"],
+                  ]
+                  for policy_name in policy_names:
+                      for strategy_name in strategy_names:
+                          metric_rows = []
+                          for fold in walk_forward["folds"]:
+                              policy_report = fold["label_policies"][policy_name]
+                              if strategy_name in {
+                                  "buy-and-hold-reference",
+                                  "sma-crossover-long-flat",
+                              }:
+                                  backtest_item = policy_report["baseline_backtests"].get(
+                                      strategy_name
+                                  )
+                              else:
+                                  backtest_item = policy_report["backtests"].get(
+                                      strategy_name
+                                  )
+                              if isinstance(backtest_item, dict) and isinstance(
+                                  backtest_item.get("metrics"), dict
+                              ):
+                                  metric_rows.append(backtest_item["metrics"])
+                          if metric_rows:
+                              mean = lambda key: sum(
+                                  float(row[key]) for row in metric_rows
+                              ) / len(metric_rows)
+                              total = lambda key: sum(
+                                  float(row[key]) for row in metric_rows
+                              )
+                              output.write(
+                                  f"| {policy_name} | {strategy_name} | {len(metric_rows)}/"
+                                  f"{walk_forward['protocol']['fold_count']} | "
+                                  f"{mean('net_return_fraction') * 100:.4f}% | "
+                                  f"{mean('max_drawdown_fraction') * 100:.4f}% | "
+                                  f"{total('closed_trade_count'):.0f} | "
+                                  f"{total('gross_turnover'):.2f} | "
+                                  f"{mean('turnover_multiple'):.4f} | "
+                                  f"{total('commission_paid'):.4f} | "
+                                  f"{total('estimated_spread_cost'):.4f} | "
+                                  f"{total('estimated_slippage_cost'):.4f} | "
+                                  f"{mean('time_in_market_fraction') * 100:.2f}% |\n"
+                              )
+                          else:
+                              output.write(
+                                  f"| {policy_name} | {strategy_name} | 0/"
+                                  f"{walk_forward['protocol']['fold_count']} | n/a | n/a | "
+                                  "0 | n/a | n/a | n/a | n/a | n/a | n/a |\n"
+                              )
+                  output.write("\nFold rows remain separately recorded in the JSON report; no best-fold is selected.\n\n")
+              else:
+                  output.write("**Walk-forward outcome:** report not produced; inspect walk-forward-run.log.\n\n")
+              output.write("\\n**Disposition:** research only; not approved for Live trading.\\n")
               output.write("Spread/slippage are assumptions. Data-use rights and volume-unit semantics remain unreviewed.\n")
           PY
 
@@ -129,9 +272,12 @@ jobs:
             python-version.log
             pip-install.log
             package-install.log
+            torch-dependencies.log
+            torch-install.log
             pip-audit-install.log
             pip-audit.log
             pytest.log
             research-run.log
+            walk-forward-run.log
           if-no-files-found: warn
           retention-days: 90

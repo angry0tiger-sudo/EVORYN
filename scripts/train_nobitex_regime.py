@@ -90,7 +90,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dataset_id=f"nobitex-{market.symbol.lower()}-{args.resolution}m",
         market=market,
         interval=timedelta(seconds=interval_seconds),
-        volume_unit="base_asset",
+        volume_unit="unknown",
         source_name="nobitex-public-ohlcv",
         source_uri=request_uri,
         source_revision=f"udf-history:{args.symbol}:{args.resolution}:{from_unix}:{to_unix}",
