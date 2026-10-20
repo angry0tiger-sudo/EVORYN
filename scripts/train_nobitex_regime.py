@@ -32,8 +32,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="60",
         help="UDF candle resolution; default is 1 hour.",
     )
-    parser.add_argument("--lookback-days", type=int, default=180)
-    parser.add_argument("--max-pages", type=int, default=24)
+    parser.add_argument("--lookback-days", type=int, default=365)
+    parser.add_argument("--max-pages", type=int, default=40)
     parser.add_argument("--output", type=Path, default=Path("artifacts/nobitex-regime"))
     return parser.parse_args(argv)
 
@@ -43,8 +43,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     now = datetime.now(UTC)
     if not args.symbol.endswith("USDT") or len(args.symbol) <= 4:
         raise SystemExit("--symbol must be a compact USDT-quoted Nobitex market, e.g. BTCUSDT.")
-    if not 30 <= args.lookback_days <= 365:
-        raise SystemExit("--lookback-days must be in [30, 365].")
+    if not 30 <= args.lookback_days <= 730:
+        raise SystemExit("--lookback-days must be in [30, 730].")
+    if type(args.max_pages) is not int or not 1 <= args.max_pages <= 40:
+        raise SystemExit("--max-pages must be in [1, 40].")
     interval_seconds = {
         "1": 60,
         "5": 300,
