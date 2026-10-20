@@ -195,7 +195,7 @@ class PaperRuntimeLocks:
             ) from release_error
 
     def _acquire_windows_mutex(self) -> None:
-        win_dll = ctypes.WinDLL
+        win_dll = getattr(ctypes, "WinDLL")  # noqa: B009
         kernel32 = win_dll("kernel32", use_last_error=True)
         create_mutex = kernel32.CreateMutexW
         create_mutex.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
