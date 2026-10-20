@@ -100,6 +100,7 @@ jobs:
           path: |
             artifacts/nobitex-regime/training-report.json
             artifacts/nobitex-regime/training-report.json.sha256
+            artifacts/nobitex-regime/datasets/
             artifacts/nobitex-regime/advanced-meta-label/
             python-version.log
             pip-install.log
@@ -114,3 +115,4 @@ jobs:
             advanced-meta-label-run.log
           if-no-files-found: warn
           retention-days: 90
+          # Dataset candles, manifest, and model evidence must be archived together.
