@@ -34,10 +34,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-      - name: Run Windows cross-process Paper lock tests
+      - name: Parse Windows Task Scheduler PowerShell helper
         shell: pwsh
         run: |
-          python -m pytest -q tests/unit/test_paper_runtime_locks.py
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $env:GITHUB_WORKSPACE "scripts/windows_paper_task.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Run Windows Paper lock and Task Scheduler lifecycle tests
+        shell: pwsh
+        run: |
+          python -m pytest -q tests/unit/test_paper_runtime_locks.py tests/unit/test_windows_paper_task.py
 
   runner-preflight:
     name: Runner and dependency preflight
