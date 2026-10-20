@@ -170,6 +170,7 @@ No open item may be closed by inference. This ledger does not authorize live tra
   `forward_thresholds`, despite classification outputs for that policy. It is not sufficient to claim
   economic acceptance across both label policies. Its exact source commit was not independently
   linked to the artifact metadata in this audit.
+- [x] **Audit report published.** See [six-model artifact audit](docs/research/2026-10-20-six-model-artifact-audit.md) for recomputed classification/economic summaries, digest discrepancy, and the missing forward-policy backtests.
 - [ ] **Fresh schema-v3 exact-head research run.** Validate both-policy backtest coverage, all six models,
   model artifact reloads, per-policy candidate gates, report checksum, and ZIP checksum on the new PR head.
   Do not reuse the schema-v2 artifact as evidence for the newer source.
