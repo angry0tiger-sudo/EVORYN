@@ -3,6 +3,14 @@
 **Status:** implementation candidate on feat/ai-advanced-optimization; empirical result pending.  
 **Runtime disposition:** selected_model_for_runtime = null; no Champion or Runtime promotion.
 
+## Latest exact-head execution checkpoint — 2026-10-21
+
+- Code SHA: `4343d637f2bfd6536566a8b2d23a395f37bca433`. Exact-head PR CI [Run #39493555023](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39493555023) passed all seven required jobs.
+- Advanced research workflow [Run #39493546367](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39493546367) was attempted twice on that exact SHA. Both attempts passed the research pre-network gates (Ruff, mypy, Bandit, pytest: 417 passed and 2 skipped, and pip-audit reporting no known vulnerabilities) but failed in the public-history fetch step with `Historical UDF GET failed with URLError`. The model evaluation step was skipped.
+- Attempt 1 artifact #12296199968 has ZIP SHA-256 `412e734e3301e6947ee43a66c6bf3bdec78f6ce9cfe7f3ff1e99739243a7d875`; attempt 2 artifact #12296999003 has ZIP SHA-256 `960cb4831ba5bd1c3029bd1cc2e8b975fe40c79a9785a5780a717cc0a9c7a751`. Both were inspected and contain diagnostics only, with no dataset, manifest, training report, advanced report or model files.
+- The exception wrapper does not preserve the underlying `URLError` reason. The available evidence does not distinguish DNS, TLS, timeout, or another transport cause. No current-code AP, trade, net-return or baseline comparison exists. The older first-run result remains a rejected historical result for its own SHA and is not evidence for this threshold revision.
+- Disposition: **empirical qualification pending; no Champion; no Runtime promotion; no live trading.** Do not infer model quality from a run that never reached model evaluation.
+
 ## Objective
 
 Improve prior weak Nobitex Spot BTC-USDT regime/challenger research without changing live execution boundaries. Research uses public hourly OHLC history through the fixed unauthenticated GET-only UDF route. It does not use account endpoints, API secrets, order routes, or exchange writes. A successful code check is not evidence of a profitable strategy.
