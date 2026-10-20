@@ -328,11 +328,16 @@ def select_features_train_only(
         or target.ndim != 1 or len(set(int(value) for value in target)) < 2
         or not numpy.isfinite(matrix).all()
     ):
-        raise ValueError("Feature selection requires aligned, finite training data with >=2 classes.")
+        raise ValueError(
+            "Feature selection requires aligned, finite training data with >=2 classes."
+        )
     scores = selection.mutual_info_classif(
         matrix, target, discrete_features=False, random_state=random_seed
     )
-    ranked_indices = sorted(range(len(feature_names)), key=lambda index: (-float(scores[index]), index))
+    ranked_indices = sorted(
+        range(len(feature_names)),
+        key=lambda index: (-float(scores[index]), index),
+    )
     return tuple(feature_names[index] for index in ranked_indices[:top_k])
 
 
@@ -431,8 +436,10 @@ def tune_meta_labeler(
     numpy = importlib.import_module("numpy")
     optuna = importlib.import_module("optuna")
     metrics = importlib.import_module("sklearn.metrics")
-    train_x, train_y = numpy.asarray(x_train, dtype="float64"), numpy.asarray(y_train, dtype="int64")
-    valid_x, valid_y = numpy.asarray(x_validation, dtype="float64"), numpy.asarray(y_validation, dtype="int64")
+    train_x = numpy.asarray(x_train, dtype="float64")
+    train_y = numpy.asarray(y_train, dtype="int64")
+    valid_x = numpy.asarray(x_validation, dtype="float64")
+    valid_y = numpy.asarray(y_validation, dtype="int64")
     if (
         train_x.ndim != 2 or valid_x.ndim != 2 or train_x.shape[1] == 0
         or train_x.shape[1] != valid_x.shape[1] or len(train_x) != len(train_y)
@@ -441,7 +448,9 @@ def tune_meta_labeler(
         or set(int(value) for value in valid_y) != {0, 1}
         or not numpy.isfinite(train_x).all() or not numpy.isfinite(valid_x).all()
     ):
-        raise ValueError("Tuning requires finite, aligned train/validation matrices with both labels.")
+        raise ValueError(
+            "Tuning requires finite, aligned train/validation matrices with both labels."
+        )
 
     def objective(trial: Any) -> float:
         if model_name == "xgboost":
@@ -468,7 +477,11 @@ def tune_meta_labeler(
                 "reg_alpha": trial.suggest_float("reg_alpha", 1e-5, 10.0, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-5, 20.0, log=True),
             }
-        model = make_meta_label_classifier(model_name, params, random_seed=random_seed + trial.number)
+        model = make_meta_label_classifier(
+            model_name,
+            params,
+            random_seed=random_seed + trial.number,
+        )
         model.fit(train_x, train_y)
         probability = model.predict_proba(valid_x)[:, 1]
         score = float(metrics.average_precision_score(valid_y, probability))
