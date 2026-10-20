@@ -124,13 +124,26 @@ No open item may be closed by inference. This ledger does not authorize live tra
 
 ### Verified starting point — 2026-10-20
 
-- [x] **PR #30 merged.** Squash merge commit db68a4c943a6300bf1be5718e03c99bc321a71dc; post-merge six-gate CI passed on that exact SHA in [Run #39369887248](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39369887248).
-- [ ] **Volume ambiguity represented explicitly in the research candidate; exact-head CI is pending.** Official Nobitex UDF history documentation calls v trade volume but does not specify base-asset versus quote-asset units. Research stores volume_unit=unknown; the new model input schema defaults to price-only, sets the volume-ratio slot to zero, and rejects unknown-unit volume features. Backtests disable volume-based participation caps when unit semantics are unknown and record zero for the unknown liquidity-reference volume; these simulations are liquidity-unconstrained, not executable-capacity evidence.
-- [x] **Current predictive model is not accepted.** The previous Random Forest scored 33.92% accuracy versus 58.51% from the train-only majority baseline. It stays research-only and is not installed as Paper/Live default.
-- [x] **Windows Task Scheduler design documented.** See docs/operations/windows-paper-scheduler-design.md. No task was registered, no installer was run and no owner Windows host was accessed.
-- [ ] **Walk-forward result pending.** Run the new anonymous public-data workflow on this branch and wait for all fold reports/artifact checksums to be published on the exact source/test SHA. Do not mark done if a fold lacks the required class support or the research job fails.
-- [ ] **Volume semantics/provider confirmation remains open.** Keep volume features and volume capacity limits disabled for UDF history until source semantics are independently confirmed.
-- [ ] **Historical data rights remain unreviewed.** Nobitex data retention/commercial-use rights need independent confirmation before stronger claims.
-- [ ] **Model acceptance remains open.** Require repeated walk-forward stability across all reported folds, calibrated probability metrics, meaningful baselines, sufficient trade/exposure support and independent model-risk review before any model promotion.
-- [ ] **Windows task implementation remains open.** Do not register a scheduled task until the composition root, verified feed, trusted model pins, single-instance locking, durable journal/reconciliation, failure recovery and independent security/risk review are accepted.
-- [ ] **Production integration remains open.** Provider-backed account/portfolio, live fills/order reconciliation, durable production audit sink, OS-level supervision, fault drills, local Windows 11 acceptance and the Live release gate are not established by CI or research artifacts.
+- [x] **PR #30 merged.** Squash merge commit `db68a4c943a6300bf1be5718e03c99bc321a71dc`; post-merge six-gate CI passed on that exact SHA in [Run #39369939519](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39369939519).
+- [x] **Volume ambiguity is represented, not guessed.** The public UDF contract does not certify whether `v` is base-asset or quote-asset volume. The dataset uses `volume_unit="unknown"`; research excludes it and disables volume participation caps unless base units are verified.
+- [x] **Original Random Forest remains rejected.** Its final holdout accuracy was 33.92% versus 58.51% for the train-only majority baseline. The cost-adjusted holdout backtest did not establish a profitable edge.
+- [x] **Challenger stack and design gates recorded.** ADR 0018 documents Random Forest, HistGradientBoosting, XGBoost, forward-filtered Gaussian HMM and compact CPU LSTM; ADR 0019 records Windows Task Scheduler requirements.
+- [ ] **Provider semantics and data rights.** Keep Nobitex UDF volume unknown. Historical data retention/commercial-use terms remain unreviewed.
+- [ ] **Windows unattended execution.** No owner Windows host was accessed, no task was registered, no OS-level mutex was implemented or tested, and no native Windows acceptance exists.
+- [ ] **Production runtime model integration.** Research schema v3 is not accepted by the current production loader. No challenger is connected or promoted.
+- [ ] **Independent model-risk review.** Required even if a future challenger passes empirical gates.
+
+
+
+## Phase 26 — Challenger exact-head evidence (2026-10-20)
+
+- [x] **Six standard CI gates passed on exact SHA** `c08096a8ff8c28d78a9879977cc5c30fde2d5f77`: [Run #39397941134](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941134). ML-enabled suite: 391 passed in 15.26s; dependency audit: no known vulnerabilities in the installed environment.
+- [x] **Exact-head research completed** on that same SHA: [Run #39397941187](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187), [artifact #12252633238](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187/artifacts/12252633238), ZIP SHA-256 `5d411b9ef13a0e31b5a602e4d03cbd570c0eada8530bcbc9137a552166724d8e`. Walk-forward report SHA-256 `5900b1c3465ad23b90bce58fcfbe020fbc6b4b8ce295b9d505bf3b0bdb1785a7`.
+- [x] **Walk-forward report defect corrected and ZIP audited.** Ten folds are present, each containing both label policies, five model families and fold-level validation/test/backtest metrics.
+- [x] **Dataset verified:** 4,319 gap-free hourly BTC-USDT candles, version `275bdf9bb7c5049e24b1a7e17944ec3a09db7e831465da56038fdf8daa766420`; candle SHA-256 `b68b69b0f5dfffbf0e373d97725923a7ba45612dd410b6da93810907ca5c958f`; manifest SHA-256 `ce4bfbf7a78a975e1f0148215e565e781af7772e4d3c942aa1ac4c245a64ec5b`.
+- [x] **No model passed the combined gate.** Majority Accuracy averaged 63.445%; all five Triple-Barrier mean accuracies were lower. Macro-F1 improved for several candidates, but Accuracy confidence intervals remained negative and return-difference intervals versus Buy-and-Hold spanned zero with negative lower bounds. Report fields: `selected_model_for_runtime=null`, `runtime_promotion_allowed=false`.
+- [ ] **Fresh confirmation and independent model-risk review** before any possible future promotion.
+- [ ] **Volume semantics and data-use rights** remain unresolved; UDF volume stays unknown and unused, and capacity caps remain disabled.
+- [ ] **Windows unattended Paper runtime** remains open. No OS task was registered, no OS-level mutex/launcher was implemented or tested, and no native Windows host was accessed. ADR 0019 is design-only.
+- [ ] **Runtime schema integration** remains open. Research schema v3 does not match the production loader contract; no challenger is connected.
+- Full metric tables, confidence intervals, portfolio outcomes and digests: [`docs/research/2026-10-20-regime-challenger-walk-forward.md`](docs/research/2026-10-20-regime-challenger-walk-forward.md).
