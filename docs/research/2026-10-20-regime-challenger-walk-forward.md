@@ -29,7 +29,7 @@ UDF volume units remain **unknown**. Volume is excluded from features and volume
 
 ## Out-of-sample classification means
 
-Means over ten test folds. Targets are weak future-outcome labels, not verified economic truth. Train-only majority Accuracy averaged **63.445%** (per-fold range 48.80%–75.12%).
+Means over ten test folds. Targets are weak future-outcome labels, not verified economic truth. Train-only majority Accuracy averaged **63.062%** for forward-threshold labels (fold range **41.63%–88.52%**) and **63.445%** for Triple-Barrier labels (fold range **48.80%–75.12%**).
 
 ### Forward-threshold labels
 
