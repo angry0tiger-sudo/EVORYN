@@ -13,7 +13,7 @@ import importlib
 import json
 import math
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -40,7 +40,6 @@ from evoryn.intelligence.regime_training import (
     BuyAndHoldStrategy,
     _classification_metrics,
     _fit_temperature,
-    _temperature_scale,
     assign_forward_regime,
     forward_outcome,
     linear_quantile,
@@ -534,7 +533,9 @@ def run_walk_forward_research(
                         n_jobs=1,
                         random_state=options.random_seed + fold.fold_index,
                     )
-                    class_index_by_value = {label.value: index for index, label in enumerate(_LABELS)}
+                    class_index_by_value = {
+                        label.value: index for index, label in enumerate(_LABELS)
+                    }
                     y_train_encoded = numpy.asarray(
                         [class_index_by_value[value] for value in y_train_labels], dtype="int64"
                     )
@@ -559,9 +560,12 @@ def run_walk_forward_research(
                         },
                     }
                 elif model_name == "lstm":
-                    label_index = {label.value: index for index, label in enumerate(_LABELS)}
+                    class_index_by_value = {
+                        label.value: index for index, label in enumerate(_LABELS)
+                    }
                     y_train_encoded = numpy.asarray(
-                        [label_index[value] for value in y_train_labels], dtype="int64"
+                        [class_index_by_value[value] for value in y_train_labels],
+                        dtype="int64"
                     )
                     estimator, torch = fit_lstm(
                         train_sequences,

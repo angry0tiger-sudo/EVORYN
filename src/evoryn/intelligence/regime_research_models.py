@@ -152,7 +152,7 @@ def sequence_matrix(
 def _new_lstm(torch: Any, input_size: int, hidden_size: int = 32) -> Any:
     nn = torch.nn
 
-    class CompactRegimeLSTM(torch.nn.Module):
+    class CompactRegimeLSTM(torch.nn.Module):  # type: ignore[misc]
         def __init__(self) -> None:
             super().__init__()
             self.recurrent = nn.LSTM(
