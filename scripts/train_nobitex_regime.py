@@ -34,6 +34,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--lookback-days", type=int, default=365)
     parser.add_argument("--max-pages", type=int, default=40)
+    parser.add_argument(
+        "--fetch-only",
+        action="store_true",
+        help="Persist and verify public history without fitting the legacy regime model.",
+    )
     parser.add_argument("--output", type=Path, default=Path("artifacts/nobitex-regime"))
     return parser.parse_args(argv)
 
@@ -118,6 +123,56 @@ def main(argv: Sequence[str] | None = None) -> int:
         or stored_manifest_sha256 != dataset_reference.manifest_sha256
     ):
         raise RuntimeError("Persisted historical dataset failed post-write verification.")
+    if args.fetch_only:
+        dataset_directory = Path(dataset_reference.path)
+        dataset_store_metadata = {
+            "dataset_id": dataset_reference.dataset_id,
+            "dataset_version": dataset_reference.version,
+            "candle_count": dataset_reference.candle_count,
+            "candles_sha256": dataset_reference.candles_sha256,
+            "manifest_sha256": dataset_reference.manifest_sha256,
+            "manifest_path": str((dataset_directory / "manifest.json").relative_to(output)),
+            "csv_path": str((dataset_directory / "candles.csv").relative_to(output)),
+        }
+        download_metadata = {
+            "public_endpoint": NOBITEX_HISTORY_URI,
+            "authenticated": False,
+            "http_method": "GET",
+            "route_scope": "/market/udf/history",
+            "pages_fetched": client.pages_fetched,
+            "configured_page_limit": args.max_pages,
+            "configured_lookback_days": args.lookback_days,
+        }
+        report = {
+            "schema_version": 1,
+            "dataset": {
+                **dataset.metadata(),
+                "dataset_manifest_status": "content_addressed_and_verified",
+            },
+            "dataset_store": dataset_store_metadata,
+            "download": download_metadata,
+            "training_executed": False,
+            "release_disposition": "RESEARCH_ONLY_NOT_APPROVED_FOR_LIVE_TRADING",
+        }
+        report_path = output / "training-report.json"
+        report_bytes = json.dumps(
+            report, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        ).encode("utf-8")
+        report_path.write_bytes(report_bytes + bytes([10]))
+        (output / "training-report.json.sha256").write_text(
+            hashlib.sha256(report_path.read_bytes()).hexdigest() + chr(10),
+            encoding="ascii",
+        )
+        print(f"DATASET_VERSION={dataset.version}")
+        print(f"CANDLE_COUNT={len(dataset.candles)}")
+        print(f"PAGES_FETCHED={client.pages_fetched}")
+        print(f"FIRST_CANDLE={dataset.candles[0].timestamp.isoformat()}")
+        print(f"LAST_CANDLE={dataset.candles[-1].timestamp.isoformat()}")
+        print(f"DATASET_SHA256={dataset_reference.candles_sha256}")
+        print("TRAINING_EXECUTED=false")
+        print("RELEASE_DISPOSITION=RESEARCH_ONLY_NOT_APPROVED_FOR_LIVE_TRADING")
+        return 0
+
     report = train_regime_model(
         dataset,
         artifact_dir=output,
