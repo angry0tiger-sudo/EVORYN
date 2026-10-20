@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import copy
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.regime import RegimeLabel
 from evoryn.intelligence.regime_walk_forward import (
+    _build_candidate_gates_by_policy,
     filtered_gaussian_hmm_probabilities,
     volatility_scaled_triple_barrier_label,
 )
@@ -297,3 +300,96 @@ def test_lightgbm_fixed_class_order_probabilities_and_serialization(tmp_path: Pa
     assert numpy.allclose(
         probabilities, restored["estimator"].predict_proba(features[:8]), atol=1e-12
     )
+
+
+
+def test_candidate_gates_cover_every_model_policy_and_fail_closed_on_missing_backtest() -> None:
+    pytest.importorskip("numpy")
+    policies = (
+        "forward_thresholds",
+        "volatility_scaled_triple_barrier",
+    )
+    models = (
+        "random_forest",
+        "hist_gradient_boosting",
+        "xgboost",
+        "lightgbm",
+        "gaussian_hmm",
+        "lstm",
+    )
+    fold_reports: list[dict[str, Any]] = []
+    for fold_index in range(10):
+        baselines = {
+            "buy-and-hold-reference": {
+                "metrics": {"net_return_fraction": 0.0},
+            },
+            "sma-crossover-long-flat": {
+                "metrics": {"net_return_fraction": 0.0},
+            },
+        }
+        policy_reports: dict[str, Any] = {}
+        for policy in policies:
+            model_reports: dict[str, Any] = {}
+            backtests: dict[str, Any] = {}
+            for model in models:
+                model_reports[model] = {
+                    "status": "EVALUATED",
+                    "test_metrics": {
+                        "accuracy": 0.80,
+                        "balanced_accuracy": 0.75,
+                        "macro_f1": 0.70,
+                    },
+                    "training_only_majority_baseline": {
+                        "accuracy": 0.60,
+                        "balanced_accuracy": 0.25,
+                        "macro_f1": 0.20,
+                    },
+                }
+                backtests[model] = {
+                    "metrics": {
+                        "net_return_fraction": 0.02,
+                        "closed_trade_count": 3,
+                    },
+                }
+            policy_reports[policy] = {
+                "models": model_reports,
+                "backtests": backtests,
+                "baseline_backtests": baselines,
+            }
+        fold_reports.append(
+            {
+                "fold_index": fold_index,
+                "label_policies": policy_reports,
+                "same_fold_baseline_backtests": baselines,
+            }
+        )
+
+    gates = _build_candidate_gates_by_policy(
+        fold_reports,
+        expected_fold_count=10,
+        random_seed=41,
+    )
+    assert set(gates) == set(policies)
+    for policy in policies:
+        assert set(gates[policy]) == set(models)
+        for model in models:
+            gate = gates[policy][model]
+            assert gate["status"] == "EVALUATED"
+            assert gate["evaluated_folds"] == 10
+            assert gate["classification_gate_passed"] is True
+            assert gate["economic_gate_passed"] is True
+            assert gate["empirical_candidate_gate_passed"] is True
+            assert gate["runtime_promotion_allowed"] is False
+
+    incomplete = copy.deepcopy(fold_reports)
+    del incomplete[0]["label_policies"]["forward_thresholds"]["backtests"]["lightgbm"]
+    incomplete_gates = _build_candidate_gates_by_policy(
+        incomplete,
+        expected_fold_count=10,
+        random_seed=41,
+    )
+    lightgbm_gate = incomplete_gates["forward_thresholds"]["lightgbm"]
+    assert lightgbm_gate["status"] == "INCOMPLETE_FOLD_COVERAGE"
+    assert lightgbm_gate["evaluated_folds"] == 9
+    assert lightgbm_gate["all_folds_gate_passed"] is False
+    assert lightgbm_gate["empirical_candidate_gate_passed"] is False

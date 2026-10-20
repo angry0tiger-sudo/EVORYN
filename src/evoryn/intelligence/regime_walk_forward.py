@@ -1,9 +1,8 @@
 """Purged rolling walk-forward research for price-only regime models.
 
-Compares two weak-label policies and three model families: Random Forest,
-HistGradientBoosting, and a filtered Gaussian Hidden Markov Model. Every fit, scaler,
-label threshold, state-to-label map, and probability temperature is trained within a
-fold's past; final fold-test observations are never used for tuning. Outputs are advisory.
+Compares six model families under two weak-label policies. Every fit, scaler, label
+threshold, state-to-label map, and probability temperature is trained within a fold's
+past; final fold-test observations are never used for tuning. Outputs are advisory.
 """
 
 from __future__ import annotations
@@ -120,6 +119,120 @@ class WalkForwardResearchConfig:
             raise ValueError("random_seed must be a non-negative integer.")
         if not math.isfinite(self.confidence_threshold) or not 0.5 <= self.confidence_threshold < 1:
             raise ValueError("confidence_threshold must be finite and in [0.5, 1).")
+
+
+def _build_candidate_gates_by_policy(
+    fold_reports: Sequence[dict[str, Any]],
+    *,
+    expected_fold_count: int,
+    random_seed: int,
+) -> dict[str, dict[str, Any]]:
+    """Evaluate every model/policy pair using paired-fold classification and economic gates."""
+    candidate_gates_by_policy: dict[str, dict[str, Any]] = {
+        policy: {} for policy in _POLICIES
+    }
+    for policy_index, policy in enumerate(_POLICIES):
+        policy_gates = candidate_gates_by_policy[policy]
+        for model_index, model_name in enumerate(_MODELS):
+            accuracy_differences: list[float] = []
+            balanced_differences: list[float] = []
+            f1_differences: list[float] = []
+            return_differences: list[float] = []
+            trade_count = 0
+            evaluated_folds = 0
+            for fold_report in fold_reports:
+                policy_report = fold_report["label_policies"][policy]
+                model_report = policy_report["models"].get(model_name)
+                model_backtest = policy_report["backtests"].get(model_name)
+                if (
+                    not isinstance(model_report, dict)
+                    or model_report.get("status") != "EVALUATED"
+                    or not isinstance(model_backtest, dict)
+                ):
+                    continue
+                metrics = model_report["test_metrics"]
+                majority = model_report["training_only_majority_baseline"]
+                accuracy_differences.append(
+                    float(metrics["accuracy"]) - float(majority["accuracy"])
+                )
+                balanced_differences.append(
+                    float(metrics["balanced_accuracy"])
+                    - float(majority["balanced_accuracy"])
+                )
+                f1_differences.append(float(metrics["macro_f1"]) - float(majority["macro_f1"]))
+                model_return = float(model_backtest["metrics"]["net_return_fraction"])
+                baseline_backtests = policy_report.get(
+                    "baseline_backtests", fold_report["same_fold_baseline_backtests"]
+                )
+                hold_return = float(
+                    baseline_backtests["buy-and-hold-reference"]["metrics"][
+                        "net_return_fraction"
+                    ]
+                )
+                return_differences.append(model_return - hold_return)
+                trade_count += int(model_backtest["metrics"]["closed_trade_count"])
+                evaluated_folds += 1
+            if not evaluated_folds:
+                policy_gates[model_name] = {
+                    "status": "NOT_EVALUATED",
+                    "label_policy": policy,
+                    "evaluated_folds": 0,
+                    "closed_trades_total": 0,
+                    "runtime_promotion_allowed": False,
+                }
+                continue
+            seed_offset = random_seed + policy_index * 1000 + model_index * 10
+            acc_ci = bootstrap_mean_interval(
+                accuracy_differences, random_seed=seed_offset + 101
+            )
+            balanced_ci = bootstrap_mean_interval(
+                balanced_differences, random_seed=seed_offset + 102
+            )
+            f1_ci = bootstrap_mean_interval(
+                f1_differences, random_seed=seed_offset + 103
+            )
+            return_ci = bootstrap_mean_interval(
+                return_differences, random_seed=seed_offset + 104
+            )
+            classification_gate = (
+                acc_ci["ci95_lower"] > 0
+                and balanced_ci["ci95_lower"] > 0
+                and f1_ci["ci95_lower"] > 0
+            )
+            economic_gate = return_ci["ci95_lower"] > 0 and trade_count >= 20
+            all_folds_gate = (
+                evaluated_folds == expected_fold_count
+                and len(fold_reports) == expected_fold_count
+                and expected_fold_count >= 10
+            )
+            policy_gates[model_name] = {
+                "status": "EVALUATED" if all_folds_gate else "INCOMPLETE_FOLD_COVERAGE",
+                "label_policy": policy,
+                "evaluated_folds": evaluated_folds,
+                "closed_trades_total": trade_count,
+                "accuracy_difference_vs_majority": acc_ci,
+                "balanced_accuracy_difference_vs_majority": balanced_ci,
+                "macro_f1_difference_vs_majority": f1_ci,
+                "net_return_difference_vs_buy_and_hold": return_ci,
+                "classification_gate_passed": classification_gate,
+                "economic_gate_passed": economic_gate,
+                "all_folds_gate_passed": all_folds_gate,
+                "empirical_candidate_gate_passed": (
+                    classification_gate and economic_gate and all_folds_gate
+                ),
+                "runtime_promotion_allowed": False,
+                "runtime_promotion_blockers": [
+                    "Model selection was performed on these same walk-forward windows; an untouched "
+                    "confirmation period is required.",
+                    "The terminal reservation is scoped to this walk-forward run; verify prior "
+                    "experiment/test ranges before calling any period project-level untouched.",
+                    "The new research feature schema has no independently pinned runtime artifact "
+                    "loader or production-approved manifest.",
+                    "UDF volume semantics and provider data-use rights remain unresolved.",
+                    "Windows Task Scheduler registration and native-host acceptance remain open.",
+                ],
+            }
+    return candidate_gates_by_policy
 
 
 def volatility_scaled_triple_barrier_label(
@@ -793,37 +906,35 @@ def run_walk_forward_research(
                         "majority_macro_f1": majority_metrics["macro_f1"],
                     }
                 )
-                if policy == "volatility_scaled_triple_barrier":
-                    fitted_for_backtest[model_name] = {
-                        "wrapper": wrapper,
-                        "artifact_sha256": artifact_sha,
-                    }
+                fitted_for_backtest[model_name] = {
+                    "wrapper": wrapper,
+                    "artifact_sha256": artifact_sha,
+                }
 
-            if policy == "volatility_scaled_triple_barrier":
-                for model_name, item in fitted_for_backtest.items():
-                    result = run_backtest(
-                        dataset,
-                        LongFlatResearchStrategy(
-                            item["wrapper"], options.confidence_threshold
+            for model_name, item in fitted_for_backtest.items():
+                result = run_backtest(
+                    dataset,
+                    LongFlatResearchStrategy(
+                        item["wrapper"], options.confidence_threshold
+                    ),
+                    backtest_config,
+                    start_index=fold.test.start,
+                    end_index=fold.test.end,
+                    warmup_start_index=0,
+                    segment_name=f"walk-forward-fold-{fold.fold_index}-{policy}",
+                )
+                path = backtest_store.save(result)
+                policy_report["backtests"][model_name] = {
+                    "run_id": result.run_id,
+                    "report_path": str(path.relative_to(output)),
+                    "model_artifact_sha256": item["artifact_sha256"],
+                    "metrics": _backtest_metrics(
+                        result.metrics,
+                        volume_capacity_constraint_enabled=(
+                            backtest_config.enforce_volume_participation
                         ),
-                        backtest_config,
-                        start_index=fold.test.start,
-                        end_index=fold.test.end,
-                        warmup_start_index=0,
-                        segment_name=f"walk-forward-fold-{fold.fold_index}",
-                    )
-                    path = backtest_store.save(result)
-                    policy_report["backtests"][model_name] = {
-                        "run_id": result.run_id,
-                        "report_path": str(path.relative_to(output)),
-                        "model_artifact_sha256": item["artifact_sha256"],
-                        "metrics": _backtest_metrics(
-                            result.metrics,
-                            volume_capacity_constraint_enabled=(
-                                backtest_config.enforce_volume_participation
-                            ),
-                        ),
-                    }
+                    ),
+                }
             fold_policy_reports[policy] = policy_report
             if policy == "volatility_scaled_triple_barrier":
                 fold_backtests = policy_report["backtests"]
@@ -859,6 +970,8 @@ def run_walk_forward_research(
                     ),
                 ),
             }
+        for policy_report in fold_policy_reports.values():
+            policy_report["baseline_backtests"] = baselines
         fold_reports.append(
             {
                 "fold_index": fold.fold_index,
@@ -922,97 +1035,19 @@ def run_walk_forward_research(
                     differences, random_seed=options.random_seed + len(key)
                 )
 
-    candidate_gates: dict[str, Any] = {}
+    candidate_gates_by_policy = _build_candidate_gates_by_policy(
+        fold_reports,
+        expected_fold_count=len(folds),
+        random_seed=options.random_seed,
+    )
     triple_policy = "volatility_scaled_triple_barrier"
-    for model_name in _MODELS:
-        accuracy_differences: list[float] = []
-        balanced_differences: list[float] = []
-        f1_differences: list[float] = []
-        return_differences: list[float] = []
-        trade_count = 0
-        evaluated_folds = 0
-        for fold_report in fold_reports:
-            model_report = (
-                fold_report["label_policies"][triple_policy]["models"].get(model_name)
-            )
-            model_backtest = fold_report["triple_barrier_holdout_backtests"].get(model_name)
-            if (
-                not isinstance(model_report, dict)
-                or model_report.get("status") != "EVALUATED"
-                or not isinstance(model_backtest, dict)
-            ):
-                continue
-            metrics = model_report["test_metrics"]
-            majority = model_report["training_only_majority_baseline"]
-            accuracy_differences.append(
-                float(metrics["accuracy"]) - float(majority["accuracy"])
-            )
-            balanced_differences.append(
-                float(metrics["balanced_accuracy"])
-                - float(majority["balanced_accuracy"])
-            )
-            f1_differences.append(float(metrics["macro_f1"]) - float(majority["macro_f1"]))
-            model_return = float(model_backtest["metrics"]["net_return_fraction"])
-            hold_return = float(
-                fold_report["same_fold_baseline_backtests"]["buy-and-hold-reference"][
-                    "metrics"
-                ]["net_return_fraction"]
-            )
-            return_differences.append(model_return - hold_return)
-            trade_count += int(model_backtest["metrics"]["closed_trade_count"])
-            evaluated_folds += 1
-        if not evaluated_folds:
-            candidate_gates[model_name] = {
-                "status": "NOT_EVALUATED",
-                "evaluated_folds": 0,
-                "runtime_promotion_allowed": False,
-            }
-            continue
-        acc_ci = bootstrap_mean_interval(
-            accuracy_differences, random_seed=options.random_seed + 101
-        )
-        balanced_ci = bootstrap_mean_interval(
-            balanced_differences, random_seed=options.random_seed + 102
-        )
-        f1_ci = bootstrap_mean_interval(f1_differences, random_seed=options.random_seed + 103)
-        return_ci = bootstrap_mean_interval(
-            return_differences, random_seed=options.random_seed + 104
-        )
-        classification_gate = (
-            acc_ci["ci95_lower"] > 0
-            and balanced_ci["ci95_lower"] > 0
-            and f1_ci["ci95_lower"] > 0
-        )
-        economic_gate = return_ci["ci95_lower"] > 0 and trade_count >= 20
-        all_folds_gate = evaluated_folds == len(folds) and len(folds) >= 10
-        candidate_gates[model_name] = {
-            "status": "EVALUATED" if all_folds_gate else "INCOMPLETE_FOLD_COVERAGE",
-            "evaluated_folds": evaluated_folds,
-            "closed_trades_total": trade_count,
-            "accuracy_difference_vs_majority": acc_ci,
-            "balanced_accuracy_difference_vs_majority": balanced_ci,
-            "macro_f1_difference_vs_majority": f1_ci,
-            "net_return_difference_vs_buy_and_hold": return_ci,
-            "classification_gate_passed": classification_gate,
-            "economic_gate_passed": economic_gate,
-            "all_folds_gate_passed": all_folds_gate,
-            "empirical_candidate_gate_passed": (
-                classification_gate and economic_gate and all_folds_gate
-            ),
-            "runtime_promotion_allowed": False,
-            "runtime_promotion_blockers": [
-                "Model selection was performed on these same walk-forward windows; an untouched "
-                "confirmation period is required.",
-                "The new research feature schema has no independently pinned runtime artifact "
-                "loader or production-approved manifest.",
-                "UDF volume semantics and provider data-use rights remain unresolved.",
-                "Windows Task Scheduler registration and native-host acceptance remain open.",
-            ],
-        }
+    # Preserve the existing Triple-Barrier gate key for downstream readers. The complete
+    # per-policy decision matrix is available under candidate_gates_by_policy.
+    candidate_gates = candidate_gates_by_policy[triple_policy]
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "experiment_id": hashlib.sha256(
-            f"{dataset.version}|{options!r}|walk-forward-v2".encode()
+            f"{dataset.version}|{options!r}|walk-forward-v3".encode()
         ).hexdigest(),
         "dataset": {
             "dataset_id": dataset.dataset_id,
@@ -1051,10 +1086,14 @@ def run_walk_forward_research(
                     else None
                 ),
                 "used_for_features_or_model_selection": False,
+                "scope": "walk_forward_experiment_only",
+                "project_level_independence_verified": False,
+                "promotion_eligible": False,
                 "note": (
-                    "This terminal period was reserved before walk-forward execution and is "
-                    "not used for feature generation, fold construction, training, calibration, "
-                    "metrics, baselines, or candidate selection."
+                    "This range is excluded from this walk-forward experiment. That fact alone "
+                    "does not establish project-level independence from earlier experiments; "
+                    "prior training, test, and model-selection intervals must be audited before "
+                    "the range can be treated as an untouched confirmation period."
                 ),
             },
             "feature_names": list(FEATURE_NAMES),
@@ -1078,6 +1117,10 @@ def run_walk_forward_research(
                 item["hmm_converged"] for item in fold_reports
             ],
             "test_fold_tuning": False,
+            "backtest_policy_coverage": list(_POLICIES),
+            "candidate_gates_scope": "each model family under each label policy",
+            "terminal_confirmation_scope": "walk_forward_experiment_only",
+            "project_level_confirmation_independence_verified": False,
             "volume_capacity_status": (
                 "UNCONSTRAINED_UNKNOWN_VOLUME_UNIT"
                 if not backtest_config.enforce_volume_participation
@@ -1092,6 +1135,7 @@ def run_walk_forward_research(
         "folds": fold_reports,
         "per_fold_metric_summary": summaries,
         "candidate_gates": candidate_gates,
+        "candidate_gates_by_policy": candidate_gates_by_policy,
         "model_selection": {
             "selected_model_for_runtime": None,
             "reason": (
@@ -1115,6 +1159,8 @@ def run_walk_forward_research(
             "Disabling unknown-unit volume caps means backtests do not establish executable " +
             "liquidity.",
             "Historical spread/depth and provider data-use rights remain unresolved.",
+            "The terminal reservation is experiment-scoped; audit all prior test intervals before "
+            "calling it a project-level untouched confirmation period.",
             "All model choices require an untouched confirmation period and independent review.",
         ],
     }
