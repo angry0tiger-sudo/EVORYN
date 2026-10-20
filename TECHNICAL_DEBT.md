@@ -147,3 +147,35 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [ ] **Windows unattended Paper runtime** remains open. No OS task was registered, no OS-level mutex/launcher was implemented or tested, and no native Windows host was accessed. ADR 0019 is design-only.
 - [ ] **Runtime schema integration** remains open. Research schema v3 does not match the production loader contract; no challenger is connected.
 - Full metric tables, confidence intervals, portfolio outcomes and digests: [`docs/research/2026-10-20-regime-challenger-walk-forward.md`](docs/research/2026-10-20-regime-challenger-walk-forward.md).
+
+
+## Phase 27 — Six-model evidence reconciliation and Windows supervision
+
+### Six-model Artifact audit — 2026-10-20
+
+- [x] **Artifact downloaded and ZIP hash recomputed.** Artifact ID `12256082280`; actual downloaded ZIP SHA-256
+  `806cc33bcc2b80746e8fa35ae08ca3886c352166bc6287589b5fb0db20475e84`. The digest transcribed
+  from the supplied screenshot differs; preserve the computed digest for the downloaded bytes.
+- [x] **Embedded report parsed.** Walk-forward report SHA-256
+  `702bcbba8fd69ddcf334bf8c8fb1b938d65428336744d96c12202adfb4ede4b8`; schema version 2;
+  4,320 hourly BTC-USDT candles, zero gaps, dataset version
+  `8aaf2e83e1aa68d8a4ed6deae9057626f3a0556467d7bd99a6f509fc6be2e384`.
+- [x] **Fold/model coverage checked.** Eleven unique logical folds, both label policies, and all six models
+  have EVALUATED classification outputs in each fold/policy. 91 embedded `.sha256` sidecars were
+  checked against their corresponding files; no sidecar mismatch was found.
+- [x] **No Champion.** Report records `selected_model_for_runtime=null`. Triple-Barrier mean train-only
+  majority accuracy recomputes to 64.3887%; every candidate mean accuracy is lower. Mean net return
+  is +0.5551% for Buy-and-Hold, +0.1249% for SMA, and negative or effectively zero for every challenger.
+- [ ] **Historical artifact reporting gap.** The schema-v2 artifact has no model backtest entries under
+  `forward_thresholds`, despite classification outputs for that policy. It is not sufficient to claim
+  economic acceptance across both label policies. Its exact source commit was not independently
+  linked to the artifact metadata in this audit.
+- [ ] **Fresh schema-v3 exact-head research run.** Validate both-policy backtest coverage, all six models,
+  model artifact reloads, per-policy candidate gates, report checksum, and ZIP checksum on the new PR head.
+  Do not reuse the schema-v2 artifact as evidence for the newer source.
+- [ ] **Windows Task Scheduler remains a release blocker.** The repository contains process-local Paper
+  scheduling and a single-instance locking primitive, but no verified dedicated Windows Paper composition
+  root, Task Scheduler registration/unregistration implementation, or native Windows-host acceptance.
+  No task was registered and no local machine was accessed. Do not close this item based on Linux CI.
+- [ ] **No live connectivity or order activity.** All work remains GitHub-side; no local Windows action,
+  authenticated account request, exchange-write request, or real order was performed.
