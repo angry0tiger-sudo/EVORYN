@@ -19,7 +19,7 @@ Improve prior weak Nobitex Spot BTC-USDT regime/challenger research without chan
 
 ## Features and model path
 
-The versioned 27-column feature schema combines returns, realized volatility, Bollinger %B/bandwidth, ATR-normalized range, rolling-range Fibonacci distances, confirmed-swing counts/direction/amplitude and completed 4-hour/daily trend context. Features are calculated at the hourly close and are expected to be prefix-invariant.
+The versioned 27-column feature schema combines returns, realized volatility, Bollinger %B/bandwidth, ATR-normalized range, rolling-range Fibonacci distances, confirmed-swing counts/direction/amplitude and completed 4-hour/daily trend context. Features are calculated at the hourly close and are expected to be prefix-invariant. The first empirical iteration showed insufficient event support under the original 40%/10%/3.5% split and a fixed 0.55 threshold. The current iteration uses 35% train, 15% validation and 3% non-overlapping test blocks to increase validation support while retaining at least 10 expected folds on the current snapshot.
 
 select_features_train_only uses mutual-information ranking from the fold's training events only. Validation/test rows are not provided to feature selection. The primary strategy creates a long entry event when SMA(12) crosses above SMA(48); a binary meta-label indicates whether the next-open-to-six-bar-close return exceeds the declared 50 bps round-trip label-cost hurdle. Events whose outcome windows overlap are purged chronologically.
 
@@ -28,10 +28,11 @@ For each rolling fold and each of XGBoost and LightGBM:
 1. Fit feature selection only on the fold's train events.
 2. Run a seeded Optuna TPE search, bounded by the manual workflow input, to maximize average precision on chronological validation events.
 3. Refit the fixed selected features and winning hyperparameters on train plus validation after tuning.
-4. Evaluate only the later test window using the existing causal backtest, next-open fills, and explicit commission/spread/slippage assumptions.
-5. Record exact dataset version, fold ranges, selected features, Optuna parameters/trial count, model artifact SHA-256, per-fold metrics and paired baselines.
+4. Fit the final fold model on train only. Select the probability threshold on validation predictions using a fixed threshold grid and the summed after-cost event return; require at least max(3, ceil(20% of validation events)) selected events. If no candidate cutoff has positive summed validation net return, use threshold 1.01 and deliberately abstain.
+5. Evaluate only the later test window using the existing causal backtest, next-open fills, and explicit commission/spread/slippage assumptions.
+6. Record exact dataset version, fold ranges, selected features, Optuna parameters/trial count, validation-selected threshold, model artifact SHA-256, per-fold metrics and paired baselines.
 
-The primary 50 bps label threshold is fixed before test evaluation. Test observations do not set features, labels' thresholds, feature rankings, tuning parameters or probability threshold. Test-fold blocks are non-overlapping. The last 10% of the data is reserved and is not used in these folds. This reserve is not automatically declared an independently untouched project-level confirmation set.
+The primary 50 bps label threshold and threshold candidate grid are fixed before test evaluation. Both Optuna settings and the decision threshold use only the chronological validation partition; that shared development partition can still be overfit, so test blocks remain locked and the reported classification gate is pooled average precision across all out-of-sample test events versus pooled positive prevalence, with at least 30 test events and both classes. Test observations do not set features, labels' thresholds, feature rankings, tuning parameters or probability threshold. Test-fold blocks are non-overlapping. The last 10% of the data is reserved and is not used in these folds. This reserve is not automatically declared an independently untouched project-level confirmation set.
 
 ## Comparator and pass gates
 
