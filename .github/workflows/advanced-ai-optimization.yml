@@ -54,7 +54,7 @@ jobs:
         run: |
           set -o pipefail
           python -m ruff check . 2>&1 | tee ruff.log
-      # Keep public-history retrieval behind all static, test, and dependency gates; imports are covered by Ruff.
+      # Keep public-history retrieval behind all static, test, and dependency gates, including import order.
       - name: Run strict typing before public network access
         run: |
           set -o pipefail
