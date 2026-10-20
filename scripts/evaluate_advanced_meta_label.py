@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from evoryn.domain.models import MarketCandle
 from evoryn.learning_lab.advanced_meta_label import (
@@ -262,9 +263,9 @@ def run_experiment(
     probability_threshold: float,
 ) -> dict[str, Any]:
     """Fit only within fold history and keep runtime promotion unconditionally disabled."""
-    import joblib
-    import numpy
-    from sklearn.metrics import average_precision_score
+    joblib = cast(Any, importlib.import_module("joblib"))
+    numpy = cast(Any, importlib.import_module("numpy"))
+    metrics = cast(Any, importlib.import_module("sklearn.metrics"))
 
     candles = dataset.candles
     feature_names, indices, matrix = build_advanced_feature_matrix(candles)
@@ -318,6 +319,7 @@ def run_experiment(
         for name in ("xgboost", "lightgbm")
     }
 
+    model_names: tuple[Literal["xgboost", "lightgbm"], ...] = ("xgboost", "lightgbm")
     for fold in folds:
         train_events = _purge_overlapping_events(
             _events_for_range(all_events, fold.train.start, fold.train.end)
@@ -373,7 +375,7 @@ def run_experiment(
         baseline_sma_event_return = float(sma_event_baseline.metrics.net_return_fraction)
         baseline_hold_return = float(buy_hold.metrics.net_return_fraction)
 
-        for model_offset, model_name in enumerate(("xgboost", "lightgbm")):
+        for model_offset, model_name in enumerate(model_names):
             model_record: dict[str, Any] = {
                 "status": "NOT_EVALUATED",
                 "runtime_promotion_allowed": False,
@@ -453,7 +455,7 @@ def run_experiment(
             test_ap: float | None = None
             prevalence: float | None = None
             if len(test_y) >= 2 and len(set(test_y)) == 2:
-                test_ap = float(average_precision_score(test_y, test_probability))
+                test_ap = float(metrics.average_precision_score(test_y, test_probability))
                 prevalence = float(sum(test_y) / len(test_y))
 
             strategy = _SmaMetaLabelStrategy(
