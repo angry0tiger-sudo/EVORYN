@@ -24,7 +24,6 @@ from evoryn.intelligence.regime import RegimeLabel
 from evoryn.intelligence.regime_research_models import (
     FEATURE_NAMES,
     FEATURE_SCHEMA_VERSION,
-    LABELS,
     SEQUENCE_LENGTH,
     VOLATILITY_FEATURE_INDEX,
     EstimatorAdapter,
@@ -32,7 +31,6 @@ from evoryn.intelligence.regime_research_models import (
     LSTMAdapter,
     LongFlatResearchStrategy,
     bootstrap_mean_interval,
-    cached_research_feature,
     fit_lstm,
     lstm_probabilities,
     research_feature_vector,
@@ -216,89 +214,6 @@ def filtered_gaussian_hmm_probabilities(model: Any, observations: Any) -> Any:
     if not numpy.isfinite(filtered).all():
         raise ValueError("GaussianHMM filtering generated non-finite probabilities.")
     return filtered
-
-
-class _EstimatorAdapter:
-    """In-memory fold-scoped classifier adapter used only by offline backtests."""
-
-    def __init__(
-        self,
-        estimator: Any,
-        *,
-        class_order: tuple[RegimeLabel, ...],
-        temperature: float,
-        extractor: RegimeFeatureExtractor,
-        fingerprint: str,
-    ) -> None:
-        self.estimator = estimator
-        self.class_order = class_order
-        self.temperature = temperature
-        self.feature_extractor = extractor
-        self.model_fingerprint = fingerprint
-        self.model_version = fingerprint[:16]
-        self.model_id = "evoryn.walk-forward-classifier"
-        self.confidence_semantics = "calibrated_probability"
-        self.is_ready = True
-
-    def predict_probabilities(
-        self, history: Sequence[MarketCandle]
-    ) -> Mapping[RegimeLabel, Decimal]:
-        numpy = importlib.import_module("numpy")
-        feature = self.feature_extractor.extract(history[-self.feature_extractor.minimum_candles :])
-        raw = self.estimator.predict_proba(
-            numpy.asarray([feature.as_float_tuple()], dtype="float64")
-        )[0]
-        scaled = _temperature_scale([float(item) for item in raw], self.temperature)
-        return {
-            label: Decimal(str(scaled[index]))
-            for index, label in enumerate(self.class_order)
-        }
-
-
-class _HMMAdapter:
-    """Filtered HMM posterior mapped to training-only weak labels for a fold simulation."""
-
-    def __init__(
-        self,
-        model: Any,
-        scaler: Any,
-        state_to_label_probabilities: Any,
-        *,
-        extractor: RegimeFeatureExtractor,
-        training_start_index: int,
-        temperature: float,
-        fingerprint: str,
-    ) -> None:
-        self.model = model
-        self.scaler = scaler
-        self.state_to_label_probabilities = state_to_label_probabilities
-        self.feature_extractor = extractor
-        self.training_start_index = training_start_index
-        self.temperature = temperature
-        self.model_fingerprint = fingerprint
-        self.model_version = fingerprint[:16]
-        self.model_id = "evoryn.walk-forward-gaussian-hmm"
-        self.confidence_semantics = "calibrated_probability"
-        self.is_ready = True
-
-    def predict_probabilities(
-        self, history: Sequence[MarketCandle]
-    ) -> Mapping[RegimeLabel, Decimal]:
-        numpy = importlib.import_module("numpy")
-        local_history = history[self.training_start_index :]
-        vectors = self.feature_extractor.extract_series(local_history)
-        observations = numpy.asarray(
-            [vector.as_float_tuple() for vector in vectors], dtype="float64"
-        )
-        scaled = self.scaler.transform(observations)
-        states = filtered_gaussian_hmm_probabilities(self.model, scaled)
-        label_probabilities = states[-1] @ self.state_to_label_probabilities
-        raw = [float(value) for value in label_probabilities]
-        calibrated = _temperature_scale(raw, self.temperature)
-        return {
-            label: Decimal(str(calibrated[index]))
-            for index, label in enumerate(_LABELS)
-        }
 
 
 def run_walk_forward_research(
@@ -534,7 +449,7 @@ def run_walk_forward_research(
                 for _ in y_test
             ]
             majority_metrics = _classification_metrics(
-                y_test, majority_probabilities, _LABELS
+                y_test, majority_probabilities, _LABELS, temperature=1.0
             )
             majority_metrics.update(
                 {
@@ -619,9 +534,9 @@ def run_walk_forward_research(
                         n_jobs=1,
                         random_state=options.random_seed + fold.fold_index,
                     )
-                    label_index = {label.value: index for index, label in enumerate(_LABELS)}
+                    class_index_by_value = {label.value: index for index, label in enumerate(_LABELS)}
                     y_train_encoded = numpy.asarray(
-                        [label_index[value] for value in y_train_labels], dtype="int64"
+                        [class_index_by_value[value] for value in y_train_labels], dtype="int64"
                     )
                     estimator.fit(x_train, y_train_encoded)
                     class_order = _LABELS
@@ -692,9 +607,12 @@ def run_walk_forward_research(
                             "test_metrics": None,
                         }
                         continue
-                    assert train_posteriors is not None
-                    assert validation_posteriors is not None
-                    assert test_posteriors is not None
+                    if (
+                        train_posteriors is None
+                        or validation_posteriors is None
+                        or test_posteriors is None
+                    ):
+                        raise ValueError("Converged HMM is missing fold posterior arrays.")
                     state_map = numpy.ones((len(_LABELS), len(_LABELS)), dtype="float64")
                     state_ids = numpy.argmax(train_posteriors, axis=1)
                     for state in range(len(_LABELS)):

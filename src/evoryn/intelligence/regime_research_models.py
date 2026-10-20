@@ -11,6 +11,7 @@ from typing import Any
 
 from evoryn.domain.models import MarketCandle
 from evoryn.intelligence.regime import RegimeLabel
+from evoryn.intelligence.regime_training import _temperature_scale
 
 FEATURE_SCHEMA_VERSION = "3.0.0-price-technical-only"
 SEQUENCE_LENGTH = 12
@@ -151,7 +152,7 @@ def sequence_matrix(
 def _new_lstm(torch: Any, input_size: int, hidden_size: int = 32) -> Any:
     nn = torch.nn
 
-    class CompactRegimeLSTM(nn.Module):
+    class CompactRegimeLSTM(torch.nn.Module):
         def __init__(self) -> None:
             super().__init__()
             self.recurrent = nn.LSTM(
@@ -284,6 +285,10 @@ class HMMAdapter:
             for i in range(self.first_index, len(history))
         ]
         scaled = self.scaler.transform(numpy.asarray(rows, dtype="float64"))
+        from evoryn.intelligence.regime_walk_forward import (
+            filtered_gaussian_hmm_probabilities,
+        )
+
         hidden = filtered_gaussian_hmm_probabilities(self.model, scaled)
         raw = hidden[-1] @ self.state_map
         calibrated = _temperature_scale([float(v) for v in raw], self.temperature)
