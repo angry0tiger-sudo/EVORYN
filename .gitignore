@@ -15,6 +15,7 @@ ENV/
 
 # Build and packaging
 build/
+artifacts/
 dist/
 *.egg-info/
 .eggs/

@@ -555,3 +555,171 @@ def test_runtime_ledger_detects_tampered_persisted_event(tmp_path: Path) -> None
         )
     with pytest.raises(RuntimeLedgerIntegrityError, match="hash-chain"):
         ledger.events()
+
+
+
+def test_fitted_trained_detector_runs_through_risk_gated_mock_paper_runtime(
+    tmp_path: Path,
+) -> None:
+    """Prove a verified fitted artifact can advise the complete Mock/Paper flow offline."""
+    import hashlib
+
+    pytest.importorskip("numpy")
+    pytest.importorskip("sklearn")
+    pytest.importorskip("joblib")
+
+    from evoryn.intelligence.regime_training import RegimeTrainingConfig, train_regime_model
+    from evoryn.intelligence.trained_regime import load_trained_regime_detector
+    from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
+
+    closes = [Decimal("100")]
+    for index in range(1, 1600):
+        regime = (index // 100) % 4
+        prior = closes[-1]
+        if regime == 0:
+            multiplier = Decimal("1.002")
+        elif regime == 1:
+            multiplier = Decimal("0.998")
+        elif regime == 2:
+            multiplier = Decimal("1.0002") if index % 2 else Decimal("0.9998")
+        else:
+            multiplier = Decimal("1.015") if index % 2 else Decimal("0.985")
+        closes.append(prior * multiplier)
+
+    training_candles = tuple(
+        MarketCandle(
+            market=MARKET,
+            timestamp=datetime(2025, 1, 1, tzinfo=UTC) + INTERVAL * index,
+            interval=INTERVAL,
+            open=close,
+            high=close * Decimal("1.02"),
+            low=close * Decimal("0.98"),
+            close=close,
+            volume=Decimal("1000") + Decimal(index % 17),
+            source="synthetic-training-fixture",
+        )
+        for index, close in enumerate(closes)
+    )
+    training_dataset = HistoricalDataset(
+        dataset_id="synthetic-paper-model-integration",
+        market=MARKET,
+        interval=INTERVAL,
+        volume_unit="base_asset",
+        source_name="synthetic-training-fixture",
+        source_uri="https://example.invalid/synthetic-paper-fixture",
+        source_revision="fixture-v1",
+        license_id="test-data",
+        license_uri="https://example.invalid/test-data-license",
+        collected_at=training_candles[-1].timestamp + INTERVAL,
+        candles=training_candles,
+    )
+    dataset_store = HistoricalDatasetStore(tmp_path / "trained-datasets")
+    saved = dataset_store.save(training_dataset)
+    verified_dataset = dataset_store.load(saved.dataset_id, saved.version)
+    assert verified_dataset.candles == training_dataset.candles
+
+    artifact_dir = tmp_path / "trained-model"
+    train_regime_model(
+        verified_dataset,
+        artifact_dir=artifact_dir,
+        config=RegimeTrainingConfig(
+            feature_lookback=12,
+            horizon_bars=6,
+            train_fraction=0.60,
+            validation_fraction=0.20,
+            trend_quantile=0.65,
+            volatility_quantile=0.75,
+            min_class_samples=3,
+            random_seed=41,
+            confidence_threshold=Decimal("0.55"),
+        ),
+    )
+    artifact_path = artifact_dir / "regime-model.joblib"
+    manifest_path = artifact_dir / "model-manifest.json"
+    artifact_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    detector = load_trained_regime_detector(
+        artifact_path,
+        manifest_path,
+        expected_artifact_sha256=artifact_sha256,
+        expected_manifest_sha256=manifest_sha256,
+        min_confidence=Decimal("0.65"),
+    )
+
+    supported_labels = {RegimeLabel.BULL_TREND, RegimeLabel.RANGE_BOUND}
+    selected_seed: int | None = None
+    for seed_index in range(200, len(training_candles) - 2):
+        predictions = []
+        for candle_index in (seed_index + 1, seed_index + 2):
+            history = training_candles[max(0, candle_index - 255) : candle_index + 1]
+            current = training_candles[candle_index].timestamp + INTERVAL
+            predictions.append(detector.classify(history, now=current))
+        first_prediction, second_prediction = predictions
+        if (
+            not first_prediction.abstained
+            and not second_prediction.abstained
+            and first_prediction.label is second_prediction.label
+            and first_prediction.label in supported_labels
+            and first_prediction.confidence >= Decimal("0.65")
+            and second_prediction.confidence >= Decimal("0.65")
+        ):
+            selected_seed = seed_index
+            break
+    assert selected_seed is not None, (
+        "Synthetic trained model did not produce a stable, high-confidence long regime."
+    )
+
+    initial_candle = training_candles[selected_seed]
+    initial_now = initial_candle.timestamp + INTERVAL
+    initial_price = initial_candle.close
+    feed = MockRuntimeFeed(
+        training_candles[: selected_seed + 1],
+        snapshot(
+            initial_now,
+            bid=format(initial_price * Decimal("0.999"), "f"),
+            ask=format(initial_price * Decimal("1.001"), "f"),
+        ),
+    )
+    clock = MutableClock(initial_now)
+    journal_path = tmp_path / "trained-paper-runtime.sqlite3"
+    runtime = build_runtime(
+        tmp_path,
+        feed,
+        detector,
+        clock,
+        journal_path=journal_path,
+    )
+    assert runtime.bootstrap(now=initial_now).status is RuntimeStatus.BOOTSTRAPPED
+    assert runtime.risk_engine.is_halted is False
+
+    results: list[PaperRuntimeResult] = []
+    for candle_index in (selected_seed + 1, selected_seed + 2):
+        next_candle = training_candles[candle_index]
+        cycle_now = next_candle.timestamp + INTERVAL
+        next_price = next_candle.close
+        clock.set(cycle_now)
+        feed.add_candle(
+            next_candle,
+            snapshot(
+                cycle_now,
+                bid=format(next_price * Decimal("0.999"), "f"),
+                ask=format(next_price * Decimal("1.001"), "f"),
+            ),
+        )
+        results.append(runtime.step(now=cycle_now))
+
+    final = results[-1]
+    assert final.status is RuntimeStatus.PROCESSED
+    assert final.regime_label in {label.value for label in supported_labels}
+    assert final.regime_confidence is not None and final.regime_confidence >= Decimal("0.65")
+    assert final.selected_strategy_id == "fixture-long"
+    assert final.target_exposure == Decimal("1")
+    assert final.order_status == PaperOrderStatus.FILLED.value
+    assert final.filled_quantity > Decimal("0")
+    assert final.reconciliation_matched is True
+    assert final.account is not None and final.account.portfolio.account_reconciled is True
+    assert runtime.risk_engine.is_halted is False
+    assert runtime.mock_venue.get_balances().base_available == runtime.broker.position_quantity
+    assert len(runtime.execution.ledger.intents) == 1
+    assert runtime.execution.ledger.reconciliations[-1].matched is True
+    assert runtime.journal.verify()

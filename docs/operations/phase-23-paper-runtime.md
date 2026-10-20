@@ -39,8 +39,11 @@ remains latched. Recovery intentionally does not guess whether an interrupted op
 The hash chain detects corruption, but is not a signature against a privileged attacker who can
 rewrite the database and its contents.
 
-`PaperRuntimeSupervisor` wraps one bounded cycle and can reconstruct from the same journal after
-an exception. It is not an OS service manager, and it does not automatically clear a halt.
+`PaperRuntimeSupervisor` wraps one bounded cycle and can reconstruct from the same journal after an
+exception. Phase 24 adds `PaperRuntimeScheduler` with serial fixed-cadence cycles, a cooperative stop
+event, explicit cycle limits and terminal-HALT handling. Neither is an OS service manager; neither
+automatically clears a halt. The runtime still requires an explicitly configured feed/classifier,
+and no live trading service is started automatically.
 
 ## Integration coverage
 

@@ -9,7 +9,8 @@ EVORYN is an independently governed trading-intelligence platform. The currently
 - PR #26 added the supervised read-only Nobitex USDT wallet check. No live API test is performed in GitHub Actions.
 - The generic `ExchangePort` and read-only Nobitex transport remain write-disabled.
 - A separate local Spot execution candidate contains an Ed25519-signed, fixed-route gateway, official instrument-rule reader, deterministic Risk Engine preconditions, a durable SQLite idempotency journal and an explicit default-off owner gate. It is **not a production trading runtime**.
-- Phase 23 adds a bounded end-to-end Mock/Paper runtime connecting the regime-classifier port, hysteretic strategy selection, target intent, Risk Engine, Paper Broker, separate Mock Spot ledger, portfolio view, protective exits and SQLite checkpoint/recovery. It is a simulation runtime, not a production Live service. Production account/portfolio integration, live venue fill reconciliation, OS-level supervision and independent release review remain open. There is no supported command to start an autonomous live-trading bot. Do not enable Spot writes or interpret passing CI as trading authorization.
+- Phase 23 adds a bounded end-to-end Mock/Paper runtime connecting regime classification, strategy selection, intents, deterministic risk, Paper fills/reconciliation, portfolio state, protective exits and SQLite recovery.
+- Phase 24 adds an explicitly bounded public-historical-data research workflow, versioned regime training/holdout backtests, and a cooperative process-local Paper scheduler. Latest research [Run #5](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776038) completed on code/test SHA `5639f9ad6a1133be814251db0d958fe4d463d06d`: 4,320 gap-free hourly BTC-USDT Spot candles, 9 public pages, dataset version `5a9e1d165b1a9688a726563a1c06bfa96bde3abf8bd6193fa43664227ff67728`, candle SHA-256 `0d976abd6772fc8dce0578b55d69c9686aabe7ffa0a9329cc46c600349297d84`, dataset-manifest SHA-256 `b769326d0d2b686b2eb91b92910d644e05304a4fc3d8e76d4cddcd7848ddce9b`, model SHA-256 `38799b767b2aa6c2910c07383c3e213db090d5b8d5c1a1e401ee963173c17f2c` and model-manifest SHA-256 `6491232c7d0b0f475d24887406f71bd008a32424430c2e50fa60387a01f46157`. In the 858-sample final holdout, accuracy was 33.92% versus the train-only majority baseline's 58.51%; balanced accuracy 25.59%, macro-F1 24.66%, Brier 0.72879 and log loss 1.34498. Same-cost net returns were −0.2411% for trained-regime long/flat, −1.3562% for SMA crossover and +1.4810% for buy-and-hold. The learned model fails the predictive-quality gate and remains research-only, not the Paper/Live default. Research artifacts [#12224231419](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39329776038/artifacts/12224231419) are retained for 90 days. All six standard gates also passed on documentation-only PR head `65150ec5937abaad5e130e6f8027d026f76a939f`: push [Run #39330490769](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39330490769) and PR [Run #39330494963](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39330494963). The research workflow corresponds to source/test SHA `5639f9ad6a1133be814251db0d958fe4d463d06d`; the later commit(s) are documentation-only. Data-use rights and UDF volume semantics, production account/fill reconciliation, OS-level service installation, independent risk/security review, and owner-host acceptance remain open. No supported command starts an autonomous live-trading bot; passing CI does not authorize Spot writes.
 
 ## Engineering principles
 
@@ -17,7 +18,7 @@ EVORYN is an independently governed trading-intelligence platform. The currently
 - Deterministic risk controls stay independent from AI recommendations.
 - Secrets stay local and never enter GitHub, test fixtures, agent prompts or logs.
 - A timeout during an order write is an **unknown outcome**, not permission to submit again.
-- Tests and CI use mocks only. Live account validation is deferred to the owner's local machine.
+- The six-gate CI uses mocks/fixtures only. A separate research workflow reads unauthenticated public Nobitex OHLCV history through a fixed GET-only route; it does not access accounts or order endpoints. Live account validation is deferred to the owner's local machine.
 
 ## Requirements
 
@@ -141,4 +142,6 @@ This is a safety-oriented implementation candidate, not a launchable automated t
 - [Local deployment guide](docs/operations/local-deployment.md)
 - [Read-only Nobitex USDT smoke-test runbook](docs/operations/live-readonly-nobitex-usdt-smoke-test.md)
 - [Phase 23: End-to-End Mock/Paper Runtime](docs/operations/phase-23-paper-runtime.md)
+- [Phase 24: Historical Regime Research and Process-Local Scheduler](docs/operations/phase-24-regime-training-supervisor.md)
+- [Nobitex Regime Model Holdout Research (real public OHLCV, research-only)](docs/research/2026-10-20-nobitex-regime-holdout.md)
 - [Technical debt and release gates](TECHNICAL_DEBT.md)

@@ -1,0 +1,137 @@
+name: Nobitex Public-History Regime Research
+
+on:
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: Number of calendar days of public hourly candles
+        type: choice
+        options: ["90", "180", "365"]
+        default: "180"
+        required: true
+  push:
+    branches:
+      - feat/nobitex-regime-training-supervisor-20261020
+    paths:
+      - "src/evoryn/learning_lab/nobitex_history.py"
+      - "src/evoryn/intelligence/regime_training.py"
+      - "src/evoryn/intelligence/trained_regime.py"
+      - "scripts/train_nobitex_regime.py"
+      - "tests/integration/test_regime_training_pipeline.py"
+      - "tests/integration/test_paper_strategy_runtime.py"
+      - "tests/unit/test_nobitex_history.py"
+      - "tests/unit/test_regime_training.py"
+      - ".github/workflows/nobitex-regime-training.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nobitex-public-history-research-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  historical-research:
+    name: Public OHLCV fetch, model training, and holdout backtest
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install offline tests, research model, and audit tools
+        run: |
+          set -o pipefail
+          python --version 2>&1 | tee python-version.log
+          python -m pip install --upgrade pip 2>&1 | tee pip-install.log
+          python -m pip install -e ".[dev,regime]" 2>&1 | tee package-install.log
+          python -m pip install pip-audit 2>&1 | tee pip-audit-install.log
+
+      - name: Run offline suite including estimator integration test
+        run: |
+          set -o pipefail
+          python -m pytest -q 2>&1 | tee pytest.log
+
+      - name: Audit complete research environment
+        run: |
+          set -o pipefail
+          pip-audit 2>&1 | tee pip-audit.log
+
+      - name: Fetch public Nobitex historical candles and train/backtest
+        run: |
+          set -o pipefail
+          DAYS="${{ inputs.lookback_days || '180' }}"
+          python scripts/train_nobitex_regime.py --symbol BTCUSDT --resolution 60 --lookback-days "$DAYS" --max-pages 24 --output artifacts/nobitex-regime 2>&1 | tee research-run.log
+
+      - name: Publish evidence summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          report_path = Path("artifacts/nobitex-regime/training-report.json")
+          with summary.open("a", encoding="utf-8") as output:
+              output.write("# Nobitex public-history regime research\n\n")
+              if not report_path.is_file():
+                  output.write("**Outcome:** research pipeline did not produce a complete report.\n\n")
+                  output.write("Review the historical-fetch and training logs.\n")
+                  raise SystemExit(0)
+              report = json.loads(report_path.read_text(encoding="utf-8"))
+              dataset = report["dataset"]
+              training = report["training"]
+              output.write("## Provenance\n\n")
+              output.write(f"- Market: {dataset['market']['symbol']} / {dataset['market']['venue']} / Spot\n")
+              output.write(f"- Dataset version: {dataset['dataset_version']}\n")
+              output.write(f"- Candle count: **{dataset['candle_count']}**\n")
+              output.write(f"- First candle: {dataset['first_candle_open']}\n")
+              output.write(f"- Last candle: {dataset['last_candle_open']}\n")
+              output.write(f"- Candle SHA-256: {dataset['candles_sha256']}\n")
+              output.write(f"- Model SHA-256: {report['model_artifact_sha256']}\n")
+              output.write(f"- Source license review: {training['license_review_status']}\n\n")
+              output.write("## Holdout classification metrics\n\n")
+              metrics = training["test_classification_metrics"]
+              output.write("| Metric | Value |\n|---|---:|\n")
+              for key in ("sample_count", "accuracy", "balanced_accuracy", "macro_f1", "multiclass_brier_score", "log_loss"):
+                  output.write(f"| {key} | {metrics[key]} |\n")
+              output.write("\nLabels are weak targets from future outcomes, not independently verified ground truth.\n\n")
+              output.write("## Holdout portfolio simulation\n\n")
+              output.write("| Strategy | Net return | Max drawdown | Closed trades | Final equity (USDT) |\n")
+              output.write("|---|---:|---:|---:|---:|\n")
+              for name, result in report["backtests"].items():
+                  values = result["metrics"]
+                  output.write(
+                      f"| {name} | {values['net_return_fraction']} | "
+                      f"{values['max_drawdown_fraction']} | {values['closed_trade_count']} | "
+                      f"{values['final_equity']} |\n"
+                  )
+              output.write("\n**Disposition:** research only; not approved for Live trading.\n")
+              output.write("Spread/slippage are assumptions. Data-use rights and volume-unit semantics remain unreviewed.\n")
+          PY
+
+      - name: Upload historical dataset, fitted model, checksums, and backtest reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nobitex-regime-research-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/nobitex-regime/
+            python-version.log
+            pip-install.log
+            package-install.log
+            pip-audit-install.log
+            pip-audit.log
+            pytest.log
+            research-run.log
+          if-no-files-found: warn
+          retention-days: 90
