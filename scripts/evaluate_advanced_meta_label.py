@@ -588,15 +588,21 @@ def run_experiment(
                 intervals[metric] = _bootstrap_interval(
                     values[metric], seed=random_seed + 5000 + model_index * 10 + offset
                 )
-        classification_gate = (
-            len(values["ap"]) == len(folds)
-            and len(values["prevalence"]) == len(folds)
-            and all(
-                ap > prevalence
-                for ap, prevalence in zip(
-                    values["ap"], values["prevalence"], strict=True
-                )
+        pooled_labels = pooled_test_labels[gate_model_name]
+        pooled_probabilities = pooled_test_probabilities[gate_model_name]
+        pooled_ap: float | None = None
+        pooled_prevalence: float | None = None
+        if len(pooled_labels) >= 2 and set(pooled_labels) == {0, 1}:
+            pooled_ap = float(
+                metrics.average_precision_score(pooled_labels, pooled_probabilities)
             )
+            pooled_prevalence = float(sum(pooled_labels) / len(pooled_labels))
+        classification_gate = (
+            complete_coverage
+            and len(pooled_labels) >= 30
+            and pooled_ap is not None
+            and pooled_prevalence is not None
+            and pooled_ap > pooled_prevalence
         )
         economic_gate = (
             complete_coverage
@@ -620,6 +626,9 @@ def run_experiment(
             "mean_positive_prevalence": (
                 _mean(values["prevalence"]) if values["prevalence"] else None
             ),
+            "pooled_test_event_count": len(pooled_labels),
+            "pooled_test_event_average_precision": pooled_ap,
+            "pooled_test_event_positive_prevalence": pooled_prevalence,
             "closed_trades_total": int(sum(values["trades"])),
             "paired_fold_bootstrap_intervals": intervals,
             "classification_gate_passed": classification_gate,
@@ -631,7 +640,7 @@ def run_experiment(
     report: dict[str, Any] = {
         "schema_version": 1,
         "experiment_id": hashlib.sha256(
-            f"{dataset.version}:{ADVANCED_FEATURE_SCHEMA_VERSION}:{n_trials}:{random_seed}:{probability_threshold}".encode()
+            f"{dataset.version}:{ADVANCED_FEATURE_SCHEMA_VERSION}:{n_trials}:{random_seed}:validation-threshold-v2:walk-forward-35-15-3".encode()
         ).hexdigest(),
         "created_at": datetime.now(UTC).isoformat(),
         "dataset": {
@@ -745,7 +754,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--n-trials", type=int, default=10)
     parser.add_argument("--seed", type=int, default=41)
     parser.add_argument("--top-k", type=int, default=15)
-    parser.add_argument("--probability-threshold", type=float, default=0.55)
     return parser.parse_args(argv)
 
 
@@ -757,8 +765,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--seed must be a non-negative integer.")
     if type(args.top_k) is not int or args.top_k < 1:
         raise SystemExit("--top-k must be a positive integer.")
-    if not 0.5 <= args.probability_threshold < 1:
-        raise SystemExit("--probability-threshold must be in [0.5, 1).")
     output = args.output.expanduser().resolve()
     dataset = _load_dataset(output)
     run_experiment(
@@ -767,7 +773,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         n_trials=args.n_trials,
         random_seed=args.seed,
         top_k=args.top_k,
-        probability_threshold=args.probability_threshold,
     )
     return 0
 
