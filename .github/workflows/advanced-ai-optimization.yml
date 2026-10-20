@@ -1,6 +1,11 @@
 name: Advanced AI Optimization Research
 
 on:
+  push:
+    branches:
+      - feat/ai-advanced-optimization
+    paths:
+      - ".github/workflows/advanced-ai-optimization.yml"
   workflow_dispatch:
     inputs:
       lookback_days:
@@ -45,6 +50,18 @@ jobs:
           python -m pip install --upgrade pip 2>&1 | tee pip-install.log
           python -m pip install -e ".[dev,regime,regime-upgrade]" 2>&1 | tee research-dependencies.log
           python -m pip install pip-audit 2>&1 | tee pip-audit-install.log
+      - name: Run Ruff before public network access
+        run: |
+          set -o pipefail
+          python -m ruff check . 2>&1 | tee ruff.log
+      - name: Run strict typing before public network access
+        run: |
+          set -o pipefail
+          python -m mypy src tests scripts/evaluate_advanced_meta_label.py 2>&1 | tee mypy.log
+      - name: Run focused static security scan before public network access
+        run: |
+          set -o pipefail
+          python -m bandit -q scripts/evaluate_advanced_meta_label.py 2>&1 | tee bandit.log
       - name: Run offline CI suite
         run: |
           set -o pipefail
@@ -84,6 +101,9 @@ jobs:
             python-version.log
             pip-install.log
             research-dependencies.log
+            ruff.log
+            mypy.log
+            bandit.log
             pip-audit-install.log
             pip-audit.log
             pytest.log
