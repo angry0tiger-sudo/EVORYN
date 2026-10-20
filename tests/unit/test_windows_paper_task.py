@@ -20,7 +20,6 @@ from scripts.windows_paper_task import (
     load_and_validate_config,
     preflight,
 )
-
 from evoryn.domain.models import Market
 
 INTERVAL = timedelta(hours=1)
