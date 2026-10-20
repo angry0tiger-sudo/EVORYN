@@ -13,6 +13,7 @@ on:
     branches:
       - feat/nobitex-regime-training-supervisor-20261020
       - research/walk-forward-labels-volume-audit-20261020
+      - research/lightgbm-windows-paper-supervision-v2-20261020
     paths:
       - "src/evoryn/learning_lab/nobitex_history.py"
       - "src/evoryn/learning_lab/historical_data.py"
