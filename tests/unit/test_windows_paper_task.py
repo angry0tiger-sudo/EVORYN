@@ -10,7 +10,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-
 from scripts.windows_paper_task import (
     DEFAULT_TASK_NAME,
     OfflineCsvPaperFeed,
