@@ -196,12 +196,12 @@ def _feature_row(
     all_highs: Sequence[float],
     all_lows: Sequence[float],
 ) -> tuple[float, ...]:
-    start_index = end_index - lookback + 1
+    start_index = end_index - lookback
     window = candles[start_index : end_index + 1]
     closes = [float(candle.close) for candle in window]
     highs = [float(candle.high) for candle in window]
     lows = [float(candle.low) for candle in window]
-    if len(closes) != lookback or any(
+    if len(closes) != lookback + 1 or any(
         not math.isfinite(value) or value <= 0 for value in (*closes, *highs, *lows)
     ):
         raise ValueError("Feature window contains invalid OHLC values.")
@@ -287,7 +287,7 @@ def build_advanced_feature_matrix(
     grid_offset_seconds = int(candles[0].timestamp.timestamp()) % 3600
     all_highs = tuple(float(c.high) for c in candles)
     all_lows = tuple(float(c.low) for c in candles)
-    indices = tuple(range(lookback - 1, len(candles)))
+    indices = tuple(range(lookback, len(candles)))
     rows = tuple(
         _feature_row(
             candles,
