@@ -8,11 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from evoryn.runtime.single_instance import (
-    PaperRuntimeLocks,
-    RuntimeAlreadyRunning,
-    RuntimeLockAcquisitionError,
-)
+from evoryn.runtime.single_instance import PaperRuntimeLocks, RuntimeLockAcquisitionError
 
 _CHILD_PROBE = """
 from pathlib import Path
@@ -74,9 +70,8 @@ def test_duplicate_process_is_rejected_before_journal_mutation(tmp_path: Path) -
 def test_lock_set_releases_all_locks_after_exception(tmp_path: Path) -> None:
     journal = tmp_path / "runtime.sqlite3"
 
-    with pytest.raises(RuntimeError, match="injected"):
-        with PaperRuntimeLocks(journal):
-            raise RuntimeError("injected")
+    with pytest.raises(RuntimeError, match="injected"), PaperRuntimeLocks(journal):
+        raise RuntimeError("injected")
 
     with PaperRuntimeLocks(journal) as locks:
         assert locks.held
@@ -90,8 +85,10 @@ def test_lock_sidecar_symlink_is_rejected_without_touching_target(tmp_path: Path
     sidecar = journal.with_name(f".{journal.name}.instance.lock")
     sidecar.symlink_to(target)
 
-    with pytest.raises(RuntimeLockAcquisitionError, match="Cannot acquire Paper lock"):
-        with PaperRuntimeLocks(journal):
-            pass
+    with (
+        pytest.raises(RuntimeLockAcquisitionError, match="Cannot acquire Paper lock"),
+        PaperRuntimeLocks(journal),
+    ):
+        pass
 
     assert target.read_text(encoding="utf-8") == "sentinel"

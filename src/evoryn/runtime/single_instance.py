@@ -182,24 +182,31 @@ class PaperRuntimeLocks:
             self._release_all()
             raise
 
-    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        self._release_all()
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: object,
+    ) -> None:
+        release_error = self._release_all()
+        if release_error is not None and exc is None:
+            raise RuntimeLockAcquisitionError("Failed to release Paper runtime locks.") from release_error
 
     def _acquire_windows_mutex(self) -> None:
         win_dll = getattr(ctypes, "WinDLL")
         kernel32 = win_dll("kernel32", use_last_error=True)
-        create_mutex = getattr(kernel32, "CreateMutexW")
+        create_mutex = kernel32.CreateMutexW
         create_mutex.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
         create_mutex.restype = ctypes.c_void_p
         raw_handle = create_mutex(None, 1, self._mutex_name)
-        error_code = ctypes.get_last_error()
+        error_code = getattr(ctypes, "get_last_error")()  # noqa: B009
         if not raw_handle:
             raise RuntimeLockAcquisitionError(
                 f"Cannot create Paper runtime mutex (WinError {error_code})."
             )
         handle = cast(int, raw_handle)
         if error_code == self._ERROR_ALREADY_EXISTS:
-            close_handle = getattr(kernel32, "CloseHandle")
+            close_handle = kernel32.CloseHandle
             close_handle.argtypes = [ctypes.c_void_p]
             close_handle.restype = ctypes.c_int
             close_handle(handle)
@@ -208,30 +215,55 @@ class PaperRuntimeLocks:
         self._mutex_handle = handle
         self._mutex_owned = True
 
-    def _release_all(self) -> None:
-        self._held = False
+    def _release_all(self) -> BaseException | None:
+        """Attempt every cleanup action, returning the first release error."""
+        errors: list[BaseException] = []
         if self._journal_file_lock is not None:
-            self._journal_file_lock.release()
-            self._journal_file_lock = None
+            try:
+                self._journal_file_lock.release()
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                self._journal_file_lock = None
         if self._process_file_lock is not None:
-            self._process_file_lock.release()
-            self._process_file_lock = None
+            try:
+                self._process_file_lock.release()
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                self._process_file_lock = None
         if self._mutex_handle is not None and self._kernel32 is not None:
             handle = self._mutex_handle
             kernel32 = self._kernel32
             if self._mutex_owned:
                 try:
-                    release_mutex = getattr(kernel32, "ReleaseMutex")
+                    release_mutex = kernel32.ReleaseMutex
                     release_mutex.argtypes = [ctypes.c_void_p]
                     release_mutex.restype = ctypes.c_int
-                    release_mutex(handle)
+                    if not release_mutex(handle):
+                        errors.append(
+                            RuntimeLockAcquisitionError(
+                                "Windows refused to release the Paper runtime mutex."
+                            )
+                        )
+                except BaseException as exc:
+                    errors.append(exc)
                 finally:
                     self._mutex_owned = False
             try:
-                close_handle = getattr(kernel32, "CloseHandle")
+                close_handle = kernel32.CloseHandle
                 close_handle.argtypes = [ctypes.c_void_p]
                 close_handle.restype = ctypes.c_int
-                close_handle(handle)
+                if not close_handle(handle):
+                    errors.append(
+                        RuntimeLockAcquisitionError(
+                            "Windows refused to close the Paper runtime mutex handle."
+                        )
+                    )
+            except BaseException as exc:
+                errors.append(exc)
             finally:
                 self._mutex_handle = None
                 self._kernel32 = None
+        self._held = False
+        return errors[0] if errors else None
