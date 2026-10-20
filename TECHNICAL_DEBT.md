@@ -209,10 +209,8 @@ No open item may be closed by inference. This ledger does not authorize live tra
   tests plus a native Windows task register/status/unregister round trip using a temporary
   `EVORYN-CI-PaperOnly-*` task; the test attempts cleanup in a `finally` block. Cross-platform unit tests
   validate config, CSV freshness/gaps, UNC rejection and task-name scope.
-- [ ] **Exact-HEAD seven-gate CI.** The earlier run #971 failed Ruff and mypy. Those issues have been amended;
-  do not close the gate until a new run on the final PR HEAD has all seven jobs completed with
-  `conclusion=success`: unit tests, Ruff, mypy, Bandit, runner preflight/compile, pip-audit, and Windows
-  Paper locks/Task Scheduler lifecycle.
+- [x] **Seven-gate checkpoint passed.** GitHub Actions [Run #1018](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39486110714) passed all seven configured jobs on checkpoint SHA `7eaaaacd2f2c38d91e0bd2cb87352410e08cb648`: pytest, Ruff, strict mypy, Bandit, preflight/compile, pip-audit, and Windows Paper/Task Scheduler. The Windows job parsed the PowerShell helper and reported **12 passed, 1 skipped** (`O_NOFOLLOW` is POSIX-only); the disposable CI task successfully completed register/status/unregister.
+- [ ] **Final-head CI rerun.** Later documentation/workflow-only commits change the PR HEAD; require all seven jobs green on the latest exact PR HEAD before merge. Do not infer that from checkpoint Run #1018.
 - [ ] **Fresh schema-v3 research artifact.** The historical six-model schema-v2 Artifact #12256082280 has
   no model backtest entries under `forward_thresholds`. A new research run on the current source must confirm
   six models, both policy backtests, per-policy candidate gates, model artifact checksums/reloads, and report
@@ -220,5 +218,9 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [ ] **Native owner-host acceptance.** No task has been registered on the user's Windows 11 host. Owner-host
   ACL, logoff/shutdown, restart budget, disk-full/permission/journal-corruption fault drills, log rotation,
   and explicit unregistration acceptance remain open. Linux/Windows CI cannot attest to the actual owner host.
-- [x] **No live operations.** All changes were committed through GitHub APIs. No local owner machine was
-  accessed, no exchange/account endpoint or credential was used, and no real order was placed.
+- [x] **No operator-host activity.** All changes were committed through GitHub APIs. No owner-local
+  Windows host was accessed, no credential or account/write endpoint was manually used, and no real order
+  was placed. The historical public-data research workflow had push triggers on this branch; those triggers
+  have now been removed from this branch to prevent subsequent infrastructure pushes from initiating a
+  new public-history research job. Any already-triggered automatic run must be distinguished from a manually
+  dispatched live session; no new research run was manually dispatched in this phase.
