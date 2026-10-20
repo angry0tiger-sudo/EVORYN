@@ -80,8 +80,6 @@ jobs:
           name: advanced-ai-optimization-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/nobitex-regime/training-report.json
-            artifacts/nobitex-regime/training-report.json.sha256
-            artifacts/nobitex-regime/walk-forward/
             artifacts/nobitex-regime/advanced-meta-label/
             python-version.log
             pip-install.log
