@@ -26,9 +26,10 @@ or liquidity constraint.
    multi-horizon returns, multiple volatility horizons, SMA gaps, RSI-14, MACD, Bollinger Bands,
    ATR-14, trend strength, range position, and volatility ratio. Indicators use trailing
    completed OHLC bars only. Unknown-unit volume is excluded entirely.
-2. Compare five challenger families: Random Forest, HistGradientBoosting, XGBoost, Gaussian HMM
-   using forward-filtered (not backward-smoothed) state probabilities, and a compact CPU LSTM
-   over twelve chronological feature rows. XGBoost and PyTorch are research-only dependencies.
+2. Compare six challenger families: Random Forest, HistGradientBoosting, XGBoost, LightGBM,
+   Gaussian HMM using forward-filtered (not backward-smoothed) state probabilities, and a compact
+   CPU LSTM over twelve chronological feature rows. LightGBM is pinned as `lightgbm==4.7.0`;
+   all challenger-specific packages remain research-only dependencies.
 3. Compare two weak-label policies: train-thresholded forward-return/volatility labels and a
    volatility-scaled first-touch OHLC Triple-Barrier label. The horizon is six candles. A same
    candle touching both barriers is labelled high volatility because intrabar order is unknown.
@@ -67,7 +68,7 @@ or liquidity constraint.
 ## Consequences
 
 ### Positive
-- Five materially different model families are compared under common temporal and cost protocols.
+- Six materially different model families are compared under common temporal and cost protocols.
 - Technical inputs are richer without importing unverified volume semantics.
 - Fold identity, labels, artifacts, calibration and benchmarks are auditable.
 - “No winner” remains a valid engineering outcome.
@@ -108,3 +109,25 @@ neither the production feature schema nor risk and exchange-write gates.
 - Train-only majority Accuracy averaged 63.062% for forward-threshold labels and 63.445% for Triple-Barrier labels. Triple-Barrier mean Accuracy was RF 40.67%, HistGradientBoosting 55.79%, XGBoost 59.04%, HMM 61.77%, LSTM 33.16%. Several Macro-F1 results improved, but all candidates' Accuracy difference confidence intervals were below zero.
 - Buy-and-Hold mean net return was +0.5629% per test fold. Mean candidate returns ranged from -0.2406% to near zero; closed trades ranged from 0 to 18. Return-difference intervals versus Buy-and-Hold all crossed zero with negative lower bounds. All five candidates failed the combined gate.
 - The report records `selected_model_for_runtime=null`. No challenger is connected to Runtime; an untouched confirmation period and independently pinned schema-compatible loader remain required.
+
+
+## Six-model artifact audit — 2026-10-20
+
+Artifact `12256082280` was retrieved and its ZIP was independently hashed as
+`806cc33bcc2b80746e8fa35ae08ca3886c352166bc6287589b5fb0db20475e84`; the embedded
+walk-forward report SHA-256 is
+`702bcbba8fd69ddcf334bf8c8fb1b938d65428336744d96c12202adfb4ede4b8`. The ZIP digest does
+not match the digest transcribed in the supplied screenshot, so the locally computed digest is
+the value to retain for this downloaded byte stream.
+
+The report contains 11 logical folds, both label policies, and all six model outputs for every
+fold/policy pair. It records `selected_model_for_runtime=null`. Recomputed Triple-Barrier mean
+majority accuracy is 64.3887% for this artifact, not 63.44%. All six candidate mean accuracies
+are below that baseline; their cost-adjusted mean net returns are below Buy-and-Hold.
+
+This schema-version-2 artifact is not sufficient as final exact-head evidence: its
+`forward_thresholds` policy records have no model backtest entries, and the artifact's source
+commit association has not yet been independently established from artifact metadata. The
+current schema-version-3 source is expected to persist policy-specific backtests and
+`candidate_gates_by_policy`; a fresh exact-head research run must verify that behavior before
+this ADR's evidence section is considered complete. No model is promoted.
