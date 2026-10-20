@@ -15,7 +15,6 @@ from unittest.mock import patch
 import pytest
 
 from evoryn.domain.models import Market, MarketCandle
-from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
 from evoryn.learning_lab.advanced_meta_label import (
     ADVANCED_FEATURE_SCHEMA_VERSION,
     advanced_feature_names,
@@ -24,6 +23,7 @@ from evoryn.learning_lab.advanced_meta_label import (
     select_features_train_only,
     tune_meta_labeler,
 )
+from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
 
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 INTERVAL = timedelta(hours=1)
