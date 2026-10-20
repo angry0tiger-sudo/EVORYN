@@ -190,10 +190,12 @@ class PaperRuntimeLocks:
     ) -> None:
         release_error = self._release_all()
         if release_error is not None and exc is None:
-            raise RuntimeLockAcquisitionError("Failed to release Paper runtime locks.") from release_error
+            raise RuntimeLockAcquisitionError(
+                "Failed to release Paper runtime locks."
+            ) from release_error
 
     def _acquire_windows_mutex(self) -> None:
-        win_dll = getattr(ctypes, "WinDLL")
+        win_dll = ctypes.WinDLL
         kernel32 = win_dll("kernel32", use_last_error=True)
         create_mutex = kernel32.CreateMutexW
         create_mutex.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
