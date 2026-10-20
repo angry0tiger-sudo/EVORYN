@@ -12,8 +12,15 @@ on:
   push:
     branches:
       - feat/nobitex-regime-training-supervisor-20261020
+      - research/walk-forward-labels-volume-audit-20261020
     paths:
       - "src/evoryn/learning_lab/nobitex_history.py"
+      - "src/evoryn/learning_lab/historical_data.py"
+      - "src/evoryn/learning_lab/backtest.py"
+      - "src/evoryn/intelligence/regime.py"
+      - "src/evoryn/intelligence/regime_walk_forward.py"
+      - "scripts/evaluate_regime_walk_forward.py"
+      - "tests/unit/test_regime_walk_forward.py"
       - "src/evoryn/intelligence/regime_training.py"
       - "src/evoryn/intelligence/trained_regime.py"
       - "scripts/train_nobitex_regime.py"
@@ -70,6 +77,10 @@ jobs:
           set -o pipefail
           DAYS="${{ inputs.lookback_days || '180' }}"
           python scripts/train_nobitex_regime.py --symbol BTCUSDT --resolution 60 --lookback-days "$DAYS" --max-pages 24 --output artifacts/nobitex-regime 2>&1 | tee research-run.log
+      - name: Run purged walk-forward model and label comparison
+        run: |
+          set -o pipefail
+          python scripts/evaluate_regime_walk_forward.py --output artifacts/nobitex-regime 2>&1 | tee walk-forward-run.log
 
       - name: Publish evidence summary
         if: always()
@@ -115,7 +126,22 @@ jobs:
                       f"{values['max_drawdown_fraction']} | {values['closed_trade_count']} | "
                       f"{values['final_equity']} |\n"
                   )
-              output.write("\n**Disposition:** research only; not approved for Live trading.\n")
+              walk_forward_path = Path("artifacts/nobitex-regime/walk-forward/walk-forward-report.json")
+              output.write("\n## Rolling walk-forward comparison\n\n")
+              if walk_forward_path.is_file():
+                  walk_forward = json.loads(walk_forward_path.read_text(encoding="utf-8"))
+                  output.write(f"- Folds: **{walk_forward['protocol']['fold_count']}**\n")
+                  output.write(f"- Dataset volume semantics: {walk_forward['dataset']['volume_semantics_status']}\n")
+                  output.write("| Label policy / model | Metric | Fold mean | Fold stddev | Min | Max |\n")
+                  output.write("|---|---|---:|---:|---:|---:|\n")
+                  for key, metric_map in walk_forward["per_fold_metric_summary"].items():
+                      for metric in ("balanced_accuracy", "macro_f1", "log_loss"):
+                          stat = metric_map[metric]
+                          output.write(f"| {key} | {metric} | {stat['mean']:.6f} | {stat['population_stddev']:.6f} | {stat['minimum']:.6f} | {stat['maximum']:.6f} |\n")
+                  output.write("\nFold rows remain separately recorded in the JSON report; no best-fold is selected.\n\n")
+              else:
+                  output.write("**Walk-forward outcome:** report not produced; inspect walk-forward-run.log.\n\n")
+              output.write("\\n**Disposition:** research only; not approved for Live trading.\\n")
               output.write("Spread/slippage are assumptions. Data-use rights and volume-unit semantics remain unreviewed.\n")
           PY
 
@@ -133,5 +159,6 @@ jobs:
             pip-audit.log
             pytest.log
             research-run.log
+            walk-forward-run.log
           if-no-files-found: warn
           retention-days: 90

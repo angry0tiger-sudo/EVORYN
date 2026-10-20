@@ -136,6 +136,19 @@ def test_feature_extractor_uses_only_the_completed_trailing_window() -> None:
     assert len(extractor.extract_series(history)) == len(history) - extractor.lookback
 
 
+def test_default_feature_schema_excludes_unverified_volume() -> None:
+    history = candles(30)
+    price_only = RegimeFeatureExtractor(lookback=10).extract(history)
+    assert price_only.volume_ratio == Decimal("0")
+
+    volume_enabled = RegimeFeatureExtractor(
+        lookback=10,
+        use_volume_feature=True,
+        feature_schema_version="2.0.0-price-plus-volume",
+    ).extract(history)
+    assert volume_enabled.volume_ratio != Decimal("0")
+
+
 def test_feature_extractor_rejects_insufficient_history_and_time_gaps() -> None:
     extractor = RegimeFeatureExtractor(lookback=10)
     with pytest.raises(ValueError, match="at least"):

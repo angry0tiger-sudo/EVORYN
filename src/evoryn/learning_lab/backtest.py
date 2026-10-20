@@ -52,6 +52,7 @@ class BacktestConfig:
     allocation_fraction: Decimal
     quantity_step: Decimal
     allow_gaps: bool = False
+    enforce_volume_participation: bool = True
 
     def __post_init__(self) -> None:
         _positive(self.initial_cash, "initial_cash")
@@ -74,6 +75,8 @@ class BacktestConfig:
         _positive(self.quantity_step, "quantity_step")
         if type(self.allow_gaps) is not bool:
             raise ValueError("allow_gaps must be an explicit boolean.")
+        if type(self.enforce_volume_participation) is not bool:
+            raise ValueError("enforce_volume_participation must be an explicit boolean.")
         if self.spread_bps / Decimal("20000") + self.slippage_bps / _BPS_DENOMINATOR >= 1:
             raise ValueError("Combined adverse spread and slippage must be less than 100%.")
 
@@ -99,6 +102,7 @@ class BacktestConfig:
             "allocation_fraction": str(self.allocation_fraction),
             "quantity_step": str(self.quantity_step),
             "allow_gaps": self.allow_gaps,
+            "enforce_volume_participation": self.enforce_volume_participation,
         }
 
 
@@ -616,10 +620,11 @@ def run_backtest(
         raise ValueError("warmup_start_index must be between zero and evaluation start.")
     if not segment_name.strip():
         raise ValueError("segment_name must not be empty.")
-    if dataset.volume_unit != "base_asset":
+    if config.enforce_volume_participation and dataset.volume_unit != "base_asset":
         raise ValueError(
-            "Backtest fill constraints require base-asset volume; "
-            "quote-volume datasets are unsupported."
+            "Volume-based fill constraints require confirmed base-asset volume semantics; "
+            "use enforce_volume_participation=False only for an explicitly unconstrained "
+            "research simulation."
         )
     if dataset.gap_count and not config.allow_gaps:
         raise ValueError("Dataset contains gaps; allow_gaps must be explicitly enabled in config.")
@@ -741,12 +746,18 @@ def run_backtest(
         if pending is not None and not history:
             raise RuntimeError("Pending order exists without completed history.")
         if pending is not None:
-            # At the current open, only the previous completed bar's volume is knowable.
+            # Capacity may only be capped by volume when its unit is verified.
             liquidity_reference = history[-1]
-            available = _floor_to_step(
-                liquidity_reference.volume * config.max_bar_participation,
-                config.quantity_step,
-            )
+            if config.enforce_volume_participation:
+                available = _floor_to_step(
+                    liquidity_reference.volume * config.max_bar_participation,
+                    config.quantity_step,
+                )
+                recorded_liquidity_volume = liquidity_reference.volume
+            else:
+                # Do not misrepresent an undocumented UDF v value as base-asset capacity.
+                available = pending.remaining_quantity
+                recorded_liquidity_volume = _ZERO
             raw_fill = min(pending.remaining_quantity, available)
             if pending.side is Side.BUY:
                 execution_price = candle.open * (
@@ -776,7 +787,7 @@ def run_backtest(
                     quantity=quantity,
                     reference_open=candle.open,
                     liquidity_reference_candle_open=liquidity_reference.timestamp,
-                    liquidity_reference_volume=liquidity_reference.volume,
+                    liquidity_reference_volume=recorded_liquidity_volume,
                     execution_price=execution_price,
                     notional=notional,
                     commission=fee,
@@ -784,7 +795,7 @@ def run_backtest(
                     estimated_slippage_cost=slippage_cost,
                     volume_participation=(
                         quantity / liquidity_reference.volume
-                        if liquidity_reference.volume > 0
+                        if config.enforce_volume_participation and liquidity_reference.volume > 0
                         else _ZERO
                     ),
                     partial=was_partial,

@@ -118,3 +118,19 @@ This ledger records open verification and runtime-integration obligations. Close
 - **Unconfirmed:** the available evidence does not establish the claimed cause or conclusion.
 
 No open item may be closed by inference. This ledger does not authorize live trading, provider-policy circumvention, or changes to deterministic risk limits.
+
+
+## Phase 25 — Volume Semantics, Walk-Forward Robustness and Windows Paper Supervision
+
+### Verified starting point — 2026-10-20
+
+- [x] **PR #30 merged.** Squash merge commit db68a4c943a6300bf1be5718e03c99bc321a71dc; post-merge six-gate CI passed on that exact SHA in [Run #39369887248](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39369887248).
+- [ ] **Volume ambiguity represented explicitly in the research candidate; exact-head CI is pending.** Official Nobitex UDF history documentation calls v trade volume but does not specify base-asset versus quote-asset units. Research stores volume_unit=unknown; the new model input schema defaults to price-only, sets the volume-ratio slot to zero, and rejects unknown-unit volume features. Backtests disable volume-based participation caps when unit semantics are unknown and record zero for the unknown liquidity-reference volume; these simulations are liquidity-unconstrained, not executable-capacity evidence.
+- [x] **Current predictive model is not accepted.** The previous Random Forest scored 33.92% accuracy versus 58.51% from the train-only majority baseline. It stays research-only and is not installed as Paper/Live default.
+- [x] **Windows Task Scheduler design documented.** See docs/operations/windows-paper-scheduler-design.md. No task was registered, no installer was run and no owner Windows host was accessed.
+- [ ] **Walk-forward result pending.** Run the new anonymous public-data workflow on this branch and wait for all fold reports/artifact checksums to be published on the exact source/test SHA. Do not mark done if a fold lacks the required class support or the research job fails.
+- [ ] **Volume semantics/provider confirmation remains open.** Keep volume features and volume capacity limits disabled for UDF history until source semantics are independently confirmed.
+- [ ] **Historical data rights remain unreviewed.** Nobitex data retention/commercial-use rights need independent confirmation before stronger claims.
+- [ ] **Model acceptance remains open.** Require repeated walk-forward stability across all reported folds, calibrated probability metrics, meaningful baselines, sufficient trade/exposure support and independent model-risk review before any model promotion.
+- [ ] **Windows task implementation remains open.** Do not register a scheduled task until the composition root, verified feed, trusted model pins, single-instance locking, durable journal/reconciliation, failure recovery and independent security/risk review are accepted.
+- [ ] **Production integration remains open.** Provider-backed account/portfolio, live fills/order reconciliation, durable production audit sink, OS-level supervision, fault drills, local Windows 11 acceptance and the Live release gate are not established by CI or research artifacts.

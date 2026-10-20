@@ -16,7 +16,8 @@ from typing import Any, Protocol
 
 from evoryn.domain.models import MarketCandle
 
-REGIME_FEATURE_SCHEMA_VERSION = "1.0.0"
+REGIME_FEATURE_SCHEMA_VERSION = "2.0.0-price-only"
+REGIME_FEATURE_SCHEMA_WITH_VOLUME = "2.0.0-price-plus-volume"
 REGIME_MODEL_OUTPUTS = (
     "bull_trend",
     "bear_trend",
@@ -45,7 +46,7 @@ class InvalidRegimeHistory(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class RegimeFeatureVector:
-    """Four dimensionless, causal features calculated at a completed candle close."""
+    """Four-dimensional causal vector; the fourth slot is zero unless volume is explicitly trusted."""
 
     as_of: datetime
     sample_count: int
@@ -92,16 +93,26 @@ class RegimeFeatureVector:
 
 @dataclass(frozen=True, slots=True)
 class RegimeFeatureExtractor:
-    """Trailing return/trend/volatility/volume features with strict time-series validation."""
+    """Trailing price features plus an opt-in volume ratio whose unit semantics must be trusted."""
 
     lookback: int = 20
+    use_volume_feature: bool = False
     feature_schema_version: str = REGIME_FEATURE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         if type(self.lookback) is not int or self.lookback < 2:
             raise ValueError("lookback must be an integer >= 2.")
-        if not self.feature_schema_version.strip():
-            raise ValueError("feature_schema_version must not be empty.")
+        if type(self.use_volume_feature) is not bool:
+            raise ValueError("use_volume_feature must be an explicit boolean.")
+        expected_schema = (
+            REGIME_FEATURE_SCHEMA_WITH_VOLUME
+            if self.use_volume_feature
+            else REGIME_FEATURE_SCHEMA_VERSION
+        )
+        if self.feature_schema_version != expected_schema:
+            raise ValueError(
+                "feature_schema_version must match the selected price/volume feature contract."
+            )
 
     @property
     def minimum_candles(self) -> int:
@@ -171,13 +182,15 @@ class RegimeFeatureExtractor:
         ) / Decimal(len(returns))
         realized_volatility = variance.sqrt()
         trend_strength = (window[-1].close / window[0].close) - Decimal("1")
-        volumes = tuple(candle.volume for candle in window[1:])
-        mean_volume = sum(volumes, Decimal("0")) / Decimal(len(volumes))
-        volume_ratio = (
-            (volumes[-1] / mean_volume) - Decimal("1")
-            if mean_volume > 0
-            else Decimal("0")
-        )
+        volume_ratio = Decimal("0")
+        if self.use_volume_feature:
+            volumes = tuple(candle.volume for candle in window[1:])
+            mean_volume = sum(volumes, Decimal("0")) / Decimal(len(volumes))
+            volume_ratio = (
+                (volumes[-1] / mean_volume) - Decimal("1")
+                if mean_volume > 0
+                else Decimal("0")
+            )
         last = window[-1]
         return RegimeFeatureVector(
             as_of=last.timestamp + last.interval,
@@ -340,6 +353,7 @@ class RegimeProbabilityModel(Protocol):
     def is_ready(self) -> bool:
         """False until fitted/loaded with a valid, versioned training artifact."""
         ...
+
 
     def predict_probabilities(
         self, completed_history: Sequence[MarketCandle]

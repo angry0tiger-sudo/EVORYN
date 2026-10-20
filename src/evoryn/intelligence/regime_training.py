@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from evoryn.domain.models import MarketCandle
-from evoryn.intelligence.regime import RegimeFeatureExtractor, RegimeLabel
+from evoryn.intelligence.regime import RegimeFeatureExtractor, RegimeLabel, RegimeProbabilityModel
 from evoryn.intelligence.trained_regime import TrainedRegimeProbabilityModel
 from evoryn.learning_lab.backtest import BacktestConfig, BacktestResultStore, run_backtest
 from evoryn.learning_lab.historical_data import HistoricalDataset
@@ -50,6 +50,7 @@ class RegimeTrainingConfig:
     min_class_samples: int = 8
     random_seed: int = 41
     confidence_threshold: Decimal = Decimal("0.65")
+    use_volume_feature: bool = False
 
     def __post_init__(self) -> None:
         if type(self.feature_lookback) is not int or self.feature_lookback < 2:
@@ -76,6 +77,8 @@ class RegimeTrainingConfig:
             or not Decimal("0.5") <= self.confidence_threshold < Decimal("1")
         ):
             raise ValueError("confidence_threshold must be a finite Decimal in [0.5, 1).")
+        if type(self.use_volume_feature) is not bool:
+            raise ValueError("use_volume_feature must be an explicit boolean.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,11 +160,17 @@ class RegimeLongFlatStrategy:
 
     def __init__(
         self,
-        model: TrainedRegimeProbabilityModel,
+        model: RegimeProbabilityModel,
         confidence_threshold: Decimal,
         training_dataset_version: str,
     ) -> None:
         self._model = model
+        model_features = getattr(model, "feature_extractor", None)
+        if model_features is None:
+            model_features = RegimeFeatureExtractor()
+        if not isinstance(model_features, RegimeFeatureExtractor):
+            raise ValueError("Model feature extractor is not a supported causal extractor.")
+        self._features = model_features
         self._confidence_threshold = confidence_threshold
         self._dataset_version = training_dataset_version
         self.strategy_id = "trained-regime-long-flat"
@@ -176,7 +185,7 @@ class RegimeLongFlatStrategy:
         }
 
     def target_exposure(self, history: Sequence[MarketCandle]) -> Decimal:
-        if len(history) < self._model.feature_extractor.minimum_candles:
+        if len(history) < self._features.minimum_candles:
             return _ZERO
         probabilities = self._model.predict_probabilities(history)
         best_label, confidence = max(probabilities.items(), key=lambda item: item[1])
@@ -213,8 +222,10 @@ def train_regime_model(
         raise ValueError("Regime training supports Spot data only.")
     if not dataset.market.symbol.upper().endswith("-USDT"):
         raise ValueError("This training candidate is restricted to USDT-quoted markets.")
-    if dataset.volume_unit != "base_asset":
-        raise ValueError("Backtest requires verified/declared base-asset volume semantics.")
+    if options.use_volume_feature and dataset.volume_unit == "unknown":
+        raise ValueError(
+            "Volume features are disabled when the source does not document volume units."
+        )
     if dataset.allow_gaps or dataset.gap_count:
         raise ValueError("Training refuses gapped OHLCV instead of bridging missing intervals.")
     candles = dataset.candles
@@ -234,7 +245,15 @@ def train_regime_model(
             "Historical dataset is too short for purged chronological model partitions."
         )
 
-    extractor = RegimeFeatureExtractor(lookback=lookback)
+    use_volume_feature = options.use_volume_feature
+    feature_schema = (
+        "2.0.0-price-plus-volume" if use_volume_feature else "2.0.0-price-only"
+    )
+    extractor = RegimeFeatureExtractor(
+        lookback=lookback,
+        use_volume_feature=use_volume_feature,
+        feature_schema_version=feature_schema,
+    )
     series = extractor.extract_series(candles)
     feature_by_index = {
         lookback + offset: list(feature.as_float_tuple())
@@ -353,6 +372,12 @@ def train_regime_model(
         "interval_seconds": int(dataset.interval.total_seconds()),
         "feature_schema_version": extractor.feature_schema_version,
         "feature_lookback": lookback,
+        "volume_feature_enabled": use_volume_feature,
+        "volume_semantics_status": (
+            "DECLARED_BASE_ASSET" if dataset.volume_unit == "base_asset"
+            else "DECLARED_QUOTE_ASSET" if dataset.volume_unit == "quote_asset"
+            else "UNVERIFIED_NOT_USED_IN_MODEL"
+        ),
         "label_horizon_bars": horizon,
         "weak_label_policy": {
             "name": "forward-return-volatility-thresholds-v1",
@@ -426,6 +451,7 @@ def train_regime_model(
         max_bar_participation=Decimal("0.05"),
         allocation_fraction=Decimal("0.25"),
         quantity_step=Decimal("0.00001"),
+        enforce_volume_participation=(dataset.volume_unit == "base_asset"),
     )
     strategies: list[CausalTargetStrategy] = [
         RegimeLongFlatStrategy(
@@ -471,6 +497,11 @@ def train_regime_model(
             "dataset_version": dataset.version,
             "candles_sha256": hashlib.sha256(dataset.candles_csv_bytes()).hexdigest(),
             "dataset_manifest_status": "versioned_in_memory_not_persisted_by_trainer",
+            "volume_semantics_status": (
+                "DECLARED_BASE_ASSET" if dataset.volume_unit == "base_asset"
+                else "DECLARED_QUOTE_ASSET" if dataset.volume_unit == "quote_asset"
+                else "UNVERIFIED"
+            ),
         },
         "training": training_info,
         "backtests": backtests,
@@ -481,6 +512,11 @@ def train_regime_model(
             "spread_bps": str(backtest_config.spread_bps),
             "slippage_bps": str(backtest_config.slippage_bps),
             "max_bar_participation": str(backtest_config.max_bar_participation),
+            "enforce_volume_participation": backtest_config.enforce_volume_participation,
+            "volume_capacity_status": (
+                "ENFORCED_BASE_ASSET" if backtest_config.enforce_volume_participation
+                else "UNCONSTRAINED_UNKNOWN_VOLUME_UNIT"
+            ),
             "allocation_fraction": str(backtest_config.allocation_fraction),
             "quantity_step": str(backtest_config.quantity_step),
         },
@@ -496,8 +532,8 @@ def train_regime_model(
                 "are explicit assumptions."
             ),
             (
-                "Volume is interpreted as base-asset volume for the fill model and requires "
-                "provider semantics review."
+                "UDF volume units are undocumented; price-only features are used and volume-based "
+                "fill participation is disabled for this dataset."
             ),
             "Historical market-data rights/commercial-use permission remain unreviewed.",
             "A positive simulated return is not evidence of future profitability.",

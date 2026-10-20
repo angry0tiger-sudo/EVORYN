@@ -20,6 +20,7 @@ from typing import Any
 from evoryn.domain.models import MarketCandle
 from evoryn.intelligence.regime import (
     REGIME_FEATURE_SCHEMA_VERSION,
+    REGIME_FEATURE_SCHEMA_WITH_VOLUME,
     AbstainingRegimeDetector,
     RegimeFeatureExtractor,
     RegimeLabel,
@@ -204,8 +205,16 @@ def load_trained_regime_model(
     training_manifest = manifest_value.get("training")
     if not isinstance(training_manifest, dict):
         raise TrainedRegimeArtifactError("Model training manifest is missing.")
-    if training_manifest.get("feature_schema_version") != REGIME_FEATURE_SCHEMA_VERSION:
-        raise TrainedRegimeArtifactError("Model feature schema is unsupported.")
+    volume_feature_enabled = training_manifest.get("volume_feature_enabled")
+    if type(volume_feature_enabled) is not bool:
+        raise TrainedRegimeArtifactError("Manifest volume feature status must be explicit.")
+    expected_feature_schema = (
+        REGIME_FEATURE_SCHEMA_WITH_VOLUME
+        if volume_feature_enabled
+        else REGIME_FEATURE_SCHEMA_VERSION
+    )
+    if training_manifest.get("feature_schema_version") != expected_feature_schema:
+        raise TrainedRegimeArtifactError("Model feature schema is unsupported or inconsistent.")
     manifest_lookback = training_manifest.get("feature_lookback")
     if type(manifest_lookback) is not int or manifest_lookback < 2:
         raise TrainedRegimeArtifactError("Manifest feature lookback is invalid.")
@@ -268,7 +277,11 @@ def load_trained_regime_model(
             temperature=float(temperature),
             model_fingerprint=actual_sha,
             model_version=actual_sha[:16],
-            feature_extractor=RegimeFeatureExtractor(lookback=lookback),
+            feature_extractor=RegimeFeatureExtractor(
+                lookback=lookback,
+                use_volume_feature=volume_feature_enabled,
+                feature_schema_version=expected_feature_schema,
+            ),
             training_manifest=training_manifest,
         )
     except (ValueError, TypeError, AttributeError, OverflowError) as exc:

@@ -145,3 +145,8 @@ This is a safety-oriented implementation candidate, not a launchable automated t
 - [Phase 24: Historical Regime Research and Process-Local Scheduler](docs/operations/phase-24-regime-training-supervisor.md)
 - [Nobitex Regime Model Holdout Research (real public OHLCV, research-only)](docs/research/2026-10-20-nobitex-regime-holdout.md)
 - [Technical debt and release gates](TECHNICAL_DEBT.md)
+
+
+## Follow-up research and Windows supervision
+
+The follow-up research candidate on branch research/walk-forward-labels-volume-audit-20261020 keeps Nobitex UDF volume units explicitly unknown, defaults regime features to price-only, and disables volume-derived fill-capacity limits until the provider semantics are verified. It compares two train-fitted weak-label policies and three time-series model families in purged rolling folds. These candidate changes are not accepted until their exact-head CI and research artifacts succeed. Windows Task Scheduler work is design-only; no local task is installed or started.
