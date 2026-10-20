@@ -66,6 +66,18 @@ class MetaLabelTuningResult:
     random_seed: int
 
 
+@dataclass(frozen=True, slots=True)
+class ValidationThresholdSelection:
+    """Decision threshold selected from validation events only."""
+
+    threshold: float
+    validation_event_count: int
+    selected_event_count: int
+    summed_net_return_fraction: float
+    mean_net_contribution_per_event: float
+    abstain: bool
+
+
 def advanced_feature_names() -> tuple[str, ...]:
     """Return the stable, versioned order for advanced features."""
     return _FEATURE_NAMES
@@ -389,6 +401,69 @@ def build_sma_meta_labels(
             round_trip_cost_bps=round_trip_cost_bps, label=int(net_return > 0),
         ))
     return tuple(events)
+
+
+def select_meta_label_threshold(
+    validation_events: Sequence[MetaLabelEvent],
+    validation_probabilities: Sequence[float],
+) -> ValidationThresholdSelection:
+    """Choose a conservative probability threshold using validation outcomes only.
+
+    The fixed grid minimizes threshold-search flexibility. A candidate is eligible only
+    when it retains at least max(3, ceil(20% of validation events)) events and its summed
+    after-cost validation return is positive. If no candidate meets both conditions, return
+    threshold 1.01, which intentionally abstains from all future entries. This validation
+    objective is a model-selection heuristic; the locked walk-forward backtest remains the
+    economic acceptance authority.
+    """
+    import math
+
+    if len(validation_events) != len(validation_probabilities) or not validation_events:
+        raise ValueError("Threshold selection requires aligned, non-empty validation events.")
+    probabilities = tuple(float(value) for value in validation_probabilities)
+    if not all(math.isfinite(value) and 0.0 <= value <= 1.0 for value in probabilities):
+        raise ValueError("Validation probabilities must be finite values in [0, 1].")
+    minimum_selected = max(3, math.ceil(0.20 * len(validation_events)))
+    thresholds = (
+        0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45,
+        0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95,
+    )
+    best_threshold: float | None = None
+    best_sum = 0.0
+    best_count = 0
+    for threshold in thresholds:
+        selected = tuple(
+            event.net_return_after_costs
+            for event, probability in zip(validation_events, probabilities, strict=True)
+            if probability >= threshold
+        )
+        if len(selected) < minimum_selected:
+            continue
+        net_sum = sum(selected)
+        if net_sum > best_sum or (
+            net_sum == best_sum and net_sum > 0.0
+            and (best_threshold is None or threshold > best_threshold)
+        ):
+            best_threshold = threshold
+            best_sum = net_sum
+            best_count = len(selected)
+    if best_threshold is None:
+        return ValidationThresholdSelection(
+            threshold=1.01,
+            validation_event_count=len(validation_events),
+            selected_event_count=0,
+            summed_net_return_fraction=0.0,
+            mean_net_contribution_per_event=0.0,
+            abstain=True,
+        )
+    return ValidationThresholdSelection(
+        threshold=best_threshold,
+        validation_event_count=len(validation_events),
+        selected_event_count=best_count,
+        summed_net_return_fraction=best_sum,
+        mean_net_contribution_per_event=best_sum / len(validation_events),
+        abstain=False,
+    )
 
 
 def make_meta_label_classifier(
