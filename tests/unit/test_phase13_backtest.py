@@ -489,7 +489,7 @@ def test_backtest_rejects_non_spot_dataset_for_spot_only_accounting() -> None:
 
 def test_backtest_rejects_quote_volume_when_fill_cap_requires_base_volume() -> None:
     quote_volume_dataset = dataset(count=10, volume_unit="quote_asset")
-    with pytest.raises(ValueError, match="require base-asset volume"):
+    with pytest.raises(ValueError, match="confirmed base-asset volume semantics"):
         run_backtest(
             quote_volume_dataset,
             SmaTrendBaseline(window=2),

@@ -412,7 +412,8 @@ def run_walk_forward_research(
             else:
                 labels = {
                     index: volatility_scaled_triple_barrier_label(
-                        outcomes[index],
+                        candles,
+                        index,
                         trailing_volatility=float(feature_by_index[index][2]),
                         horizon_bars=horizon,
                         barrier_multiplier=options.triple_barrier_multiplier,
@@ -669,7 +670,12 @@ def run_walk_forward_research(
                 baselines[strategy.strategy_id] = {
                     "run_id": result.run_id,
                     "report_path": str(report_path.relative_to(output)),
-                    "metrics": _backtest_metrics(result.metrics),
+                    "metrics": _backtest_metrics(
+                        result.metrics,
+                        volume_capacity_constraint_enabled=(
+                            backtest_config.enforce_volume_participation
+                        ),
+                    ),
                 }
             fold_reports.append(
                 {
