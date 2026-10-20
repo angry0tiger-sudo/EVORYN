@@ -210,7 +210,7 @@ No open item may be closed by inference. This ledger does not authorize live tra
   `EVORYN-CI-PaperOnly-*` task; the test attempts cleanup in a `finally` block. Cross-platform unit tests
   validate config, CSV freshness/gaps, UNC rejection and task-name scope.
 - [x] **Seven-gate checkpoint passed.** GitHub Actions [Run #1018](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39486110714) passed all seven configured jobs on checkpoint SHA `7eaaaacd2f2c38d91e0bd2cb87352410e08cb648`: pytest, Ruff, strict mypy, Bandit, preflight/compile, pip-audit, and Windows Paper/Task Scheduler. The Windows job parsed the PowerShell helper and reported **12 passed, 1 skipped** (`O_NOFOLLOW` is POSIX-only); the disposable CI task successfully completed register/status/unregister.
-- [ ] **Final-head CI rerun.** Later documentation/workflow-only commits change the PR HEAD; require all seven jobs green on the latest exact PR HEAD before merge. Do not infer that from checkpoint Run #1018.
+- **Merge gate (always enforced):** merge only after all seven required CI jobs report `success` for the current PR HEAD; do not infer latest-head status from checkpoint Run #1018 or an earlier attempt.
 - [ ] **Fresh schema-v3 research artifact.** The historical six-model schema-v2 Artifact #12256082280 has
   no model backtest entries under `forward_thresholds`. A new research run on the current source must confirm
   six models, both policy backtests, per-policy candidate gates, model artifact checksums/reloads, and report
