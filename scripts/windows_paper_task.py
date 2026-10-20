@@ -25,7 +25,11 @@ from typing import Any
 from evoryn.domain.models import Market, MarketCandle, MarketSnapshot
 from evoryn.intelligence.regime import RegimeLabel, RegimePrediction
 from evoryn.risk.models import RiskLimits
-from evoryn.runtime.paper import PaperRuntimeSupervisor, PaperStrategyRuntime, SQLitePaperRuntimeLedger
+from evoryn.runtime.paper import (
+    PaperRuntimeSupervisor,
+    PaperStrategyRuntime,
+    SQLitePaperRuntimeLedger,
+)
 from evoryn.runtime.scheduler import PaperRuntimeScheduler
 from evoryn.runtime.single_instance import PaperRuntimeLocks, RuntimeAlreadyRunning
 from evoryn.strategies.plugins import build_baseline_registry
@@ -136,7 +140,7 @@ class OfflineCsvPaperFeed:
 
 
 class NoChampionClassifier:
-    """Explicit no-model result; abstains on every candle until a Champion is separately approved."""
+    """Abstain on every candle until a Champion is separately approved."""
 
     def classify(
         self,
@@ -183,11 +187,15 @@ def load_and_validate_config(config_path: Path) -> dict[str, Any]:
     if unknown:
         raise PaperTaskConfigurationError(f"Unknown configuration keys: {sorted(unknown)}.")
     if missing:
-        raise PaperTaskConfigurationError(f"Required configuration keys are missing: {sorted(missing)}.")
+        raise PaperTaskConfigurationError(
+            f"Required configuration keys are missing: {sorted(missing)}."
+        )
     if type(value["schema_version"]) is not int or value["schema_version"] != 1:
         raise PaperTaskConfigurationError("schema_version must be integer 1.")
     if value["runtime_mode"] != "paper_only" or value["simulation_only"] is not True:
-        raise PaperTaskConfigurationError("Only runtime_mode=paper_only and simulation_only=true are accepted.")
+        raise PaperTaskConfigurationError(
+            "Only runtime_mode=paper_only and simulation_only=true are accepted."
+        )
     if value["market_symbol"] != "BTC-USDT":
         raise PaperTaskConfigurationError("The offline Paper task is restricted to BTC-USDT.")
     interval_seconds = _positive_int(value, "interval_seconds")
@@ -220,13 +228,17 @@ def load_and_validate_config(config_path: Path) -> dict[str, Any]:
     journal_path = paths["journal_path"]
     log_path = paths["log_path"]
     if not csv_path.is_file() or csv_path.is_symlink():
-        raise PaperTaskConfigurationError("csv_path must point to an existing regular local CSV file.")
+        raise PaperTaskConfigurationError(
+            "csv_path must point to an existing regular local CSV file."
+        )
     if csv_path.stat().st_size > _MAX_CSV_BYTES:
         raise PaperTaskConfigurationError("CSV file exceeds the configured size ceiling.")
     if not journal_path.parent.is_dir() or not log_path.parent.is_dir():
         raise PaperTaskConfigurationError("Journal and log parent directories must already exist.")
     if journal_path.exists() and (journal_path.is_symlink() or not journal_path.is_file()):
-        raise PaperTaskConfigurationError("journal_path must be a regular file when it already exists.")
+        raise PaperTaskConfigurationError(
+            "journal_path must be a regular file when it already exists."
+        )
     if log_path.exists() and (log_path.is_symlink() or not log_path.is_file()):
         raise PaperTaskConfigurationError("log_path must be a regular file when it already exists.")
     value["csv_path"] = csv_path
@@ -453,8 +465,16 @@ def _run_paper(config_path: Path, *, max_cycles: int | None) -> int:
                 result.last_status,
                 result.exit_reason,
             )
-            print(json.dumps({**report, "cycles_completed": result.cycles_completed,
-                              "last_status": result.last_status, "exit_reason": result.exit_reason}))
+            print(
+                json.dumps(
+                    {
+                        **report,
+                        "cycles_completed": result.cycles_completed,
+                        "last_status": result.last_status,
+                        "exit_reason": result.exit_reason,
+                    }
+                )
+            )
             return 2 if result.last_status == "halted" else 0
     except RuntimeAlreadyRunning:
         logging.warning("paper_task_exit reason=already_running")
@@ -533,7 +553,10 @@ def _task_name_is_owned(task_name: str) -> bool:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    preflight_parser = sub.add_parser("preflight", help="Validate config and local candle freshness without mutation.")
+    preflight_parser = sub.add_parser(
+        "preflight",
+        help="Validate config and local candle freshness without mutation.",
+    )
     preflight_parser.add_argument("--config", required=True, type=Path)
     run_parser = sub.add_parser("run", help="Run offline, no-Champion Paper supervision.")
     run_parser.add_argument("--config", required=True, type=Path)
@@ -557,8 +580,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise PaperTaskConfigurationError("--max-cycles must be positive.")
             return _run_paper(args.config, max_cycles=args.max_cycles)
         if not _task_name_is_owned(args.task_name):
-            raise PaperTaskConfigurationError("Refusing to manage a Task Scheduler name outside the EVORYN Paper namespace.")
-        config_path = args.config if args.config is not None else Path.cwd() / "unused-paper-config.json"
+            raise PaperTaskConfigurationError(
+                "Refusing to manage a Task Scheduler name outside the EVORYN Paper namespace."
+            )
+        config_path = (
+            args.config
+            if args.config is not None
+            else Path.cwd() / "unused-paper-config.json"
+        )
         if args.command == "register":
             load_and_validate_config(config_path)
         return _run_windows_task_action(args.command, config_path, args.task_name)
