@@ -222,7 +222,7 @@ def _build_candidate_gates_by_policy(
                 ),
                 "runtime_promotion_allowed": False,
                 "runtime_promotion_blockers": [
-                    "Model selection was performed on these same walk-forward windows; an untouched "
+                    "Model selection was performed on these same walk-forward windows; "
                     "confirmation period is required.",
                     "The terminal reservation is scoped to this walk-forward run; verify prior "
                     "experiment/test ranges before calling any period project-level untouched.",
