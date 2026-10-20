@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from evoryn.domain.models import Market
 from scripts.windows_paper_task import (
     DEFAULT_TASK_NAME,
     OfflineCsvPaperFeed,
@@ -35,7 +36,7 @@ def _write_fixture(tmp_path: Path, *, stale: bool = False, gap: bool = False) ->
         last_open -= timedelta(days=3)
     timestamps = [last_open - 2 * INTERVAL, last_open - INTERVAL, last_open]
     if gap:
-        timestamps[1] -= INTERVAL
+        timestamps[0] -= INTERVAL
     path = data / "candles.csv"
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
@@ -91,9 +92,7 @@ def test_valid_config_and_fresh_offline_csv_preflight(tmp_path: Path) -> None:
 
 def test_offline_csv_feed_builds_simulation_only_snapshot(tmp_path: Path) -> None:
     candles_path = _write_fixture(tmp_path)
-    market = __import__("evoryn.domain.models", fromlist=["Market"]).Market(
-        symbol="BTC-USDT", venue="nobitex", market_type="spot"
-    )
+    market = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
     feed = OfflineCsvPaperFeed(market=market, interval=INTERVAL, csv_path=candles_path)
     now = datetime.now(UTC)
     candles = feed.get_completed_candles(market, INTERVAL, now=now)
@@ -112,9 +111,11 @@ def test_offline_csv_rejects_stale_or_gapped_data(tmp_path: Path, stale: bool, g
     from evoryn.domain.models import Market
 
     market = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
-    with pytest.raises(ValueError):
-        _read_csv_candles(path, market, INTERVAL)
+    if gap:
+        with pytest.raises(ValueError, match="gapped"):
+            _read_csv_candles(path, market, INTERVAL)
     if stale:
+        _read_csv_candles(path, market, INTERVAL)
         config = _write_config(tmp_path, path)
         with pytest.raises(PaperTaskConfigurationError, match="stale"):
             preflight(config)
