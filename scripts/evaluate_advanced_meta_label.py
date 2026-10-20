@@ -42,6 +42,41 @@ class _BuyAndHold:
         return Decimal("1") if history else Decimal("0")
 
 
+class _SmaCrossEventBaseline:
+    """Unfiltered SMA entry-event comparator with the same flat-at-test-start policy."""
+
+    strategy_id = "sma-crossover-entry-events-long-flat"
+    strategy_version = "1.0.0"
+
+    def __init__(self, *, eligible_start_index: int, fast_window: int = 12, slow_window: int = 48) -> None:
+        self._eligible_start_index = eligible_start_index
+        self._fast_window = fast_window
+        self._slow_window = slow_window
+        self._holding = False
+
+    def parameters(self) -> dict[str, str]:
+        return {
+            "primary_signal": "SMA golden cross 12/48",
+            "entry_start_index": str(self._eligible_start_index),
+            "position_policy": "flat_until_new_cross_up_inside_test",
+        }
+
+    def target_exposure(self, history: Sequence[MarketCandle]) -> Decimal:
+        if len(history) < self._slow_window + 1:
+            self._holding = False
+            return Decimal("0")
+        closes = [float(candle.close) for candle in history]
+        fast_now = sum(closes[-self._fast_window :]) / self._fast_window
+        slow_now = sum(closes[-self._slow_window :]) / self._slow_window
+        fast_before = sum(closes[-self._fast_window - 1 : -1]) / self._fast_window
+        slow_before = sum(closes[-self._slow_window - 1 : -1]) / self._slow_window
+        if fast_now <= slow_now:
+            self._holding = False
+        elif fast_before <= slow_before and len(history) - 1 >= self._eligible_start_index:
+            self._holding = True
+        return Decimal("1") if self._holding else Decimal("0")
+
+
 class _SmaMetaLabelStrategy:
     """Fold-fitted meta-filter for completed-bar SMA golden-cross events."""
 
@@ -269,7 +304,7 @@ def run_experiment(
     model_dir.mkdir(parents=True, exist_ok=True)
     per_fold: list[dict[str, Any]] = []
     fold_results: dict[str, dict[str, list[float]]] = {
-        name: {"net": [], "vs_buy_hold": [], "vs_sma": [], "ap": [], "prevalence": [], "trades": []}
+        name: {"net": [], "vs_buy_hold": [], "vs_sma": [], "vs_sma_event": [], "ap": [], "prevalence": [], "trades": []}
         for name in ("xgboost", "lightgbm")
     }
 
@@ -304,7 +339,16 @@ def run_experiment(
             start_index=fold.test.start,
             end_index=fold.test.end,
             warmup_start_index=0,
-            segment_name=f"advanced-meta-test-sma-fold-{fold.fold_index}",
+            segment_name=f"advanced-meta-test-sma-state-fold-{fold.fold_index}",
+        )
+        sma_event_baseline = run_backtest(
+            dataset,
+            _SmaCrossEventBaseline(eligible_start_index=fold.test.start),
+            backtest_config,
+            start_index=fold.test.start,
+            end_index=fold.test.end,
+            warmup_start_index=0,
+            segment_name=f"advanced-meta-test-sma-event-fold-{fold.fold_index}",
         )
         buy_hold = run_backtest(
             dataset,
@@ -316,6 +360,7 @@ def run_experiment(
             segment_name=f"advanced-meta-test-buyhold-fold-{fold.fold_index}",
         )
         baseline_sma_return = float(sma_baseline.metrics.net_return_fraction)
+        baseline_sma_event_return = float(sma_event_baseline.metrics.net_return_fraction)
         baseline_hold_return = float(buy_hold.metrics.net_return_fraction)
 
         for model_offset, model_name in enumerate(("xgboost", "lightgbm")):
@@ -418,7 +463,9 @@ def run_experiment(
             )
             model_net = float(backtest.metrics.net_return_fraction)
             closed_trades = int(backtest.metrics.closed_trade_count)
-            delta_hold, delta_sma = model_net - baseline_hold_return, model_net - baseline_sma_return
+            delta_hold = model_net - baseline_hold_return
+            delta_sma = model_net - baseline_sma_return
+            delta_sma_event = model_net - baseline_sma_event_return
             record = {
                 "status": "EVALUATED",
                 "tuning": {
@@ -442,16 +489,19 @@ def run_experiment(
                 "test_backtest_metrics": _metrics(backtest),
                 "same_fold_baselines": {
                     "buy_and_hold": _metrics(buy_hold),
-                    "sma_12_48": _metrics(sma_baseline),
+                    "sma_12_48_state": _metrics(sma_baseline),
+                    "sma_12_48_entry_events": _metrics(sma_event_baseline),
                 },
                 "net_return_difference_vs_buy_and_hold": delta_hold,
                 "net_return_difference_vs_sma": delta_sma,
+                "net_return_difference_vs_sma_entry_event_baseline": delta_sma_event,
                 "runtime_promotion_allowed": False,
             }
             fold_record["models"][model_name] = record
             fold_results[model_name]["net"].append(model_net)
             fold_results[model_name]["vs_buy_hold"].append(delta_hold)
             fold_results[model_name]["vs_sma"].append(delta_sma)
+            fold_results[model_name]["vs_sma_event"].append(delta_sma_event)
             fold_results[model_name]["trades"].append(float(closed_trades))
             if test_ap is not None and prevalence is not None:
                 fold_results[model_name]["ap"].append(test_ap)
@@ -459,7 +509,8 @@ def run_experiment(
 
         fold_record["baselines"] = {
             "buy_and_hold": _metrics(buy_hold),
-            "sma_12_48": _metrics(sma_baseline),
+            "sma_12_48_state": _metrics(sma_baseline),
+            "sma_12_48_entry_events": _metrics(sma_event_baseline),
         }
         per_fold.append(fold_record)
 
@@ -469,7 +520,7 @@ def run_experiment(
         folds_evaluated = len(values["net"])
         complete_coverage = folds_evaluated == len(folds) and len(folds) >= 10
         intervals: dict[str, Any] = {}
-        for metric in ("vs_buy_hold", "vs_sma"):
+        for metric in ("vs_buy_hold", "vs_sma", "vs_sma_event"):
             if values[metric]:
                 intervals[metric] = _bootstrap_interval(
                     values[metric], seed=random_seed + 5000 + model_index * 10 + (0 if metric == "vs_buy_hold" else 1)
@@ -485,8 +536,10 @@ def run_experiment(
             and _mean(values["net"]) > 0
             and "vs_buy_hold" in intervals
             and "vs_sma" in intervals
+            and "vs_sma_event" in intervals
             and float(intervals["vs_buy_hold"]["ci95_lower"]) > 0
             and float(intervals["vs_sma"]["ci95_lower"]) > 0
+            and float(intervals["vs_sma_event"]["ci95_lower"]) > 0
             and sum(values["trades"]) >= 20
         )
         gates[model_name] = {
