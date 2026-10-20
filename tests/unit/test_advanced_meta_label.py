@@ -174,8 +174,8 @@ def test_tuning_trial_count_fails_closed_before_optional_imports() -> None:
 def test_advanced_evaluator_loads_the_versioned_dataset_store_reference(
     tmp_path: Path,
 ) -> None:
-    from scripts import evaluate_advanced_meta_label as evaluator
     from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
+    from scripts import evaluate_advanced_meta_label as evaluator
 
     dataset_id = "nobitex-btcusdt-1h"
     dataset_version = "a" * 64
