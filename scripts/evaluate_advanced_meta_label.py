@@ -634,14 +634,15 @@ def run_experiment(
         report, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
     report_path = artifacts_dir / "advanced-meta-label-report.json"
-    report_path.write_bytes(report_bytes + b"\n")
+    report_path.write_bytes(report_bytes + bytes([10]))
+    report_digest = hashlib.sha256(report_path.read_bytes()).hexdigest()
     (artifacts_dir / "advanced-meta-label-report.json.sha256").write_text(
-        hashlib.sha256(report_bytes + b"\n").hexdigest() + "\n", encoding="ascii"
+        report_digest + chr(10), encoding="ascii"
     )
     print(f"ADVANCED_EXPERIMENT_ID={report['experiment_id']}")
     print(f"ADVANCED_DATASET_VERSION={dataset.version}")
     print(f"ADVANCED_FOLDS={len(folds)}")
-    print(f"ADVANCED_REPORT_SHA256={hashlib.sha256(report_bytes + b'\\n').hexdigest()}")
+    print(f"ADVANCED_REPORT_SHA256={report_digest}")
     print("SELECTED_MODEL_FOR_RUNTIME=null")
     for name, gate in gates.items():
         print(
