@@ -234,3 +234,14 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [ ] **Feature/model validation:** confirm prefix causality on exact code; audit closed-bar 4h/daily aggregation, label horizons, event purging, feature selection scope, Optuna split discipline, artifact serialization and three paired baseline comparisons.
 - [ ] **Liquidity limitations:** UDF volume semantics remain unknown and historical book depth has not been sourced. Features omit volume/order-book, and capacity limits are disabled; do not interpret the backtest as liquidity-realistic.
 - [ ] **No promotion by this phase:** selected_model_for_runtime remains null in code and reports. Empirical success alone cannot bypass untouched confirmation, independent model-risk review, loader compatibility, deterministic risk protections, and separate release approval.
+
+
+### Phase 29 first empirical checkpoint — 2026-10-20
+
+- [x] The bounded public-history request completed and produced a verified immutable dataset: 11,430 H1 candles, 23 pages, zero reported gaps, actual coverage 2025-07-01 13:30 UTC through 2026-10-20 18:30 UTC (about 476 days, despite a 730-day request).
+- [x] Exact-head CI on SHA \`a80c4c200c6acfbb8169bd19de1ff206a8b8e7e2\` passed all seven jobs. Research workflow static/type/security/unit/dependency preflight and run completed successfully.
+- [ ] **Candidate failed empirical gates:** XGBoost and LightGBM each evaluated only 3/11 folds; only scored test-fold AP equaled positive prevalence (0.20), both made zero closed trades, mean net return was 0, and paired-fold lower confidence bounds versus all three baselines were negative. No model qualifies.
+- [ ] **Artifact reproducibility correction:** first run artifact carries dataset and manifest hashes but not the underlying dataset CSV/manifest. Update the workflow artifact path to retain the immutable dataset files before treating any future run as fully reproducible.
+- [ ] **Second research iteration:** improve signal/threshold research using only train/validation data, retain test isolation and explicit multiple-comparison controls, and never reduce empirical gates to manufacture acceptance.
+- [ ] **Promotion remains blocked:** \`selected_model_for_runtime=null\`; no Champion, no runtime change, no live connection and no order submission.
+- Evidence: \`docs/research/advanced-ai-optimization-first-run-2026-10-20.md\`; workflow run ID 39491394243; artifact ID 12295054562.
