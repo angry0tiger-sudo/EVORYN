@@ -16,7 +16,7 @@ nobitex = "evoryn.adapters.exchanges.nobitex:NobitexExchangePlugin"
 [project.optional-dependencies]
 dev = ["bandit>=1.7.10", "mypy>=1.11.2,<2", "pytest>=8.3.3", "ruff>=0.6.9"]
 regime = ["hmmlearn==0.3.3", "numpy>=1.26,<2", "scikit-learn>=1.5,<2"]
-regime-upgrade = ["xgboost>=3.4,<3.5"]
+regime-upgrade = ["xgboost>=3.4,<3.5", "lightgbm==4.7.0"]
 news-nlp = ["transformers>=4.44,<5", "torch>=2.6,<3"]
 
 [tool.setuptools]

@@ -44,9 +44,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("Training report dataset identity is invalid.")
     dataset = HistoricalDatasetStore(output / "datasets").load(dataset_id, dataset_version)
     count = len(dataset.candles)
+    confirmation_bars = max(1, (count + 9) // 10)
+    research_bars = count - confirmation_bars
     train_bars = int(count * 0.40)
     validation_bars = int(count * 0.10)
-    test_bars = int(count * 0.05)
+    test_bars = max(1, int(count * 0.035))
+    if research_bars < train_bars + validation_bars + 10 * test_bars:
+        raise SystemExit(
+            "Dataset is too short to reserve terminal confirmation data and retain "
+            "ten non-overlapping research folds."
+        )
     config = WalkForwardResearchConfig(
         feature_lookback=48,
         horizon_bars=6,
@@ -54,6 +61,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         validation_bars=validation_bars,
         test_bars=test_bars,
         step_bars=test_bars,
+        confirmation_bars=confirmation_bars,
         lstm_epochs=18,
         trend_quantile=0.65,
         volatility_quantile=0.75,
@@ -72,6 +80,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"WALK_FORWARD_EXPERIMENT_ID={report_value['experiment_id']}")
     print(f"WALK_FORWARD_DATASET_VERSION={dataset.version}")
     print(f"WALK_FORWARD_FOLD_COUNT={report_value['protocol']['fold_count']}")
+    print(
+        "WALK_FORWARD_RESEARCH_END_INDEX="
+        f"{report_value['protocol']['research_evaluation_end_index']}"
+    )
+    print(
+        "WALK_FORWARD_CONFIRMATION="
+        f"{report_value['protocol']['terminal_confirmation']['status']}"
+    )
+    print(
+        "WALK_FORWARD_CONFIRMATION_BARS="
+        f"{report_value['protocol']['terminal_confirmation']['bar_count']}"
+    )
     print(f"WALK_FORWARD_REPORT_SHA256={digest}")
     print(f"WALK_FORWARD_REPORT={output_path}")
     print(f"VOLUME_SEMANTICS={report_value['dataset']['volume_semantics_status']}")

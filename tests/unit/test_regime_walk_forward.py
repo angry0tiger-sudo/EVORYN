@@ -14,6 +14,8 @@ from evoryn.intelligence.regime_walk_forward import (
     filtered_gaussian_hmm_probabilities,
     volatility_scaled_triple_barrier_label,
 )
+from evoryn.learning_lab.backtest import make_walk_forward_folds
+from evoryn.learning_lab.historical_data import HistoricalDataset
 
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 INTERVAL = timedelta(hours=1)
@@ -197,3 +199,95 @@ def test_lstm_training_produces_normalized_probabilities_when_torch_is_available
     assert probabilities.shape == (4, 4)
     assert numpy.isfinite(probabilities).all()
     assert numpy.allclose(probabilities.sum(axis=1), numpy.ones(4), atol=1e-6)
+
+
+def test_terminal_confirmation_geometry_stays_outside_all_research_folds() -> None:
+    count = 4319
+    confirmation_bars = (count + 9) // 10
+    research_end = count - confirmation_bars
+    candles = _technical_fixture(count)
+    dataset = HistoricalDataset(
+        dataset_id="walk-forward-confirmation-test",
+        market=MARKET,
+        interval=INTERVAL,
+        volume_unit="unknown",
+        source_name="synthetic-test-only",
+        source_uri="urn:evoryn:test:source",
+        source_revision="fixture-v1",
+        license_id="test-only-unreviewed",
+        license_uri="urn:evoryn:test:license",
+        collected_at=START + count * INTERVAL,
+        candles=candles,
+    )
+    test_bars = int(count * 0.035)
+    folds = make_walk_forward_folds(
+        dataset,
+        train_bars=int(count * 0.40),
+        validation_bars=int(count * 0.10),
+        test_bars=test_bars,
+        step_bars=test_bars,
+        evaluation_end_index=research_end,
+    )
+
+    assert len(folds) >= 10
+    assert all(fold.test.end <= research_end for fold in folds)
+    assert folds[-1].test.end < research_end
+    assert all(
+        left.test.end <= right.test.start
+        for left, right in zip(folds, folds[1:], strict=False)
+    )
+    assert len(candles[research_end:]) == confirmation_bars
+    with pytest.raises(ValueError, match="evaluation_end_index"):
+        make_walk_forward_folds(
+            dataset,
+            train_bars=10,
+            validation_bars=5,
+            test_bars=5,
+            evaluation_end_index=count + 1,
+        )
+
+
+def test_lightgbm_fixed_class_order_probabilities_and_serialization(tmp_path) -> None:
+    lightgbm = pytest.importorskip("lightgbm")
+    joblib = pytest.importorskip("joblib")
+    numpy = pytest.importorskip("numpy")
+
+    generator = numpy.random.default_rng(41)
+    features = generator.normal(size=(80, 21)).astype("float64")
+    targets = numpy.asarray([0, 1, 2, 3] * 20, dtype="int64")
+    estimator = lightgbm.LGBMClassifier(
+        objective="multiclass",
+        num_class=4,
+        n_estimators=20,
+        learning_rate=0.04,
+        max_depth=3,
+        num_leaves=7,
+        max_bin=31,
+        min_child_samples=2,
+        n_jobs=1,
+        random_state=41,
+        deterministic=True,
+        force_col_wise=True,
+        verbosity=-1,
+    )
+    estimator.fit(features, targets)
+    probabilities = estimator.predict_proba(features[:8])
+
+    assert tuple(int(value) for value in estimator.classes_) == (0, 1, 2, 3)
+    assert probabilities.shape == (8, 4)
+    assert numpy.isfinite(probabilities).all()
+    assert numpy.allclose(probabilities.sum(axis=1), numpy.ones(8), atol=1e-6)
+
+    artifact = tmp_path / "lightgbm-challenger.joblib"
+    joblib.dump(
+        {
+            "estimator": estimator,
+            "class_order": ["bull_trend", "bear_trend", "range_bound", "high_volatility"],
+            "label_encoding": {"0": "bull_trend", "1": "bear_trend", "2": "range_bound", "3": "high_volatility"},
+        },
+        artifact,
+    )
+    restored = joblib.load(artifact)
+    assert numpy.allclose(
+        probabilities, restored["estimator"].predict_proba(features[:8]), atol=1e-12
+    )

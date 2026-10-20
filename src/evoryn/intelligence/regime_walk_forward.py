@@ -60,7 +60,14 @@ _LABELS = (
     RegimeLabel.HIGH_VOLATILITY,
 )
 _POLICIES = ("forward_thresholds", "volatility_scaled_triple_barrier")
-_MODELS = ("random_forest", "hist_gradient_boosting", "xgboost", "gaussian_hmm", "lstm")
+_MODELS = (
+    "random_forest",
+    "hist_gradient_boosting",
+    "xgboost",
+    "lightgbm",
+    "gaussian_hmm",
+    "lstm",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +80,7 @@ class WalkForwardResearchConfig:
     validation_bars: int = 432
     test_bars: int = 216
     step_bars: int = 216
+    confirmation_bars: int = 0
     lstm_epochs: int = 18
     trend_quantile: float = 0.65
     volatility_quantile: float = 0.75
@@ -94,6 +102,8 @@ class WalkForwardResearchConfig:
             value = getattr(self, name)
             if type(value) is not int or value <= 0:
                 raise ValueError(f"{name} must be a positive integer.")
+        if type(self.confirmation_bars) is not int or self.confirmation_bars < 0:
+            raise ValueError("confirmation_bars must be a non-negative integer.")
         if self.feature_lookback < 48 or self.horizon_bars < 1:
             raise ValueError("Feature lookback must be >= 48 and horizon must be positive.")
         if type(self.lstm_epochs) is not int or not 1 <= self.lstm_epochs <= 100:
@@ -231,20 +241,27 @@ def run_walk_forward_research(
     if dataset.allow_gaps or dataset.gap_count:
         raise ValueError("Walk-forward research refuses gapped data.")
     candles = dataset.candles
+    evaluation_end_index = len(candles) - options.confirmation_bars
+    if evaluation_end_index <= 0:
+        raise ValueError("Terminal confirmation reservation leaves no research candles.")
+    if options.confirmation_bars and options.confirmation_bars < options.horizon_bars:
+        raise ValueError("Terminal confirmation period must cover at least one label horizon.")
     folds = make_walk_forward_folds(
         dataset,
         train_bars=options.train_bars,
         validation_bars=options.validation_bars,
         test_bars=options.test_bars,
         step_bars=options.step_bars,
+        evaluation_end_index=evaluation_end_index,
     )
     if len(folds) < 10:
         raise ValueError(
             f"At least ten non-overlapping test folds are required; got {len(folds)}."
         )
+    # Keep confirmation candles outside even the research feature-generation pass.
     feature_by_index: dict[int, tuple[float, ...]] = {
         index: research_feature_vector(candles, index, lookback=options.feature_lookback)
-        for index in range(options.feature_lookback, len(candles))
+        for index in range(options.feature_lookback, evaluation_end_index)
     }
     output = Path(output_dir).expanduser().resolve()
     model_dir = output / "models"
@@ -255,6 +272,7 @@ def run_walk_forward_research(
     sklearn_preprocessing = importlib.import_module("sklearn.preprocessing")
     sklearn_hmm = importlib.import_module("hmmlearn.hmm")
     xgboost = importlib.import_module("xgboost")
+    lightgbm = importlib.import_module("lightgbm")
     joblib = importlib.import_module("joblib")
     fold_reports: list[dict[str, Any]] = []
     aggregate_source: dict[str, list[dict[str, Any]]] = {}
@@ -554,6 +572,58 @@ def run_walk_forward_research(
                     payload = {
                         "estimator": estimator,
                         "class_order": [label.value for label in class_order],
+                        "label_encoding": {
+                            str(index): label.value
+                            for index, label in enumerate(_LABELS)
+                        },
+                    }
+                elif model_name == "lightgbm":
+                    class_index_by_value = {
+                        label.value: index for index, label in enumerate(_LABELS)
+                    }
+                    y_train_encoded = numpy.asarray(
+                        [class_index_by_value[value] for value in y_train_labels],
+                        dtype="int64",
+                    )
+                    estimator = lightgbm.LGBMClassifier(
+                        objective="multiclass",
+                        num_class=len(_LABELS),
+                        n_estimators=180,
+                        learning_rate=0.04,
+                        max_depth=5,
+                        num_leaves=15,
+                        max_bin=63,
+                        min_child_samples=20,
+                        subsample=0.85,
+                        subsample_freq=1,
+                        colsample_bytree=0.85,
+                        reg_lambda=2.0,
+                        n_jobs=1,
+                        random_state=options.random_seed + fold.fold_index,
+                        deterministic=True,
+                        force_col_wise=True,
+                        verbosity=-1,
+                    )
+                    estimator.fit(x_train, y_train_encoded)
+                    class_ids = tuple(int(value) for value in estimator.classes_)
+                    if class_ids != tuple(range(len(_LABELS))):
+                        raise ValueError(
+                            "LightGBM class IDs do not match the fixed four-class order."
+                        )
+                    class_order = _LABELS
+                    raw_validation = estimator.predict_proba(x_validation).tolist()
+                    raw_test = estimator.predict_proba(x_test).tolist()
+                    wrapper = EstimatorAdapter(
+                        estimator,
+                        class_order=class_order,
+                        temperature=1.0,
+                        lookback=options.feature_lookback,
+                        model_name=model_name,
+                        fingerprint="pending",
+                    )
+                    payload = {
+                        "estimator": estimator,
+                        "class_order": [label.value for label in _LABELS],
                         "label_encoding": {
                             str(index): label.value
                             for index, label in enumerate(_LABELS)
@@ -960,6 +1030,33 @@ def run_walk_forward_research(
         "protocol": {
             "mode": "rolling_fixed_window_walk_forward",
             "feature_schema_version": FEATURE_SCHEMA_VERSION,
+            "research_evaluation_end_index": evaluation_end_index,
+            "terminal_confirmation": {
+                "status": (
+                    "RESERVED_NOT_EVALUATED"
+                    if options.confirmation_bars
+                    else "NOT_RESERVED"
+                ),
+                "start_index": evaluation_end_index if options.confirmation_bars else None,
+                "end_index_exclusive": len(candles) if options.confirmation_bars else None,
+                "bar_count": options.confirmation_bars,
+                "start_candle_open": (
+                    candles[evaluation_end_index].timestamp.isoformat()
+                    if options.confirmation_bars
+                    else None
+                ),
+                "last_candle_open": (
+                    candles[-1].timestamp.isoformat()
+                    if options.confirmation_bars
+                    else None
+                ),
+                "used_for_features_or_model_selection": False,
+                "note": (
+                    "This terminal period was reserved before walk-forward execution and is "
+                    "not used for feature generation, fold construction, training, calibration, "
+                    "metrics, baselines, or candidate selection."
+                ),
+            },
             "feature_names": list(FEATURE_NAMES),
             "feature_count": len(FEATURE_NAMES),
             "feature_lookback": options.feature_lookback,

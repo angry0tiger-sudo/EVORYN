@@ -552,8 +552,9 @@ def make_walk_forward_folds(
     validation_bars: int,
     test_bars: int,
     step_bars: int | None = None,
+    evaluation_end_index: int | None = None,
 ) -> tuple[WalkForwardFold, ...]:
-    """Create rolling, fixed-size, chronological windows without overlapping test periods."""
+    """Create chronological folds, optionally before a reserved terminal period."""
     for name, value in (
         ("train_bars", train_bars),
         ("validation_bars", validation_bars),
@@ -568,10 +569,13 @@ def make_walk_forward_folds(
         raise ValueError(
             "step_bars must be >= test_bars so out-of-sample test windows do not overlap."
         )
+    dataset_count = len(dataset.candles)
+    total = dataset_count if evaluation_end_index is None else evaluation_end_index
+    if type(total) is not int or total <= 0 or total > dataset_count:
+        raise ValueError("evaluation_end_index must be within the dataset's non-empty range.")
     folds: list[WalkForwardFold] = []
     start = 0
     index = 0
-    total = len(dataset.candles)
     while start + train_bars + validation_bars + test_bars <= total:
         train_end = start + train_bars
         validation_end = train_end + validation_bars
