@@ -20,15 +20,27 @@ from pathlib import Path
 from typing import Any
 
 from evoryn.domain.models import MarketCandle
-from evoryn.intelligence.regime import (
-    RegimeFeatureExtractor,
-    RegimeLabel,
+from evoryn.intelligence.regime import RegimeLabel
+from evoryn.intelligence.regime_research_models import (
+    FEATURE_NAMES,
+    FEATURE_SCHEMA_VERSION,
+    LABELS,
+    SEQUENCE_LENGTH,
+    VOLATILITY_FEATURE_INDEX,
+    EstimatorAdapter,
+    HMMAdapter,
+    LSTMAdapter,
+    LongFlatResearchStrategy,
+    bootstrap_mean_interval,
+    cached_research_feature,
+    fit_lstm,
+    lstm_probabilities,
+    research_feature_vector,
+    sequence_matrix,
 )
 from evoryn.intelligence.regime_training import (
     BuyAndHoldStrategy,
-    RegimeLongFlatStrategy,
     _classification_metrics,
-    _constant_classifier_metrics,
     _fit_temperature,
     _temperature_scale,
     assign_forward_regime,
@@ -51,19 +63,20 @@ _LABELS = (
     RegimeLabel.HIGH_VOLATILITY,
 )
 _POLICIES = ("forward_thresholds", "volatility_scaled_triple_barrier")
-_MODELS = ("random_forest", "hist_gradient_boosting", "gaussian_hmm")
+_MODELS = ("random_forest", "hist_gradient_boosting", "xgboost", "gaussian_hmm", "lstm")
 
 
 @dataclass(frozen=True, slots=True)
 class WalkForwardResearchConfig:
     """Fixed rolling windows and thresholds; no parameter search on fold test blocks."""
 
-    feature_lookback: int = 20
+    feature_lookback: int = 48
     horizon_bars: int = 6
     train_bars: int = 1728
     validation_bars: int = 432
-    test_bars: int = 432
-    step_bars: int = 432
+    test_bars: int = 216
+    step_bars: int = 216
+    lstm_epochs: int = 18
     trend_quantile: float = 0.65
     volatility_quantile: float = 0.75
     triple_barrier_multiplier: float = 1.5
@@ -84,8 +97,10 @@ class WalkForwardResearchConfig:
             value = getattr(self, name)
             if type(value) is not int or value <= 0:
                 raise ValueError(f"{name} must be a positive integer.")
-        if self.feature_lookback < 2 or self.horizon_bars < 1:
-            raise ValueError("Feature lookback/horizon are below their minimum.")
+        if self.feature_lookback < 48 or self.horizon_bars < 1:
+            raise ValueError("Feature lookback must be >= 48 and horizon must be positive.")
+        if type(self.lstm_epochs) is not int or not 1 <= self.lstm_epochs <= 100:
+            raise ValueError("lstm_epochs must be an integer in [1, 100].")
         if self.step_bars < self.test_bars:
             raise ValueError("Walk-forward test blocks must not overlap.")
         if not 0.5 <= self.trend_quantile <= 0.9:
@@ -292,7 +307,7 @@ def run_walk_forward_research(
     output_dir: str | Path,
     config: WalkForwardResearchConfig | None = None,
 ) -> dict[str, Any]:
-    """Run all model/policy combinations over rolling folds and persist immutable evidence."""
+    """Run price-only technical-feature models on purged, non-overlapping walk-forward folds."""
     options = config or WalkForwardResearchConfig()
     if (
         dataset.market.market_type.casefold() != "spot"
@@ -309,11 +324,13 @@ def run_walk_forward_research(
         test_bars=options.test_bars,
         step_bars=options.step_bars,
     )
-    extractor = RegimeFeatureExtractor(lookback=options.feature_lookback)
-    feature_series = extractor.extract_series(candles)
-    feature_by_index = {
-        options.feature_lookback + offset: vector.as_float_tuple()
-        for offset, vector in enumerate(feature_series)
+    if len(folds) < 10:
+        raise ValueError(
+            f"At least ten non-overlapping test folds are required; got {len(folds)}."
+        )
+    feature_by_index: dict[int, tuple[float, ...]] = {
+        index: research_feature_vector(candles, index, lookback=options.feature_lookback)
+        for index in range(options.feature_lookback, len(candles))
     }
     output = Path(output_dir).expanduser().resolve()
     model_dir = output / "models"
@@ -323,77 +340,120 @@ def run_walk_forward_research(
     sklearn_ensemble = importlib.import_module("sklearn.ensemble")
     sklearn_preprocessing = importlib.import_module("sklearn.preprocessing")
     sklearn_hmm = importlib.import_module("hmmlearn.hmm")
+    xgboost = importlib.import_module("xgboost")
     joblib = importlib.import_module("joblib")
     fold_reports: list[dict[str, Any]] = []
     aggregate_source: dict[str, list[dict[str, Any]]] = {}
     backtest_config = BacktestConfig(
         initial_cash=Decimal("10000"),
-        commission_bps=__import__("decimal").Decimal("10"),
-        spread_bps=__import__("decimal").Decimal("10"),
-        slippage_bps=__import__("decimal").Decimal("10"),
-        max_bar_participation=__import__("decimal").Decimal("0.05"),
-        allocation_fraction=__import__("decimal").Decimal("0.25"),
-        quantity_step=__import__("decimal").Decimal("0.00001"),
+        commission_bps=Decimal("10"),
+        spread_bps=Decimal("10"),
+        slippage_bps=Decimal("10"),
+        max_bar_participation=Decimal("0.05"),
+        allocation_fraction=Decimal("0.25"),
+        quantity_step=Decimal("0.00001"),
         enforce_volume_participation=(dataset.volume_unit == "base_asset"),
     )
-    baseline_strategy_types = (SmaCrossoverBaseline, BuyAndHoldStrategy)
     for fold in folds:
         horizon = options.horizon_bars
-        train_indices = list(
-            range(
-                max(fold.train.start + options.feature_lookback, options.feature_lookback),
-                fold.train.end - horizon,
-            )
+        first_train_sample = max(
+            fold.train.start + options.feature_lookback + SEQUENCE_LENGTH - 1,
+            options.feature_lookback + SEQUENCE_LENGTH - 1,
         )
-        validation_indices = list(
-            range(fold.validation.start, fold.validation.end - horizon)
-        )
+        train_indices = list(range(first_train_sample, fold.train.end - horizon))
+        validation_indices = list(range(fold.validation.start, fold.validation.end - horizon))
         test_indices = list(range(fold.test.start, fold.test.end - horizon))
         if min(len(train_indices), len(validation_indices), len(test_indices)) < 30:
-            raise ValueError(f"Fold {fold.fold_index} is too small after purging.")
-        outcomes = {
-            index: forward_outcome(candles, index, horizon)
-            for index in (*train_indices, *validation_indices, *test_indices)
-        }
-        train_returns = [abs(outcomes[index].forward_return) for index in train_indices]
-        train_forward_volatility = [outcomes[index].forward_volatility for index in train_indices]
-        trend_threshold = max(linear_quantile(train_returns, options.trend_quantile), 0.001)
-        volatility_threshold = linear_quantile(
-            train_forward_volatility, options.volatility_quantile
+            raise ValueError(f"Fold {fold.fold_index} is too small after label purging.")
+        indices = (*train_indices, *validation_indices, *test_indices)
+        outcomes = {index: forward_outcome(candles, index, horizon) for index in indices}
+        absolute_returns = [abs(outcomes[index].forward_return) for index in train_indices]
+        forward_volatility = [
+            outcomes[index].forward_volatility for index in train_indices
+        ]
+        trend_threshold = max(
+            linear_quantile(absolute_returns, options.trend_quantile), 0.001
         )
-        training_matrix = numpy.asarray(
+        volatility_threshold = linear_quantile(
+            forward_volatility, options.volatility_quantile
+        )
+
+        train_matrix = numpy.asarray(
             [feature_by_index[index] for index in train_indices], dtype="float64"
         )
         scaler = sklearn_preprocessing.StandardScaler()
-        scaler.fit(training_matrix)
-        scaled_train = scaler.transform(training_matrix)
-        # HMM parameters and the scaler fit on this fold's training samples only.
-        hmm_model = sklearn_hmm.GaussianHMM(
-            n_components=4,
-            covariance_type="diag",
-            n_iter=120,
-            tol=0.01,
-            min_covar=1e-4,
-            random_state=options.random_seed + fold.fold_index,
-            implementation="log",
+        scaler.fit(train_matrix)
+        all_feature_indices = sorted(feature_by_index)
+        all_features = numpy.asarray(
+            [feature_by_index[index] for index in all_feature_indices], dtype="float64"
         )
-        hmm_model.fit(scaled_train)
-        hmm_converged = bool(hmm_model.monitor_.converged)
-        hmm_iterations = int(hmm_model.monitor_.iter)
-        history_indices = list(range(train_indices[0], test_indices[-1] + 1))
-        scaled_history = scaler.transform(
-            numpy.asarray([feature_by_index[index] for index in history_indices], dtype="float64")
+        scaled_all = scaler.transform(all_features)
+        scaled_feature_by_index = {
+            index: scaled_all[offset]
+            for offset, index in enumerate(all_feature_indices)
+        }
+        scaled_train = numpy.asarray(
+            [scaled_feature_by_index[index] for index in train_indices],
+            dtype="float64",
         )
-        filtered_history = filtered_gaussian_hmm_probabilities(hmm_model, scaled_history)
-        train_posteriors = filtered_history[
-            [index - history_indices[0] for index in train_indices]
-        ]
-        val_posteriors = filtered_history[
-            [index - history_indices[0] for index in validation_indices]
-        ]
-        test_posteriors = filtered_history[
-            [index - history_indices[0] for index in test_indices]
-        ]
+
+        train_sequences = sequence_matrix(
+            scaled_feature_by_index, train_indices, SEQUENCE_LENGTH, numpy
+        )
+        validation_sequences = sequence_matrix(
+            scaled_feature_by_index, validation_indices, SEQUENCE_LENGTH, numpy
+        )
+        test_sequences = sequence_matrix(
+            scaled_feature_by_index, test_indices, SEQUENCE_LENGTH, numpy
+        )
+
+        hmm_model: Any | None = None
+        hmm_fit_error: str | None = None
+        hmm_converged = False
+        hmm_iterations = 0
+        filtered_history: Any | None = None
+        train_posteriors: Any | None = None
+        validation_posteriors: Any | None = None
+        test_posteriors: Any | None = None
+        try:
+            hmm_model = sklearn_hmm.GaussianHMM(
+                n_components=4,
+                covariance_type="diag",
+                n_iter=160,
+                tol=0.01,
+                min_covar=1e-4,
+                random_state=options.random_seed + fold.fold_index,
+                implementation="log",
+            )
+            hmm_model.fit(scaled_train)
+            hmm_converged = bool(hmm_model.monitor_.converged)
+            hmm_iterations = int(hmm_model.monitor_.iter)
+            if hmm_converged:
+                hmm_indices = list(range(train_indices[0], test_indices[-1] + 1))
+                hmm_input = numpy.asarray(
+                    [scaled_feature_by_index[index] for index in hmm_indices],
+                    dtype="float64",
+                )
+                filtered_history = filtered_gaussian_hmm_probabilities(
+                    hmm_model, hmm_input
+                )
+                train_posteriors = filtered_history[
+                    [index - hmm_indices[0] for index in train_indices]
+                ]
+                validation_posteriors = filtered_history[
+                    [index - hmm_indices[0] for index in validation_indices]
+                ]
+                test_posteriors = filtered_history[
+                    [index - hmm_indices[0] for index in test_indices]
+                ]
+            else:
+                hmm_fit_error = "HMM_DID_NOT_CONVERGE"
+        except Exception as exc:
+            hmm_model = None
+            hmm_fit_error = f"HMM_FIT_FAILED:{type(exc).__name__}"
+
+        fold_policy_reports: dict[str, dict[str, Any]] = {}
+        fold_backtests: dict[str, Any] = {}
         for policy in _POLICIES:
             if policy == "forward_thresholds":
                 labels = {
@@ -402,9 +462,10 @@ def run_walk_forward_research(
                         trend_threshold=trend_threshold,
                         volatility_threshold=volatility_threshold,
                     )
-                    for index in outcomes
+                    for index in indices
                 }
-                policy_parameters = {
+                policy_parameters: dict[str, Any] = {
+                    "method": "train-quantile forward-return and volatility thresholds",
                     "trend_threshold_abs_return": trend_threshold,
                     "high_forward_volatility_threshold": volatility_threshold,
                     "threshold_fit_scope": "training_partition_only",
@@ -414,33 +475,38 @@ def run_walk_forward_research(
                     index: volatility_scaled_triple_barrier_label(
                         candles,
                         index,
-                        trailing_volatility=float(feature_by_index[index][2]),
+                        trailing_volatility=feature_by_index[index][
+                            VOLATILITY_FEATURE_INDEX
+                        ],
                         horizon_bars=horizon,
                         barrier_multiplier=options.triple_barrier_multiplier,
                         high_volatility_threshold=volatility_threshold,
                     )
-                    for index in outcomes
+                    for index in indices
                 }
                 policy_parameters = {
+                    "method": "volatility-scaled OHLC first-touch triple barrier",
                     "barrier": "symmetric_volatility_scaled",
                     "barrier_multiplier": options.triple_barrier_multiplier,
-                    "volatility_lookback": options.feature_lookback,
+                    "volatility_feature": FEATURE_NAMES[VOLATILITY_FEATURE_INDEX],
                     "barrier_floor_abs_return": 0.001,
                     "high_forward_volatility_threshold": volatility_threshold,
                     "threshold_fit_scope": "training_partition_only",
+                    "same_bar_double_touch": "high_volatility_conservative_label",
                 }
             y_train_labels = [labels[index].value for index in train_indices]
             train_counts = Counter(y_train_labels)
             if set(train_counts) != {label.value for label in _LABELS} or any(
-                train_counts[label.value] < options.min_class_samples for label in _LABELS
+                train_counts[label.value] < options.min_class_samples
+                for label in _LABELS
             ):
                 raise ValueError(
-                    f"Fold {fold.fold_index} / {policy} lacks minimum training support for all "
-                    "four labels. The fold is not silently relabeled or dropped."
+                    f"Fold {fold.fold_index} / {policy} has insufficient class support; "
+                    "the fold is not silently relabeled or dropped."
                 )
             y_validation = [labels[index].value for index in validation_indices]
             y_test = [labels[index].value for index in test_indices]
-            x_train = training_matrix
+            x_train = train_matrix
             x_validation = numpy.asarray(
                 [feature_by_index[index] for index in validation_indices], dtype="float64"
             )
@@ -450,17 +516,40 @@ def run_walk_forward_research(
             policy_report: dict[str, Any] = {
                 "parameters": policy_parameters,
                 "train_class_counts": dict(sorted(train_counts.items())),
+                "validation_class_counts": dict(
+                    sorted(Counter(y_validation).items())
+                ),
+                "test_class_counts": dict(sorted(Counter(y_test).items())),
+                "train_sample_count": len(train_indices),
                 "validation_sample_count": len(validation_indices),
                 "test_sample_count": len(test_indices),
+                "feature_names": list(FEATURE_NAMES),
+                "features_exclude_unverified_volume": True,
                 "models": {},
+                "backtests": {},
             }
             majority_label = Counter(y_train_labels).most_common(1)[0][0]
-            fitted_for_backtest: dict[str, Any] = {}
+            majority_probabilities = [
+                [1.0 if label.value == majority_label else 0.0 for label in _LABELS]
+                for _ in y_test
+            ]
+            majority_metrics = _classification_metrics(
+                y_test, majority_probabilities, _LABELS
+            )
+            majority_metrics.update(
+                {
+                    "baseline_type": "training_partition_majority_class",
+                    "constant_label": majority_label,
+                }
+            )
+            fitted_for_backtest: dict[str, dict[str, Any]] = {}
+
             for model_name in _MODELS:
                 wrapper: Any
+                payload: dict[str, Any]
                 if model_name == "random_forest":
                     estimator = sklearn_ensemble.RandomForestClassifier(
-                        n_estimators=180,
+                        n_estimators=220,
                         max_depth=7,
                         min_samples_leaf=5,
                         class_weight="balanced_subsample",
@@ -468,95 +557,177 @@ def run_walk_forward_research(
                         n_jobs=1,
                     )
                     estimator.fit(x_train, numpy.asarray(y_train_labels, dtype=str))
-                    class_order = tuple(RegimeLabel(str(value)) for value in estimator.classes_)
+                    class_order = tuple(
+                        RegimeLabel(str(value)) for value in estimator.classes_
+                    )
                     if set(class_order) != set(_LABELS):
-                        raise ValueError(
-                            "Random Forest did not retain all required target classes."
-                        )
+                        raise ValueError("Random Forest did not retain all four classes.")
                     raw_validation = estimator.predict_proba(x_validation).tolist()
                     raw_test = estimator.predict_proba(x_test).tolist()
-                    wrapper = _EstimatorAdapter(
+                    wrapper = EstimatorAdapter(
                         estimator,
                         class_order=class_order,
                         temperature=1.0,
-                        extractor=extractor,
+                        lookback=options.feature_lookback,
+                        model_name=model_name,
                         fingerprint="pending",
                     )
-                    payload: dict[str, Any] = {
-                        "model_family": model_name,
+                    payload = {
                         "estimator": estimator,
                         "class_order": [label.value for label in class_order],
-                        "feature_schema_version": extractor.feature_schema_version,
-                        "feature_lookback": extractor.lookback,
                     }
                 elif model_name == "hist_gradient_boosting":
                     estimator = sklearn_ensemble.HistGradientBoostingClassifier(
-                        max_iter=120,
+                        max_iter=160,
                         max_leaf_nodes=15,
                         l2_regularization=1.0,
-                        learning_rate=0.06,
+                        learning_rate=0.045,
                         random_state=options.random_seed + fold.fold_index,
                     )
                     estimator.fit(x_train, numpy.asarray(y_train_labels, dtype=str))
-                    class_order = tuple(RegimeLabel(str(value)) for value in estimator.classes_)
+                    class_order = tuple(
+                        RegimeLabel(str(value)) for value in estimator.classes_
+                    )
                     if set(class_order) != set(_LABELS):
-                        raise ValueError(
-                            "HistGradientBoosting did not retain all required target classes."
-                        )
+                        raise ValueError("HistGradientBoosting did not retain all classes.")
                     raw_validation = estimator.predict_proba(x_validation).tolist()
                     raw_test = estimator.predict_proba(x_test).tolist()
-                    wrapper = _EstimatorAdapter(
+                    wrapper = EstimatorAdapter(
                         estimator,
                         class_order=class_order,
                         temperature=1.0,
-                        extractor=extractor,
+                        lookback=options.feature_lookback,
+                        model_name=model_name,
                         fingerprint="pending",
                     )
                     payload = {
-                        "model_family": model_name,
                         "estimator": estimator,
                         "class_order": [label.value for label in class_order],
-                        "feature_schema_version": extractor.feature_schema_version,
-                        "feature_lookback": extractor.lookback,
                     }
-                else:
-                    state_map = numpy.ones((4, 4), dtype="float64")
-                    state_labels = numpy.argmax(train_posteriors, axis=1)
-                    for state in range(4):
-                        subset = [
-                            labels[index].value
-                            for index, hidden_state in zip(
-                                train_indices, state_labels, strict=True
-                            )
-                            if int(hidden_state) == state
-                        ]
-                        state_counts = Counter(subset)
-                        denominator = len(subset) + len(_LABELS)
-                        for label_index, label in enumerate(_LABELS):
-                            state_map[state, label_index] = (
-                                state_counts[label.value] + 1
-                            ) / denominator
-                    raw_validation = (val_posteriors @ state_map).tolist()
-                    raw_test = (test_posteriors @ state_map).tolist()
+                elif model_name == "xgboost":
+                    estimator = xgboost.XGBClassifier(
+                        objective="multi:softprob",
+                        num_class=len(_LABELS),
+                        eval_metric="mlogloss",
+                        n_estimators=220,
+                        max_depth=4,
+                        learning_rate=0.04,
+                        subsample=0.85,
+                        colsample_bytree=0.85,
+                        reg_lambda=2.0,
+                        tree_method="hist",
+                        n_jobs=1,
+                        random_state=options.random_seed + fold.fold_index,
+                    )
+                    label_index = {label.value: index for index, label in enumerate(_LABELS)}
+                    y_train_encoded = numpy.asarray(
+                        [label_index[value] for value in y_train_labels], dtype="int64"
+                    )
+                    estimator.fit(x_train, y_train_encoded)
                     class_order = _LABELS
-                    wrapper = _HMMAdapter(
-                        hmm_model,
+                    raw_validation = estimator.predict_proba(x_validation).tolist()
+                    raw_test = estimator.predict_proba(x_test).tolist()
+                    wrapper = EstimatorAdapter(
+                        estimator,
+                        class_order=class_order,
+                        temperature=1.0,
+                        lookback=options.feature_lookback,
+                        model_name=model_name,
+                        fingerprint="pending",
+                    )
+                    payload = {
+                        "estimator": estimator,
+                        "class_order": [label.value for label in class_order],
+                        "label_encoding": {
+                            str(index): label.value
+                            for index, label in enumerate(_LABELS)
+                        },
+                    }
+                elif model_name == "lstm":
+                    label_index = {label.value: index for index, label in enumerate(_LABELS)}
+                    y_train_encoded = numpy.asarray(
+                        [label_index[value] for value in y_train_labels], dtype="int64"
+                    )
+                    estimator, torch = fit_lstm(
+                        train_sequences,
+                        y_train_encoded,
+                        random_seed=options.random_seed + fold.fold_index,
+                        epochs=options.lstm_epochs,
+                    )
+                    raw_validation = lstm_probabilities(
+                        estimator, torch, validation_sequences, numpy
+                    ).tolist()
+                    raw_test = lstm_probabilities(
+                        estimator, torch, test_sequences, numpy
+                    ).tolist()
+                    class_order = _LABELS
+                    wrapper = LSTMAdapter(
+                        estimator,
+                        torch,
                         scaler,
-                        state_map,
-                        extractor=extractor,
-                        training_start_index=fold.train.start,
+                        lookback=options.feature_lookback,
+                        sequence_length=SEQUENCE_LENGTH,
                         temperature=1.0,
                         fingerprint="pending",
                     )
                     payload = {
-                        "model_family": model_name,
+                        "model_family": "compact_torch_lstm",
+                        "state_dict_numpy": {
+                            name: tensor.detach().cpu().numpy()
+                            for name, tensor in estimator.state_dict().items()
+                        },
+                        "input_feature_count": len(FEATURE_NAMES),
+                        "sequence_length": SEQUENCE_LENGTH,
+                        "hidden_size": 32,
+                        "epochs": options.lstm_epochs,
+                        "scaler_mean": scaler.mean_.tolist(),
+                        "scaler_scale": scaler.scale_.tolist(),
+                        "class_order": [label.value for label in _LABELS],
+                    }
+                else:
+                    if not hmm_converged or hmm_model is None:
+                        policy_report["models"][model_name] = {
+                            "status": hmm_fit_error or "HMM_NOT_CONVERGED",
+                            "fold_converged": False,
+                            "test_metrics": None,
+                        }
+                        continue
+                    assert train_posteriors is not None
+                    assert validation_posteriors is not None
+                    assert test_posteriors is not None
+                    state_map = numpy.ones((len(_LABELS), len(_LABELS)), dtype="float64")
+                    state_ids = numpy.argmax(train_posteriors, axis=1)
+                    for state in range(len(_LABELS)):
+                        observed = [
+                            labels[index].value
+                            for index, state_id in zip(train_indices, state_ids, strict=True)
+                            if int(state_id) == state
+                        ]
+                        observed_counts = Counter(observed)
+                        denominator = len(observed) + len(_LABELS)
+                        for label_index, label in enumerate(_LABELS):
+                            state_map[state, label_index] = (
+                                observed_counts[label.value] + 1
+                            ) / denominator
+                    raw_validation = (validation_posteriors @ state_map).tolist()
+                    raw_test = (test_posteriors @ state_map).tolist()
+                    class_order = _LABELS
+                    wrapper = HMMAdapter(
+                        hmm_model,
+                        scaler,
+                        state_map,
+                        lookback=options.feature_lookback,
+                        first_index=train_indices[0],
+                        temperature=1.0,
+                        fingerprint="pending",
+                    )
+                    payload = {
                         "hmm": hmm_model,
                         "scaler": scaler,
                         "state_to_label_probabilities": state_map.tolist(),
                         "class_order": [label.value for label in _LABELS],
-                        "feature_schema_version": extractor.feature_schema_version,
-                        "feature_lookback": extractor.lookback,
                     }
+
                 temperature = _fit_temperature(raw_validation, y_validation, class_order)
                 wrapper.temperature = temperature
                 validation_metrics = _classification_metrics(
@@ -565,18 +736,7 @@ def run_walk_forward_research(
                 test_metrics = _classification_metrics(
                     y_test, raw_test, class_order, temperature=temperature
                 )
-                baseline_metrics = _constant_classifier_metrics(y_test, majority_label, class_order)
-                payload["temperature"] = temperature
-                payload["dataset_version"] = dataset.version
-                payload["fold_index"] = fold.fold_index
-                payload["label_policy"] = policy
-                payload["train_range"] = {"start": fold.train.start, "end": fold.train.end}
-                payload["validation_range"] = {
-                    "start": fold.validation.start,
-                    "end": fold.validation.end,
-                }
-                payload["test_range"] = {"start": fold.test.start, "end": fold.test.end}
-                model_bytes_input = json.dumps(
+                model_identity_input = json.dumps(
                     {
                         "dataset_version": dataset.version,
                         "fold": fold.fold_index,
@@ -585,123 +745,155 @@ def run_walk_forward_research(
                         "train_range": [fold.train.start, fold.train.end],
                         "validation_range": [fold.validation.start, fold.validation.end],
                         "test_range": [fold.test.start, fold.test.end],
+                        "feature_schema": FEATURE_SCHEMA_VERSION,
+                        "feature_names": FEATURE_NAMES,
                         "temperature": temperature,
                         "seed": options.random_seed + fold.fold_index,
                     },
                     sort_keys=True,
                     separators=(",", ":"),
-                ).encode("utf-8")
-                model_identity = hashlib.sha256(model_bytes_input).hexdigest()
-                wrapper.model_fingerprint = model_identity
-                wrapper.model_version = model_identity[:16]
-                artifact_path = model_dir / f"fold-{fold.fold_index}-{policy}-{model_name}.joblib"
+                ).encode()
+                identity = hashlib.sha256(model_identity_input).hexdigest()
+                wrapper.model_fingerprint = identity
+                wrapper.model_version = identity[:16]
+                payload.update(
+                    {
+                        "schema_version": 2,
+                        "model_family": model_name,
+                        "temperature": temperature,
+                        "dataset_version": dataset.version,
+                        "fold_index": fold.fold_index,
+                        "label_policy": policy,
+                        "train_range": {"start": fold.train.start, "end": fold.train.end},
+                        "validation_range": {
+                            "start": fold.validation.start,
+                            "end": fold.validation.end,
+                        },
+                        "test_range": {"start": fold.test.start, "end": fold.test.end},
+                        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+                        "feature_names": list(FEATURE_NAMES),
+                        "feature_lookback": options.feature_lookback,
+                    }
+                )
+                artifact_path = model_dir / (
+                    f"fold-{fold.fold_index}-{policy}-{model_name}.joblib"
+                )
                 joblib.dump(payload, artifact_path, compress=3)
                 artifact_sha = _sha256_file(artifact_path)
                 model_record = {
+                    "status": "EVALUATED",
                     "artifact_path": str(artifact_path.relative_to(output)),
                     "artifact_sha256": artifact_sha,
-                    "model_identity_sha256": model_identity,
-                    "model_version": model_identity[:16],
+                    "model_identity_sha256": identity,
+                    "model_version": identity[:16],
                     "temperature_fitted_on": "validation_only",
                     "validation_metrics": validation_metrics,
                     "test_metrics": test_metrics,
-                    "training_only_majority_baseline": baseline_metrics,
+                    "training_only_majority_baseline": majority_metrics,
                 }
                 policy_report["models"][model_name] = model_record
-                aggregate_key = f"{policy}/{model_name}"
-                aggregate_source.setdefault(aggregate_key, []).append(
+                aggregate_source.setdefault(f"{policy}/{model_name}", []).append(
                     {
                         "fold_index": fold.fold_index,
                         **test_metrics,
+                        "majority_accuracy": majority_metrics["accuracy"],
+                        "majority_balanced_accuracy": majority_metrics["balanced_accuracy"],
+                        "majority_macro_f1": majority_metrics["macro_f1"],
                     }
                 )
                 if policy == "volatility_scaled_triple_barrier":
                     fitted_for_backtest[model_name] = {
                         "wrapper": wrapper,
-                        "policy": policy,
                         "artifact_sha256": artifact_sha,
                     }
 
-            # The same untouched fold test interval/cost model is used for each model and baseline.
-            ml_backtests: dict[str, Any] = {}
-            for model_name, item in fitted_for_backtest.items():
-                result = run_backtest(
-                    dataset,
-                    RegimeLongFlatStrategy(
-                        item["wrapper"],
-                        __import__("decimal").Decimal(str(options.confidence_threshold)),
-                        dataset.version,
-                    ),
-                    backtest_config,
-                    start_index=fold.test.start,
-                    end_index=fold.test.end,
-                    warmup_start_index=0,
-                    segment_name=f"walk-forward-fold-{fold.fold_index}",
-                )
-                report_path = backtest_store.save(result)
-                ml_backtests[model_name] = {
-                    "run_id": result.run_id,
-                    "report_path": str(report_path.relative_to(output)),
-                    "model_artifact_sha256": item["artifact_sha256"],
-                    "metrics": _backtest_metrics(
-                        result.metrics,
-                        volume_capacity_constraint_enabled=(
-                            backtest_config.enforce_volume_participation
+            if policy == "volatility_scaled_triple_barrier":
+                for model_name, item in fitted_for_backtest.items():
+                    result = run_backtest(
+                        dataset,
+                        LongFlatResearchStrategy(
+                            item["wrapper"], options.confidence_threshold
                         ),
-                    ),
-                }
-            baselines: dict[str, Any] = {}
-            for strategy_type in baseline_strategy_types:
-                strategy = (
-                    strategy_type(fast_window=12, slow_window=48)
-                    if strategy_type is SmaCrossoverBaseline
-                    else strategy_type()
-                )
-                result = run_backtest(
-                    dataset,
-                    strategy,
-                    backtest_config,
-                    start_index=fold.test.start,
-                    end_index=fold.test.end,
-                    warmup_start_index=0,
-                    segment_name=f"walk-forward-fold-{fold.fold_index}",
-                )
-                report_path = backtest_store.save(result)
-                baselines[strategy.strategy_id] = {
-                    "run_id": result.run_id,
-                    "report_path": str(report_path.relative_to(output)),
-                    "metrics": _backtest_metrics(
-                        result.metrics,
-                        volume_capacity_constraint_enabled=(
-                            backtest_config.enforce_volume_participation
+                        backtest_config,
+                        start_index=fold.test.start,
+                        end_index=fold.test.end,
+                        warmup_start_index=0,
+                        segment_name=f"walk-forward-fold-{fold.fold_index}",
+                    )
+                    path = backtest_store.save(result)
+                    policy_report["backtests"][model_name] = {
+                        "run_id": result.run_id,
+                        "report_path": str(path.relative_to(output)),
+                        "model_artifact_sha256": item["artifact_sha256"],
+                        "metrics": _backtest_metrics(
+                            result.metrics,
+                            volume_capacity_constraint_enabled=(
+                                backtest_config.enforce_volume_participation
+                            ),
                         ),
-                    ),
-                }
-            fold_reports.append(
-                {
-                    "fold_index": fold.fold_index,
-                    "hmm_converged": hmm_converged,
-                    "hmm_iterations": hmm_iterations,
-                    "ranges": {
-                        "train": {"start": fold.train.start, "end": fold.train.end},
-                        "validation": {
-                            "start": fold.validation.start,
-                            "end": fold.validation.end,
-                        },
-                        "test": {"start": fold.test.start, "end": fold.test.end},
-                    },
-                    "label_purging": {
-                        "horizon_bars": horizon,
-                        "train_labels_crossing_boundary_removed": True,
-                        "validation_labels_crossing_boundary_removed": True,
-                        "test_labels_crossing_boundary_removed": True,
-                        "feature_inputs_are_trailing_completed_bars": True,
-                    },
-                    "label_policies": policy_report,
-                    "triple_barrier_holdout_backtests": ml_backtests,
-                    "same_fold_baseline_backtests": baselines,
-                }
+                    }
+            fold_policy_reports[policy] = policy_report
+            if policy == "volatility_scaled_triple_barrier":
+                fold_backtests = policy_report["backtests"]
+
+        baselines: dict[str, Any] = {}
+        baseline_strategies = (
+            (SmaCrossoverBaseline, "sma-crossover-long-flat"),
+            (BuyAndHoldStrategy, "buy-and-hold-reference"),
+        )
+        for strategy_type, strategy_name in baseline_strategies:
+            strategy = (
+                strategy_type(fast_window=12, slow_window=48)
+                if strategy_type is SmaCrossoverBaseline
+                else strategy_type()
             )
+            result = run_backtest(
+                dataset,
+                strategy,
+                backtest_config,
+                start_index=fold.test.start,
+                end_index=fold.test.end,
+                warmup_start_index=0,
+                segment_name=f"walk-forward-fold-{fold.fold_index}",
+            )
+            path = backtest_store.save(result)
+            baselines[strategy_name] = {
+                "run_id": result.run_id,
+                "report_path": str(path.relative_to(output)),
+                "metrics": _backtest_metrics(
+                    result.metrics,
+                    volume_capacity_constraint_enabled=(
+                        backtest_config.enforce_volume_participation
+                    ),
+                ),
+            }
+        fold_reports.append(
+            {
+                "fold_index": fold.fold_index,
+                "hmm_converged": hmm_converged,
+                "hmm_iterations": hmm_iterations,
+                "hmm_failure_reason": hmm_fit_error,
+                "ranges": {
+                    "train": {"start": fold.train.start, "end": fold.train.end},
+                    "validation": {
+                        "start": fold.validation.start,
+                        "end": fold.validation.end,
+                    },
+                    "test": {"start": fold.test.start, "end": fold.test.end},
+                },
+                "label_purging": {
+                    "horizon_bars": horizon,
+                    "train_labels_crossing_boundary_removed": True,
+                    "validation_labels_crossing_boundary_removed": True,
+                    "test_labels_crossing_boundary_removed": True,
+                    "features_use_only_trailing_completed_bars": True,
+                },
+                "label_policies": fold_policy_reports,
+                "triple_barrier_holdout_backtests": fold_backtests,
+                "same_fold_baseline_backtests": baselines,
+            }
+        )
+
     summaries: dict[str, Any] = {}
     for key, values in aggregate_source.items():
         summaries[key] = {}
@@ -727,10 +919,108 @@ def run_walk_forward_research(
                     for item in values
                 ],
             }
+        if values:
+            for metric in ("accuracy", "balanced_accuracy", "macro_f1"):
+                difference_name = f"{metric}_difference_vs_majority"
+                differences = [
+                    float(item[metric]) - float(item[f"majority_{metric}"])
+                    for item in values
+                ]
+                summaries[key][difference_name] = bootstrap_mean_interval(
+                    differences, random_seed=options.random_seed + len(key)
+                )
+
+    candidate_gates: dict[str, Any] = {}
+    triple_policy = "volatility_scaled_triple_barrier"
+    for model_name in _MODELS:
+        accuracy_differences: list[float] = []
+        balanced_differences: list[float] = []
+        f1_differences: list[float] = []
+        return_differences: list[float] = []
+        trade_count = 0
+        evaluated_folds = 0
+        for fold_report in fold_reports:
+            model_report = (
+                fold_report["label_policies"][triple_policy]["models"].get(model_name)
+            )
+            model_backtest = fold_report["triple_barrier_holdout_backtests"].get(model_name)
+            if (
+                not isinstance(model_report, dict)
+                or model_report.get("status") != "EVALUATED"
+                or not isinstance(model_backtest, dict)
+            ):
+                continue
+            metrics = model_report["test_metrics"]
+            majority = model_report["training_only_majority_baseline"]
+            accuracy_differences.append(
+                float(metrics["accuracy"]) - float(majority["accuracy"])
+            )
+            balanced_differences.append(
+                float(metrics["balanced_accuracy"])
+                - float(majority["balanced_accuracy"])
+            )
+            f1_differences.append(float(metrics["macro_f1"]) - float(majority["macro_f1"]))
+            model_return = float(model_backtest["metrics"]["net_return_fraction"])
+            hold_return = float(
+                fold_report["same_fold_baseline_backtests"]["buy-and-hold-reference"][
+                    "metrics"
+                ]["net_return_fraction"]
+            )
+            return_differences.append(model_return - hold_return)
+            trade_count += int(model_backtest["metrics"]["closed_trade_count"])
+            evaluated_folds += 1
+        if not evaluated_folds:
+            candidate_gates[model_name] = {
+                "status": "NOT_EVALUATED",
+                "evaluated_folds": 0,
+                "runtime_promotion_allowed": False,
+            }
+            continue
+        acc_ci = bootstrap_mean_interval(
+            accuracy_differences, random_seed=options.random_seed + 101
+        )
+        balanced_ci = bootstrap_mean_interval(
+            balanced_differences, random_seed=options.random_seed + 102
+        )
+        f1_ci = bootstrap_mean_interval(f1_differences, random_seed=options.random_seed + 103)
+        return_ci = bootstrap_mean_interval(
+            return_differences, random_seed=options.random_seed + 104
+        )
+        classification_gate = (
+            acc_ci["ci95_lower"] > 0
+            and balanced_ci["ci95_lower"] > 0
+            and f1_ci["ci95_lower"] > 0
+        )
+        economic_gate = return_ci["ci95_lower"] > 0 and trade_count >= 20
+        all_folds_gate = evaluated_folds == len(folds) and len(folds) >= 10
+        candidate_gates[model_name] = {
+            "status": "EVALUATED" if all_folds_gate else "INCOMPLETE_FOLD_COVERAGE",
+            "evaluated_folds": evaluated_folds,
+            "closed_trades_total": trade_count,
+            "accuracy_difference_vs_majority": acc_ci,
+            "balanced_accuracy_difference_vs_majority": balanced_ci,
+            "macro_f1_difference_vs_majority": f1_ci,
+            "net_return_difference_vs_buy_and_hold": return_ci,
+            "classification_gate_passed": classification_gate,
+            "economic_gate_passed": economic_gate,
+            "all_folds_gate_passed": all_folds_gate,
+            "empirical_candidate_gate_passed": (
+                classification_gate and economic_gate and all_folds_gate
+            ),
+            "runtime_promotion_allowed": False,
+            "runtime_promotion_blockers": [
+                "Model selection was performed on these same walk-forward windows; an untouched "
+                "confirmation period is required.",
+                "The new research feature schema has no independently pinned runtime artifact "
+                "loader or production-approved manifest.",
+                "UDF volume semantics and provider data-use rights remain unresolved.",
+                "Windows Task Scheduler registration and native-host acceptance remain open.",
+            ],
+        }
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment_id": hashlib.sha256(
-            f"{dataset.version}|{options!r}|walk-forward-v1".encode()
+            f"{dataset.version}|{options!r}|walk-forward-v2".encode()
         ).hexdigest(),
         "dataset": {
             "dataset_id": dataset.dataset_id,
@@ -739,15 +1029,22 @@ def run_walk_forward_research(
             "candle_count": len(candles),
             "volume_unit": dataset.volume_unit,
             "volume_semantics_status": (
-                "UNVERIFIED_NOT_USED_IN_FEATURES" if dataset.volume_unit == "unknown"
+                "UNVERIFIED_NOT_USED_IN_FEATURES"
+                if dataset.volume_unit == "unknown"
                 else "DECLARED_NOT_INDEPENDENTLY_VERIFIED"
             ),
             "gap_count": dataset.gap_count,
         },
         "protocol": {
             "mode": "rolling_fixed_window_walk_forward",
-            "feature_schema_version": extractor.feature_schema_version,
+            "feature_schema_version": FEATURE_SCHEMA_VERSION,
+            "feature_names": list(FEATURE_NAMES),
+            "feature_count": len(FEATURE_NAMES),
             "feature_lookback": options.feature_lookback,
+            "sequence_model": "one-layer CPU LSTM",
+            "sequence_length": SEQUENCE_LENGTH,
+            "lstm_epochs": options.lstm_epochs,
+            "volume_feature_enabled": False,
             "label_horizon_bars": options.horizon_bars,
             "train_bars": options.train_bars,
             "validation_bars": options.validation_bars,
@@ -755,37 +1052,51 @@ def run_walk_forward_research(
             "step_bars": options.step_bars,
             "fold_count": len(folds),
             "label_purging": "drop samples whose forward label crosses each partition end",
-            "calibration": "temperature fitted on that fold's validation only",
+            "calibration": "temperature fitted on each fold's validation only",
             "models": list(_MODELS),
             "label_policies": list(_POLICIES),
-            "hmm_converged_per_fold": [item.get("hmm_converged") for item in fold_reports],
+            "hmm_converged_per_fold": [
+                item["hmm_converged"] for item in fold_reports
+            ],
             "test_fold_tuning": False,
-            "volume_feature_enabled": False,
             "volume_capacity_status": (
                 "UNCONSTRAINED_UNKNOWN_VOLUME_UNIT"
                 if not backtest_config.enforce_volume_participation
                 else "ENFORCED_BASE_ASSET"
             ),
+            "backtest_costs_bps": {
+                "commission": 10.0,
+                "spread": 10.0,
+                "slippage": 10.0,
+            },
         },
         "folds": fold_reports,
         "per_fold_metric_summary": summaries,
+        "candidate_gates": candidate_gates,
+        "model_selection": {
+            "selected_model_for_runtime": None,
+            "reason": (
+                "Walk-forward results are challenger evidence only. Even if a candidate "
+                "passes the descriptive gates, it must be confirmed on a fresh untouched "
+                "period before any runtime model promotion."
+            ),
+        },
         "release_disposition": "RESEARCH_ONLY_NOT_APPROVED_FOR_LIVE_TRADING",
         "limitations": [
-            "Targets remain weak labels, not human-verified ground truth.",
-            "No fold test values are used for fitting, label thresholds, model choice, "
+            "Targets are weak future-outcome labels, not independently verified ground truth.",
+            "All technical features use trailing completed OHLC bars; volume is excluded.",
+            "XGBoost and LSTM are optional research dependencies. Runtime does not auto-load them.",
+            "No fold test values are used for fitting, label thresholds, model selection within "
             "or temperature calibration.",
-            "The HMM uses forward-filtered posteriors; it does not use "
-            "backward-smoothed test states.",
-            "UDF volume units are undocumented; volume is excluded from features "
-            "and capacity limits are disabled.",
-            "With capacity limits disabled, the portfolio simulation does not establish "
-            "executable liquidity or capacity.",
-            "Historical spread/depth are unavailable from OHLCV; spread and slippage "
-            "remain assumptions.",
-            "Fold scores are reported individually and as descriptive mean/std/range; "
-            "no best-fold selection is performed.",
-            "Results are research-only and do not establish future profitability "
-            "or live readiness.",
+            "HMM posterior probabilities use forward filtering, never backward smoothing.",
+            "If a fold's HMM does not converge, that model/fold is recorded as not evaluated.",
+            "OHLC does not reveal the order of high/low touches within a candle; these labels "
+            "are conservatively set to high_volatility.",
+            "Paired-fold bootstrap intervals are descriptive; adjacent folds may be dependent.",
+            "Disabling unknown-unit volume caps means backtests do not establish executable " +
+            "liquidity.",
+            "Historical spread/depth and provider data-use rights remain unresolved.",
+            "All model choices require an untouched confirmation period and independent review.",
         ],
     }
     output.mkdir(parents=True, exist_ok=True)

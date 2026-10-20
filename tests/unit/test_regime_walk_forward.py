@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -122,3 +124,77 @@ def test_hmm_filtering_is_causal_and_prefix_probabilities_do_not_change() -> Non
         numpy.ones(len(extended)),
     )
     assert numpy.isfinite(extended_result).all()
+
+
+def _technical_fixture(count: int = 80) -> tuple[MarketCandle, ...]:
+    from decimal import Decimal
+
+    from evoryn.domain.models import Market, MarketCandle
+
+    market = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
+    interval = timedelta(hours=1)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    rows: list[MarketCandle] = []
+    prior_close = 100.0
+    for index in range(count):
+        close_value = 100.0 + index * 0.18 + math.sin(index / 3.0) * 0.7
+        close = Decimal(str(close_value))
+        opening = Decimal(str(prior_close))
+        rows.append(
+            MarketCandle(
+                market=market,
+                timestamp=start + index * interval,
+                interval=interval,
+                open=opening,
+                high=max(opening, close) + Decimal("0.6"),
+                low=min(opening, close) - Decimal("0.6"),
+                close=close,
+                volume=Decimal("100"),
+                source="synthetic-technical-features",
+            )
+        )
+        prior_close = close_value
+    return tuple(rows)
+
+
+def test_research_technical_features_are_causal_finite_and_volume_free() -> None:
+    from evoryn.intelligence.regime_research_models import (
+        FEATURE_NAMES,
+        FEATURE_SCHEMA_VERSION,
+        research_feature_vector,
+    )
+
+    candles = _technical_fixture()
+    from_full = research_feature_vector(candles, 60, lookback=48)
+    from_prefix = research_feature_vector(candles[:61], 60, lookback=48)
+
+    assert FEATURE_SCHEMA_VERSION == "3.0.0-price-technical-only"
+    assert len(from_full) == len(FEATURE_NAMES) == 21
+    assert from_full == from_prefix
+    assert all(math.isfinite(value) for value in from_full)
+    assert not any("volume" in name.casefold() for name in FEATURE_NAMES)
+    assert "rsi_14_scaled" in FEATURE_NAMES
+    assert "macd_histogram_pct" in FEATURE_NAMES
+    assert "bollinger_percent_b" in FEATURE_NAMES
+    assert "atr_14_pct" in FEATURE_NAMES
+
+
+def test_lstm_training_produces_normalized_probabilities_when_torch_is_available() -> None:
+    pytest.importorskip("torch")
+    numpy = pytest.importorskip("numpy")
+    from evoryn.intelligence.regime_research_models import fit_lstm, lstm_probabilities
+
+    generator = numpy.random.default_rng(41)
+    features = generator.normal(size=(20, 12, 21)).astype("float32")
+    targets = numpy.asarray([0, 1, 2, 3] * 5, dtype="int64")
+    model, torch_module = fit_lstm(
+        features,
+        targets,
+        random_seed=41,
+        epochs=1,
+    )
+    probabilities = lstm_probabilities(model, torch_module, features[:4], numpy)
+
+    assert probabilities.shape == (4, 4)
+    assert numpy.isfinite(probabilities).all()
+    assert numpy.allclose(probabilities.sum(axis=1), numpy.ones(4), atol=1e-6)
