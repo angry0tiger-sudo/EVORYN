@@ -90,7 +90,7 @@ class OfflineCsvPaperFeed:
     def get_snapshot(self, market: Market) -> MarketSnapshot:
         if market != self.market:
             raise ValueError("Offline feed market does not match the requested market.")
-        now = _utc_now(self._clock())
+        now = _utc_now(self._clock)
         candles = self._completed_candles(now)
         close = candles[-1].close
         bid = close * (Decimal("1") - _SPREAD_FRACTION)
