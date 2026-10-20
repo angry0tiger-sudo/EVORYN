@@ -222,6 +222,10 @@ def load_and_validate_config(config_path: Path) -> dict[str, Any]:
         raise PaperTaskConfigurationError("CSV file exceeds the configured size ceiling.")
     if not journal_path.parent.is_dir() or not log_path.parent.is_dir():
         raise PaperTaskConfigurationError("Journal and log parent directories must already exist.")
+    if journal_path.exists() and (journal_path.is_symlink() or not journal_path.is_file()):
+        raise PaperTaskConfigurationError("journal_path must be a regular file when it already exists.")
+    if log_path.exists() and (log_path.is_symlink() or not log_path.is_file()):
+        raise PaperTaskConfigurationError("log_path must be a regular file when it already exists.")
     value["csv_path"] = csv_path
     value["journal_path"] = journal_path
     value["log_path"] = log_path
@@ -361,11 +365,11 @@ def preflight(config_path: Path) -> dict[str, str]:
         "live_connection": "disabled",
         "real_orders": "disabled",
         "candle_count": str(len(completed)),
-        "latest_candle_close": completed[-1].timestamp.add(interval).isoformat(),
+        "latest_candle_close": (completed[-1].timestamp + interval).isoformat(),
     }
 
 
-def _build_runtime(config: dict[str, Any], config_path: Path) -> PaperStrategyRuntime:
+def _build_runtime(config: dict[str, Any]) -> PaperStrategyRuntime:
     market = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
     interval = timedelta(seconds=config["interval_seconds"])
     feed = OfflineCsvPaperFeed(
@@ -419,7 +423,7 @@ def _run_paper(config_path: Path, *, max_cycles: int | None) -> int:
                 "paper_task_start mode=paper_only source=offline_csv champion=none config=%s",
                 config_path.resolve(),
             )
-            supervisor = PaperRuntimeSupervisor(lambda: _build_runtime(config, config_path))
+            supervisor = PaperRuntimeSupervisor(lambda: _build_runtime(config))
             scheduler = PaperRuntimeScheduler(
                 supervisor,
                 interval_seconds=float(_positive_int(config, "cycle_interval_seconds")),
@@ -493,6 +497,20 @@ def _run_windows_task_action(action: str, config_path: Path, task_name: str) -> 
     return 0
 
 
+def _scrub_credentials_from_environment() -> None:
+    """Remove credential-bearing variables before constructing any Paper components."""
+    sensitive_markers = (
+        "API_KEY", "PRIVATE_KEY", "SECRET", "TOKEN",
+        "LIVE_TRADING", "ORDER_WRITES", "ENABLE_REAL_TRADING",
+    )
+    for name in tuple(os.environ):
+        upper = name.upper()
+        if upper.startswith(("EVORYN_", "NOBITEX_", "BINANCE_")) or any(
+            marker in upper for marker in sensitive_markers
+        ):
+            os.environ.pop(name, None)
+
+
 def _task_name_is_owned(task_name: str) -> bool:
     import re
     return task_name == DEFAULT_TASK_NAME or bool(
@@ -510,13 +528,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     run_parser.add_argument("--max-cycles", type=int, default=None)
     for name in ("register", "unregister", "status"):
         item = sub.add_parser(name, help=f"{name.title()} the user-scoped Windows Paper task.")
-        item.add_argument("--config", required=True, type=Path)
+        item.add_argument("--config", required=(name == "register"), type=Path)
         item.add_argument("--task-name", default=DEFAULT_TASK_NAME)
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    _scrub_credentials_from_environment()
     try:
         if args.command == "preflight":
             print(json.dumps(preflight(args.config), sort_keys=True))
@@ -527,14 +546,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_paper(args.config, max_cycles=args.max_cycles)
         if not _task_name_is_owned(args.task_name):
             raise PaperTaskConfigurationError("Refusing to manage a Task Scheduler name outside the EVORYN Paper namespace.")
-        if args.command == "unregister" and not args.config.exists():
-            # Deleting the one fixed task is permitted even if its data source was removed.
-            config_path = args.config
-        else:
-            load_and_validate_config(args.config)
-            config_path = args.config
+        config_path = args.config if args.config is not None else Path.cwd() / "unused-paper-config.json"
+        if args.command == "register":
+            load_and_validate_config(config_path)
         return _run_windows_task_action(args.command, config_path, args.task_name)
-    except (PaperTaskConfigurationError, ValueError, OSError) as exc:
+    except (PaperTaskConfigurationError, ValueError, OSError, subprocess.SubprocessError) as exc:
         print(f"Paper task preflight rejected: {exc}", file=sys.stderr)
         return 2
 
