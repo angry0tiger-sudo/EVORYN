@@ -181,3 +181,44 @@ No open item may be closed by inference. This ledger does not authorize live tra
   must pass on the exact final PR HEAD. No user-machine task was registered and no local host was accessed.
 - [ ] **No live connectivity or order activity.** All work remains GitHub-side; no local Windows action,
   authenticated account request, exchange-write request, or real order was performed.
+
+
+## Phase 28 — Offline Windows Paper Task implementation (PR #31)
+
+### Implementation status — 2026-10-20
+
+- [x] **Strict offline runner added.** `scripts/windows_paper_task.py` accepts only an exact JSON allow-list,
+  `runtime_mode=paper_only`, `simulation_only=true`, BTC-USDT, local CSV, local journal and local log.
+  The CSV must have explicit UTC timestamps, contiguous bars, valid OHLC values, and a completed candle
+  no more than two configured intervals stale. UNC/network paths, unknown keys and model paths are rejected.
+- [x] **No-Champion boundary explicit.** The runner uses `NoChampionClassifier`, whose prediction is
+  `UNKNOWN` / `NO_CHAMPION_SELECTED`; no model artifact is loaded and no model is selected for Runtime.
+  `selected_model_for_runtime=null` remains the release decision.
+- [x] **Task Scheduler helper added.** `scripts/windows_paper_task.ps1` implements user-scoped register,
+  status, and unregister operations for the reserved EVORYN Paper namespace. Registration is at current-user
+  logon with Limited privilege, no stored password, `MultipleInstances=IgnoreNew`, and a bounded
+  three-restart/five-minute retry policy. Existing tasks are not overwritten.
+- [x] **Process / journal locking retained and integrated.** `PaperRuntimeLocks` is acquired before
+  constructing the SQLite Paper runtime. Duplicate processes exit before journal access. Environment
+  variables likely to contain EVORYN/Nobitex/Binance credentials or live-write acknowledgements are removed
+  before Paper composition. Logs rotate at 5 MiB with five backups, and SIGINT/SIGTERM requests cooperatively
+  stop the in-process scheduler.
+- [x] **Configuration template and runbook added.** See `config/windows-paper.example.json` and
+  `docs/operations/windows-paper-task-scheduler.md`.
+- [x] **Windows CI coverage defined.** `.github/workflows/ci.yml` parses the PowerShell helper and runs lock
+  tests plus a native Windows task register/status/unregister round trip using a temporary
+  `EVORYN-CI-PaperOnly-*` task; the test attempts cleanup in a `finally` block. Cross-platform unit tests
+  validate config, CSV freshness/gaps, UNC rejection and task-name scope.
+- [ ] **Exact-HEAD seven-gate CI.** The earlier run #971 failed Ruff and mypy. Those issues have been amended;
+  do not close the gate until a new run on the final PR HEAD has all seven jobs completed with
+  `conclusion=success`: unit tests, Ruff, mypy, Bandit, runner preflight/compile, pip-audit, and Windows
+  Paper locks/Task Scheduler lifecycle.
+- [ ] **Fresh schema-v3 research artifact.** The historical six-model schema-v2 Artifact #12256082280 has
+  no model backtest entries under `forward_thresholds`. A new research run on the current source must confirm
+  six models, both policy backtests, per-policy candidate gates, model artifact checksums/reloads, and report
+  and ZIP digests. That is separate from the seven standard CI gates.
+- [ ] **Native owner-host acceptance.** No task has been registered on the user's Windows 11 host. Owner-host
+  ACL, logoff/shutdown, restart budget, disk-full/permission/journal-corruption fault drills, log rotation,
+  and explicit unregistration acceptance remain open. Linux/Windows CI cannot attest to the actual owner host.
+- [x] **No live operations.** All changes were committed through GitHub APIs. No local owner machine was
+  accessed, no exchange/account endpoint or credential was used, and no real order was placed.
