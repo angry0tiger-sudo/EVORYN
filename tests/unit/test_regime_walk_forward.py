@@ -24,6 +24,7 @@ from evoryn.intelligence.regime_walk_forward import (
 from evoryn.learning_lab.backtest import make_walk_forward_folds
 from evoryn.learning_lab.historical_data import HistoricalDataset
 
+
 def test_walk_forward_model_registry_includes_all_six_challengers() -> None:
     assert _MODELS == (
         "random_forest",
