@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from evoryn.domain.models import Market, MarketCandle
+from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
 from evoryn.learning_lab.advanced_meta_label import (
     ADVANCED_FEATURE_SCHEMA_VERSION,
     advanced_feature_names,
@@ -174,8 +175,7 @@ def test_tuning_trial_count_fails_closed_before_optional_imports() -> None:
 def test_advanced_evaluator_loads_the_versioned_dataset_store_reference(
     tmp_path: Path,
 ) -> None:
-    from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
-    from scripts import evaluate_advanced_meta_label as evaluator
+    evaluator = importlib.import_module("scripts.evaluate_advanced_meta_label")
 
     dataset_id = "nobitex-btcusdt-1h"
     dataset_version = "a" * 64
