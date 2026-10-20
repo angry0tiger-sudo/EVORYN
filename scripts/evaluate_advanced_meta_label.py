@@ -48,7 +48,9 @@ class _SmaCrossEventBaseline:
     strategy_id = "sma-crossover-entry-events-long-flat"
     strategy_version = "1.0.0"
 
-    def __init__(self, *, eligible_start_index: int, fast_window: int = 12, slow_window: int = 48) -> None:
+    def __init__(
+        self, *, eligible_start_index: int, fast_window: int = 12, slow_window: int = 48
+    ) -> None:
         self._eligible_start_index = eligible_start_index
         self._fast_window = fast_window
         self._slow_window = slow_window
@@ -304,7 +306,15 @@ def run_experiment(
     model_dir.mkdir(parents=True, exist_ok=True)
     per_fold: list[dict[str, Any]] = []
     fold_results: dict[str, dict[str, list[float]]] = {
-        name: {"net": [], "vs_buy_hold": [], "vs_sma": [], "vs_sma_event": [], "ap": [], "prevalence": [], "trades": []}
+        name: {
+            "net": [],
+            "vs_buy_hold": [],
+            "vs_sma": [],
+            "vs_sma_event": [],
+            "ap": [],
+            "prevalence": [],
+            "trades": [],
+        }
         for name in ("xgboost", "lightgbm")
     }
 
@@ -409,7 +419,10 @@ def run_experiment(
                 model_name, tune_result.best_params,
                 random_seed=random_seed + fold.fold_index * 100 + model_offset,
             )
-            final_model.fit(numpy.asarray(x_fit, dtype="float64"), numpy.asarray(y_fit, dtype="int64"))
+            final_model.fit(
+                numpy.asarray(x_fit, dtype="float64"),
+                numpy.asarray(y_fit, dtype="int64"),
+            )
 
             model_path = model_dir / f"fold-{fold.fold_index:02d}-{model_name}.joblib"
             joblib.dump(
@@ -424,7 +437,9 @@ def run_experiment(
                     "train_range": [fold.train.start, fold.train.end],
                     "validation_range": [fold.validation.start, fold.validation.end],
                     "test_range": [fold.test.start, fold.test.end],
-                    "tuning_validation_average_precision": tune_result.best_validation_average_precision,
+                    "tuning_validation_average_precision": (
+                        tune_result.best_validation_average_precision
+                    ),
                     "best_params": tune_result.best_params,
                 },
                 model_path,
@@ -470,7 +485,9 @@ def run_experiment(
                 "status": "EVALUATED",
                 "tuning": {
                     "objective": "validation_average_precision",
-                    "best_validation_average_precision": tune_result.best_validation_average_precision,
+                    "best_validation_average_precision": (
+                        tune_result.best_validation_average_precision
+                    ),
                     "completed_trials": tune_result.completed_trials,
                     "random_seed": tune_result.random_seed,
                     "best_params": tune_result.best_params,
@@ -529,7 +546,12 @@ def run_experiment(
         classification_gate = (
             len(values["ap"]) == len(folds)
             and len(values["prevalence"]) == len(folds)
-            and all(ap > prevalence for ap, prevalence in zip(values["ap"], values["prevalence"], strict=True))
+            and all(
+                ap > prevalence
+                for ap, prevalence in zip(
+                    values["ap"], values["prevalence"], strict=True
+                )
+            )
         )
         economic_gate = (
             complete_coverage
@@ -550,7 +572,9 @@ def run_experiment(
             "complete_fold_coverage": complete_coverage,
             "mean_net_return_fraction": _mean(values["net"]) if values["net"] else None,
             "mean_average_precision": _mean(values["ap"]) if values["ap"] else None,
-            "mean_positive_prevalence": _mean(values["prevalence"]) if values["prevalence"] else None,
+            "mean_positive_prevalence": (
+                _mean(values["prevalence"]) if values["prevalence"] else None
+            ),
             "closed_trades_total": int(sum(values["trades"])),
             "paired_fold_bootstrap_intervals": intervals,
             "classification_gate_passed": classification_gate,
@@ -612,7 +636,9 @@ def run_experiment(
                 "volume_capacity_constraints": "disabled_because_volume_units_unknown",
             },
             "order_book": "NOT_USED_NO_VERIFIED_HISTORICAL_DEPTH_SOURCE",
-            "elliott_wave": "NOT_USED_SUBJECTIVE_LABELS_AVOIDED; causal confirmed-swing proxies are used",
+            "elliott_wave": (
+                "NOT_USED_SUBJECTIVE_LABELS_AVOIDED; causal confirmed-swing proxies are used"
+            ),
         },
         "folds": per_fold,
         "candidate_gates": gates,
@@ -623,7 +649,10 @@ def run_experiment(
             "OHLCV-derived multi-timeframe features are not independent native 4h/daily feeds.",
             "Confirmed swing structure is not a full Elliott-wave interpretation.",
             "Fibonacci levels are rolling-range references, not hand-validated swing anchors.",
-            "Nobitex volume units remain unknown; liquidity constraints are disabled and results are optimistic.",
+            (
+                "Nobitex volume units remain unknown; liquidity constraints are disabled "
+                "and results are optimistic."
+            ),
             "Spread and slippage are assumptions, not historical quotes.",
             "Historical provider usage and retention rights remain unreviewed.",
             "The terminal 10 percent is reserved and not evaluated by these folds.",
