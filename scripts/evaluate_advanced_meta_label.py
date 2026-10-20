@@ -240,9 +240,9 @@ def _load_dataset(output: Path) -> HistoricalDataset:
     if not report_path.is_file():
         raise SystemExit("Training report is missing; run the public-history trainer first.")
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    dataset_metadata = report.get("dataset")
+    dataset_metadata = report.get("dataset_store")
     if not isinstance(dataset_metadata, dict):
-        raise SystemExit("Training report has no dataset identity.")
+        raise SystemExit("Training report has no verified dataset-store identity.")
     dataset_id = dataset_metadata.get("dataset_id")
     dataset_version = dataset_metadata.get("dataset_version")
     if not isinstance(dataset_id, str) or not isinstance(dataset_version, str):
