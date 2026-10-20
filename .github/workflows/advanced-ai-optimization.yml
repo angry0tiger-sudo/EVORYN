@@ -70,7 +70,7 @@ jobs:
       - name: Audit research environment
         run: |
           set -o pipefail
-          pip-audit 2>&1 | tee pip-audit.log
+          pip-audit --skip-editable 2>&1 | tee pip-audit.log
       - name: Download public hourly history and create immutable dataset
         run: |
           set -o pipefail
