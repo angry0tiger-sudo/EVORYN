@@ -60,7 +60,7 @@ _LABELS = (
     RegimeLabel.HIGH_VOLATILITY,
 )
 _POLICIES = ("forward_thresholds", "volatility_scaled_triple_barrier")
-_MODELS = ("random_forest", "hist_gradient_boosting", "xgboost", "gaussian_hmm", "lstm")
+_MODELS = ("random_forest", "hist_gradient_boosting", "xgboost", "lightgbm", "gaussian_hmm", "lstm")
 
 
 @dataclass(frozen=True, slots=True)
