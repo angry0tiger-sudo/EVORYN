@@ -534,8 +534,8 @@ def run_experiment(
         per_fold.append(fold_record)
 
     gates: dict[str, dict[str, Any]] = {}
-    for model_index, model_name in enumerate(("xgboost", "lightgbm")):
-        values = fold_results[model_name]
+    for model_index, gate_model_name in enumerate(("xgboost", "lightgbm")):
+        values = fold_results[gate_model_name]
         folds_evaluated = len(values["net"])
         complete_coverage = folds_evaluated == len(folds) and len(folds) >= 10
         intervals: dict[str, Any] = {}
@@ -567,7 +567,7 @@ def run_experiment(
             and float(intervals["vs_sma_event"]["ci95_lower"]) > 0
             and sum(values["trades"]) >= 20
         )
-        gates[model_name] = {
+        gates[gate_model_name] = {
             "status": "EVALUATED" if complete_coverage else "INCOMPLETE_FOLD_COVERAGE",
             "evaluated_folds": folds_evaluated,
             "expected_folds": len(folds),
