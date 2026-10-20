@@ -15,9 +15,9 @@ import pytest
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.regime import RegimeLabel
 from evoryn.intelligence.regime_walk_forward import (
-    _MODELS,
     _backtest_metrics,
     _build_candidate_gates_by_policy,
+    _MODELS,
     filtered_gaussian_hmm_probabilities,
     volatility_scaled_triple_barrier_label,
 )
