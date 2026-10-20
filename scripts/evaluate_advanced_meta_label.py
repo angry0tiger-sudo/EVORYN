@@ -461,7 +461,9 @@ def run_experiment(
                     "validation_threshold_net_sum": (
                         threshold_selection.summed_net_return_fraction
                     ),
-                    "final_fit_policy": "train_only_validation_reserved_for_tuning_and_threshold"
+                    "final_fit_policy": (
+                        "train_only_validation_reserved_for_tuning_and_threshold"
+                    ),
                     "tuning_validation_average_precision": (
                         tune_result.best_validation_average_precision
                     ),
@@ -640,7 +642,10 @@ def run_experiment(
     report: dict[str, Any] = {
         "schema_version": 1,
         "experiment_id": hashlib.sha256(
-            f"{dataset.version}:{ADVANCED_FEATURE_SCHEMA_VERSION}:{n_trials}:{random_seed}:validation-threshold-v2:walk-forward-35-15-3".encode()
+            (
+            f"{dataset.version}:{ADVANCED_FEATURE_SCHEMA_VERSION}:{n_trials}:"
+            f"{random_seed}:validation-threshold-v2:walk-forward-35-15-3"
+        ).encode()
         ).hexdigest(),
         "created_at": datetime.now(UTC).isoformat(),
         "dataset": {
@@ -688,7 +693,9 @@ def run_experiment(
             "research_end_index_exclusive": research_end,
             "test_blocks_non_overlapping": True,
             "fold_scaler": "none (tree models; features are dimensionless/price-normalized)",
-            "final_fit": "train_only; validation used for Optuna and threshold selection, not fitting",
+            "final_fit": (
+                "train_only; validation used for Optuna and threshold selection, not fitting"
+            ),
             "costs": {
                 "initial_cash": "10000",
                 "allocation_fraction": "0.25",
