@@ -138,6 +138,7 @@ def _build_candidate_gates_by_policy(
             balanced_differences: list[float] = []
             f1_differences: list[float] = []
             return_differences: list[float] = []
+            sma_return_differences: list[float] = []
             trade_count = 0
             evaluated_folds = 0
             for fold_report in fold_reports:
@@ -169,7 +170,13 @@ def _build_candidate_gates_by_policy(
                         "net_return_fraction"
                     ]
                 )
+                sma_return = float(
+                    baseline_backtests["sma-crossover-long-flat"]["metrics"][
+                        "net_return_fraction"
+                    ]
+                )
                 return_differences.append(model_return - hold_return)
+                sma_return_differences.append(model_return - sma_return)
                 trade_count += int(model_backtest["metrics"]["closed_trade_count"])
                 evaluated_folds += 1
             if not evaluated_folds:
@@ -194,12 +201,19 @@ def _build_candidate_gates_by_policy(
             return_ci = bootstrap_mean_interval(
                 return_differences, random_seed=seed_offset + 104
             )
+            sma_return_ci = bootstrap_mean_interval(
+                sma_return_differences, random_seed=seed_offset + 105
+            )
             classification_gate = (
                 acc_ci["ci95_lower"] > 0
                 and balanced_ci["ci95_lower"] > 0
                 and f1_ci["ci95_lower"] > 0
             )
-            economic_gate = return_ci["ci95_lower"] > 0 and trade_count >= 20
+            economic_gate = (
+                return_ci["ci95_lower"] > 0
+                and sma_return_ci["ci95_lower"] > 0
+                and trade_count >= 20
+            )
             all_folds_gate = (
                 evaluated_folds == expected_fold_count
                 and len(fold_reports) == expected_fold_count
@@ -214,6 +228,7 @@ def _build_candidate_gates_by_policy(
                 "balanced_accuracy_difference_vs_majority": balanced_ci,
                 "macro_f1_difference_vs_majority": f1_ci,
                 "net_return_difference_vs_buy_and_hold": return_ci,
+                "net_return_difference_vs_sma": sma_return_ci,
                 "classification_gate_passed": classification_gate,
                 "economic_gate_passed": economic_gate,
                 "all_folds_gate_passed": all_folds_gate,

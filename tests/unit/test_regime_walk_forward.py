@@ -335,7 +335,7 @@ def test_candidate_gates_cover_every_model_policy_and_fail_closed_on_missing_bac
                 model_reports[model] = {
                     "status": "EVALUATED",
                     "test_metrics": {
-                        "accuracy": 0.80,
+                                "accuracy": 0.80,
                         "balanced_accuracy": 0.75,
                         "macro_f1": 0.70,
                     },
@@ -378,6 +378,7 @@ def test_candidate_gates_cover_every_model_policy_and_fail_closed_on_missing_bac
             assert gate["evaluated_folds"] == 10
             assert gate["classification_gate_passed"] is True
             assert gate["economic_gate_passed"] is True
+            assert gate["net_return_difference_vs_sma"]["ci95_lower"] > 0
             assert gate["empirical_candidate_gate_passed"] is True
             assert gate["runtime_promotion_allowed"] is False
 
