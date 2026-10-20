@@ -193,6 +193,8 @@ def _feature_row(
     grid_offset_seconds: int,
     *,
     lookback: int,
+    all_highs: Sequence[float],
+    all_lows: Sequence[float],
 ) -> tuple[float, ...]:
     start_index = end_index - lookback + 1
     window = candles[start_index : end_index + 1]
@@ -240,8 +242,6 @@ def _feature_row(
     ) if price_range > 0 else (0.0,) * len(FIBONACCI_LEVELS)
 
     # These are confirmed swing-shape proxies, not subjective Elliott-wave labels.
-    all_highs = [float(c.high) for c in candles]
-    all_lows = [float(c.low) for c in candles]
     pivots = _confirmed_swings(
         all_highs, all_lows, max(0, end_index - 47), end_index
     )
@@ -285,9 +285,19 @@ def build_advanced_feature_matrix(
         raise ValueError("Insufficient candles for the requested lookback.")
     index_by_epoch = {int(c.timestamp.timestamp()): i for i, c in enumerate(candles)}
     grid_offset_seconds = int(candles[0].timestamp.timestamp()) % 3600
+    all_highs = tuple(float(c.high) for c in candles)
+    all_lows = tuple(float(c.low) for c in candles)
     indices = tuple(range(lookback - 1, len(candles)))
     rows = tuple(
-        _feature_row(candles, index, index_by_epoch, grid_offset_seconds, lookback=lookback)
+        _feature_row(
+            candles,
+            index,
+            index_by_epoch,
+            grid_offset_seconds,
+            lookback=lookback,
+            all_highs=all_highs,
+            all_lows=all_lows,
+        )
         for index in indices
     )
     return _FEATURE_NAMES, indices, rows
@@ -393,7 +403,7 @@ def make_meta_label_classifier(
         module = importlib.import_module("lightgbm")
         return module.LGBMClassifier(
             objective="binary", n_jobs=1, random_state=random_seed, deterministic=True,
-            force_col_wise=True, verbosity=-1, **params,
+            force_col_wise=True, subsample_freq=1, verbosity=-1, **params,
         )
     raise ValueError("model_name must be xgboost or lightgbm.")
 
