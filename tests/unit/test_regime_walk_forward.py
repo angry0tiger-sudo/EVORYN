@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -247,7 +248,7 @@ def test_terminal_confirmation_geometry_stays_outside_all_research_folds() -> No
         )
 
 
-def test_lightgbm_fixed_class_order_probabilities_and_serialization(tmp_path) -> None:
+def test_lightgbm_fixed_class_order_probabilities_and_serialization(tmp_path: Path) -> None:
     lightgbm = pytest.importorskip("lightgbm")
     joblib = pytest.importorskip("joblib")
     numpy = pytest.importorskip("numpy")
@@ -283,7 +284,12 @@ def test_lightgbm_fixed_class_order_probabilities_and_serialization(tmp_path) ->
         {
             "estimator": estimator,
             "class_order": ["bull_trend", "bear_trend", "range_bound", "high_volatility"],
-            "label_encoding": {"0": "bull_trend", "1": "bear_trend", "2": "range_bound", "3": "high_volatility"},
+            "label_encoding": {
+                "0": "bull_trend",
+                "1": "bear_trend",
+                "2": "range_bound",
+                "3": "high_volatility",
+            },
         },
         artifact,
     )
