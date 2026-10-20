@@ -7,6 +7,7 @@ import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,6 +15,7 @@ import pytest
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.regime import RegimeLabel
 from evoryn.intelligence.regime_walk_forward import (
+    _backtest_metrics,
     _build_candidate_gates_by_policy,
     filtered_gaussian_hmm_probabilities,
     volatility_scaled_triple_barrier_label,
@@ -394,3 +396,29 @@ def test_candidate_gates_cover_every_model_policy_and_fail_closed_on_missing_bac
     assert lightgbm_gate["evaluated_folds"] == 9
     assert lightgbm_gate["all_folds_gate_passed"] is False
     assert lightgbm_gate["empirical_candidate_gate_passed"] is False
+
+
+
+def test_backtest_metric_summary_includes_gross_turnover_and_turnover_multiple() -> None:
+    metrics = SimpleNamespace(
+        initial_equity=Decimal("10000"),
+        final_equity=Decimal("10100"),
+        net_profit=Decimal("100"),
+        net_return_fraction=Decimal("0.01"),
+        max_drawdown_fraction=Decimal("0.02"),
+        gross_turnover=Decimal("25000"),
+        turnover_multiple=Decimal("2.5"),
+        closed_trade_count=7,
+        commission_paid=Decimal("25"),
+        estimated_spread_cost=Decimal("10"),
+        estimated_slippage_cost=Decimal("15"),
+        fill_count=14,
+        time_in_market_fraction=Decimal("0.35"),
+        open_position_quantity=Decimal("0"),
+    )
+    output = _backtest_metrics(
+        metrics,
+        volume_capacity_constraint_enabled=False,
+    )
+    assert output["gross_turnover"] == "25000"
+    assert output["turnover_multiple"] == "2.5"

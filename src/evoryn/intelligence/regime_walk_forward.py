@@ -1198,6 +1198,8 @@ def _backtest_metrics(metrics: Any, *, volume_capacity_constraint_enabled: bool)
         "final_equity": str(metrics.final_equity),
         "net_profit": str(metrics.net_profit),
         "net_return_fraction": str(metrics.net_return_fraction),
+        "gross_turnover": str(metrics.gross_turnover),
+        "turnover_multiple": str(metrics.turnover_multiple),
         "max_drawdown_fraction": str(metrics.max_drawdown_fraction),
         "closed_trade_count": metrics.closed_trade_count,
         "commission_paid": str(metrics.commission_paid),

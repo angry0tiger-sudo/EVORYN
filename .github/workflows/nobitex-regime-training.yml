@@ -194,6 +194,67 @@ jobs:
                       for metric in ("balanced_accuracy", "macro_f1", "log_loss"):
                           stat = metric_map[metric]
                           output.write(f"| {key} | {metric} | {stat['mean']:.6f} | {stat['population_stddev']:.6f} | {stat['minimum']:.6f} | {stat['maximum']:.6f} |\n")
+                  output.write("\n### Per-policy economic results and execution costs\n\n")
+                  output.write(
+                      "| Policy | Strategy / model | Fold coverage | Mean net return | "
+                      "Mean max drawdown | Closed trades | Gross turnover (USDT) | "
+                      "Mean turnover multiple | Commission paid (USDT) | "
+                      "Assumed spread cost (USDT) | Assumed slippage cost (USDT) | "
+                      "Mean time in market |\n"
+                  )
+                  output.write("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+                  policy_names = walk_forward["protocol"]["label_policies"]
+                  strategy_names = [
+                      "buy-and-hold-reference",
+                      "sma-crossover-long-flat",
+                      *walk_forward["protocol"]["models"],
+                  ]
+                  for policy_name in policy_names:
+                      for strategy_name in strategy_names:
+                          metric_rows = []
+                          for fold in walk_forward["folds"]:
+                              policy_report = fold["label_policies"][policy_name]
+                              if strategy_name in {
+                                  "buy-and-hold-reference",
+                                  "sma-crossover-long-flat",
+                              }:
+                                  backtest_item = policy_report["baseline_backtests"].get(
+                                      strategy_name
+                                  )
+                              else:
+                                  backtest_item = policy_report["backtests"].get(
+                                      strategy_name
+                                  )
+                              if isinstance(backtest_item, dict) and isinstance(
+                                  backtest_item.get("metrics"), dict
+                              ):
+                                  metric_rows.append(backtest_item["metrics"])
+                          if metric_rows:
+                              mean = lambda key: sum(
+                                  float(row[key]) for row in metric_rows
+                              ) / len(metric_rows)
+                              total = lambda key: sum(
+                                  float(row[key]) for row in metric_rows
+                              )
+                              output.write(
+                                  f"| {policy_name} | {strategy_name} | {len(metric_rows)}/"
+                                  f"{walk_forward['protocol']['fold_count']} | "
+                                  f"{mean('net_return_fraction') * 100:.4f}% | "
+                                  f"{mean('max_drawdown_fraction') * 100:.4f}% | "
+                                  f"{total('closed_trade_count'):.0f} | "
+                                  f"{total('gross_turnover'):.2f} | "
+                                  f"{mean('turnover_multiple'):.4f} | "
+                                  f"{total('commission_paid'):.4f} | "
+                                  f"{total('estimated_spread_cost'):.4f} | "
+                                  f"{total('estimated_slippage_cost'):.4f} | "
+                                  f"{mean('time_in_market_fraction') * 100:.2f}% |\n"
+                              )
+                          else:
+                              output.write(
+                                  f"| {policy_name} | {strategy_name} | 0/"
+                                  f"{walk_forward['protocol']['fold_count']} | n/a | n/a | "
+                                  "0 | n/a | n/a | n/a | n/a | n/a | n/a |\n"
+                              )
                   output.write("\nFold rows remain separately recorded in the JSON report; no best-fold is selected.\n\n")
               else:
                   output.write("**Walk-forward outcome:** report not produced; inspect walk-forward-run.log.\n\n")
