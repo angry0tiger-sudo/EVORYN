@@ -129,7 +129,7 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [x] **Original Random Forest remains rejected.** Its final holdout accuracy was 33.92% versus 58.51% for the train-only majority baseline. The cost-adjusted holdout backtest did not establish a profitable edge.
 - [x] **Challenger stack and design gates recorded.** ADR 0018 documents Random Forest, HistGradientBoosting, XGBoost, forward-filtered Gaussian HMM and compact CPU LSTM; ADR 0019 records Windows Task Scheduler requirements.
 - [ ] **Provider semantics and data rights.** Keep Nobitex UDF volume unknown. Historical data retention/commercial-use terms remain unreviewed.
-- [ ] **Windows unattended execution.** No owner Windows host was accessed, no task was registered, no OS-level mutex was implemented or tested, and no native Windows acceptance exists.
+- [ ] **Windows unattended execution.** At this Phase 25 checkpoint the OS task was not implemented. The Phase 28 changes below supersede that snapshot: an offline CSV runner, Windows Task Scheduler PowerShell helper and cross-process lock implementation now exist on PR #31; exact-head Windows CI and owner-host acceptance remain separate gates.
 - [ ] **Production runtime model integration.** Research schema v3 is not accepted by the current production loader. No challenger is connected or promoted.
 - [ ] **Independent model-risk review.** Required even if a future challenger passes empirical gates.
 
@@ -144,7 +144,7 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [x] **No model passed the combined gate.** Train-only majority Accuracy averaged 63.062% for forward-threshold labels and 63.445% for Triple-Barrier labels; all five candidates' mean Triple-Barrier accuracies were lower than that policy's baseline. Macro-F1 improved for several candidates, but Accuracy confidence intervals remained negative and return-difference intervals versus Buy-and-Hold spanned zero with negative lower bounds. Report fields: `selected_model_for_runtime=null`, `runtime_promotion_allowed=false`.
 - [ ] **Fresh confirmation and independent model-risk review** before any possible future promotion.
 - [ ] **Volume semantics and data-use rights** remain unresolved; UDF volume stays unknown and unused, and capacity caps remain disabled.
-- [ ] **Windows unattended Paper runtime** remains open. No OS task was registered, no OS-level mutex/launcher was implemented or tested, and no native Windows host was accessed. ADR 0019 is design-only.
+- [ ] **Windows unattended Paper runtime** remains open as a release gate. The Phase 26 checkpoint predates PR #31's offline runner, task registration helper and no-Champion composition root; see Phase 28 for the current implementation status. No user-machine task has been registered.
 - [ ] **Runtime schema integration** remains open. Research schema v3 does not match the production loader contract; no challenger is connected.
 - Full metric tables, confidence intervals, portfolio outcomes and digests: [`docs/research/2026-10-20-regime-challenger-walk-forward.md`](docs/research/2026-10-20-regime-challenger-walk-forward.md).
 
@@ -174,9 +174,10 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [ ] **Fresh schema-v3 exact-head research run.** Validate both-policy backtest coverage, all six models,
   model artifact reloads, per-policy candidate gates, report checksum, and ZIP checksum on the new PR head.
   Do not reuse the schema-v2 artifact as evidence for the newer source.
-- [ ] **Windows Task Scheduler remains a release blocker.** The repository contains process-local Paper
-  scheduling and a single-instance locking primitive, but no verified dedicated Windows Paper composition
-  root, Task Scheduler registration/unregistration implementation, or native Windows-host acceptance.
-  No task was registered and no local machine was accessed. Do not close this item based on Linux CI.
+- [ ] **Windows Task Scheduler remains a release blocker until evidence is complete.** PR #31 now adds
+  a strict offline CSV-only runner with a no-Champion classifier, PowerShell register/status/unregister
+  helper, current-user Limited privilege, IgnoreNew behavior, bounded restarts, rotating logs, credential-
+  environment scrubbing, cooperative stop handling, and an OS-level mutex plus journal lock. Windows CI
+  must pass on the exact final PR HEAD. No user-machine task was registered and no local host was accessed.
 - [ ] **No live connectivity or order activity.** All work remains GitHub-side; no local Windows action,
   authenticated account request, exchange-write request, or real order was performed.
