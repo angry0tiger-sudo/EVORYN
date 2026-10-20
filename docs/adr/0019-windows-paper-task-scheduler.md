@@ -9,9 +9,10 @@
 
 ## Context
 
-The existing `PaperRuntimeScheduler` is a process-local cooperative cycle loop. It exits on a
-latched runtime HALT or supervisor/observer error, but it does not register an OS task, hold a
-system-wide process mutex, or prove that a complete unattended Paper composition root exists.
+The existing `PaperRuntimeScheduler` is a process-local cooperative cycle loop. The repository now
+also contains `src/evoryn/runtime/single_instance.py`, which provides process-wide Paper locking
+(including a Windows named mutex and exclusive journal lock) with a Windows-hosted CI test path.
+This does not register an OS task or prove that a complete unattended Paper composition root exists.
 Linux GitHub Actions cannot establish native Windows Task Scheduler behavior.
 
 No challenger in the current Walk-forward comparison passed the empirical classification and
@@ -34,10 +35,11 @@ model.
 5. Registration must use a least-privilege user context without administrator rights or embedded
    passwords. Logs may record revision, schema, model fingerprint, dataset identity, configuration
    hash and status codes, never secrets.
-6. **Current implementation status:** design only. No native Windows host was accessed, no task
-   was registered, and no OS-level mutex or Task Scheduler installer is claimed as implemented.
-   Runtime composition, source contract, single-instance implementation, crash/recovery drills
-   and owner-host acceptance must pass before this ADR can be accepted.
+6. **Current implementation status:** single-instance locking code and a Windows CI test job exist;
+   the exact PR-head Windows CI result must be green before the lock gate is closed. Task Scheduler
+   registration/unregistration, a dedicated unattended Paper composition root, launcher failure-path
+   tests, crash/recovery drills and owner-host acceptance remain open. No native owner Windows host
+   was accessed and no task was registered.
 7. Model promotion and Task Scheduler registration are independent release gates. A scheduled
    Paper task does not authorize a model, exchange connection or live order route.
 
@@ -71,7 +73,8 @@ model.
 
 ## Validation and evidence
 
-- Unit tests for lock contention and fail-closed startup.
+- Windows-hosted tests for process-wide lock contention and exclusive journal locking; additional
+  launcher/task-registration and fail-closed startup tests remain required.
 - Crash injection at every durable journal transaction boundary.
 - Native Windows 11 start/stop/restart/uninstall acceptance by the owner.
 - Evidence that the launched process cannot enable or invoke an order-writing path.
