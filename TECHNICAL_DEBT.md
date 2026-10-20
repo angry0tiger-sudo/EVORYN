@@ -224,3 +224,13 @@ No open item may be closed by inference. This ledger does not authorize live tra
   have now been removed from this branch to prevent subsequent infrastructure pushes from initiating a
   new public-history research job. Any already-triggered automatic run must be distinguished from a manually
   dispatched live session; no new research run was manually dispatched in this phase.
+
+
+## Phase 29 — Advanced AI Optimization / SMA Meta-Label Research (2026-10-20)
+
+- [ ] **Exact-head CI and reviewer inspection:** the new branch contains a causal multi-timeframe/Fibonacci/confirmed-swing feature module, SMA event meta-labels, train-only mutual-information selection, bounded Optuna TPE tuning for XGBoost and LightGBM, an advanced walk-forward evaluator, and a manual-only research workflow. File/test definitions are not execution evidence.
+- [ ] **Empirical results:** run .github/workflows/advanced-ai-optimization.yml manually on an explicitly selected branch after the exact-head test suite passes; retain the artifact and JSON/sidecar SHA-256. No run or profit result is implied by this implementation.
+- [ ] **Extended data provenance:** the proposed 730-day / maximum-40-page request is within nominal UDF response capacity, but actual historical retention, page semantics, data-use terms and continuity must be proved from the fetched immutable dataset.
+- [ ] **Feature/model validation:** confirm prefix causality on exact code; audit closed-bar 4h/daily aggregation, label horizons, event purging, feature selection scope, Optuna split discipline, artifact serialization and three paired baseline comparisons.
+- [ ] **Liquidity limitations:** UDF volume semantics remain unknown and historical book depth has not been sourced. Features omit volume/order-book, and capacity limits are disabled; do not interpret the backtest as liquidity-realistic.
+- [ ] **No promotion by this phase:** selected_model_for_runtime remains null in code and reports. Empirical success alone cannot bypass untouched confirmation, independent model-risk review, loader compatibility, deterministic risk protections, and separate release approval.
