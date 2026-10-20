@@ -11,9 +11,21 @@ import pytest
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.intelligence.regime import RegimeLabel
 from evoryn.intelligence.regime_walk_forward import (
+    _MODELS,
     filtered_gaussian_hmm_probabilities,
     volatility_scaled_triple_barrier_label,
 )
+
+def test_walk_forward_model_registry_includes_all_six_challengers() -> None:
+    assert _MODELS == (
+        "random_forest",
+        "hist_gradient_boosting",
+        "xgboost",
+        "lightgbm",
+        "gaussian_hmm",
+        "lstm",
+    )
+
 
 MARKET = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
 INTERVAL = timedelta(hours=1)
