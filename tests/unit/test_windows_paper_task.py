@@ -43,11 +43,18 @@ def _write_fixture(tmp_path: Path, *, stale: bool = False, gap: bool = False) ->
         writer.writerow(("timestamp", "open", "high", "low", "close", "volume"))
         for index, stamp in enumerate(timestamps):
             close = str(100 + index)
-            writer.writerow((stamp.isoformat(), close, str(101 + index), str(99 + index), close, "10"))
+            writer.writerow(
+                (stamp.isoformat(), close, str(101 + index), str(99 + index), close, "10")
+            )
     return path
 
 
-def _write_config(tmp_path: Path, csv_path: Path, *, extra: dict[str, object] | None = None) -> Path:
+def _write_config(
+    tmp_path: Path,
+    csv_path: Path,
+    *,
+    extra: dict[str, object] | None = None,
+) -> Path:
     data = tmp_path / "data"
     logs = tmp_path / "logs"
     payload: dict[str, object] = {
@@ -108,8 +115,6 @@ def test_offline_csv_feed_builds_simulation_only_snapshot(tmp_path: Path) -> Non
 @pytest.mark.parametrize("stale,gap", [(True, False), (False, True)])
 def test_offline_csv_rejects_stale_or_gapped_data(tmp_path: Path, stale: bool, gap: bool) -> None:
     path = _write_fixture(tmp_path, stale=stale, gap=gap)
-    from evoryn.domain.models import Market
-
     market = Market(symbol="BTC-USDT", venue="nobitex", market_type="spot")
     if gap:
         with pytest.raises(ValueError, match="gapped"):
@@ -146,7 +151,10 @@ def test_task_name_scope_is_narrow_and_explicit() -> None:
     assert not _task_name_is_owned("EVORYN-LiveTrading")
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Native Task Scheduler integration runs only on Windows CI.")
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="Native Task Scheduler integration runs only on Windows CI.",
+)
 def test_windows_task_scheduler_register_status_unregister_round_trip(tmp_path: Path) -> None:
     from scripts.windows_paper_task import _run_windows_task_action
 
