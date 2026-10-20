@@ -83,13 +83,23 @@ switch ($Action) {
             break
         }
         $info = Get-ScheduledTaskInfo -TaskName $TaskName
+        $lastRun = $null
+        $nextRun = $null
+        if ($null -ne $info -and $null -ne $info.LastRunTime -and
+            $info.LastRunTime -gt [datetime]::MinValue) {
+            $lastRun = $info.LastRunTime.ToUniversalTime().ToString("o")
+        }
+        if ($null -ne $info -and $null -ne $info.NextRunTime -and
+            $info.NextRunTime -gt [datetime]::MinValue) {
+            $nextRun = $info.NextRunTime.ToUniversalTime().ToString("o")
+        }
         [PSCustomObject]@{
             status = "registered"
             task_name = $TaskName
             task_state = [string]$registered.State
-            last_run_time = $info.LastRunTime.ToUniversalTime().ToString("o")
-            last_task_result = $info.LastTaskResult
-            next_run_time = $info.NextRunTime.ToUniversalTime().ToString("o")
+            last_run_time = $lastRun
+            last_task_result = if ($null -ne $info) { $info.LastTaskResult } else { $null }
+            next_run_time = $nextRun
         } | ConvertTo-Json -Compress
     }
 }
