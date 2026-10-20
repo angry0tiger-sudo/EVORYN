@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -174,6 +175,7 @@ def test_advanced_evaluator_loads_the_versioned_dataset_store_reference(
     tmp_path: Path,
 ) -> None:
     from scripts import evaluate_advanced_meta_label as evaluator
+    from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
 
     dataset_id = "nobitex-btcusdt-1h"
     dataset_version = "a" * 64
@@ -187,12 +189,15 @@ def test_advanced_evaluator_loads_the_versioned_dataset_store_reference(
     (tmp_path / "training-report.json").write_text(
         json.dumps(report), encoding="utf-8"
     )
-    fake_dataset = SimpleNamespace(candles=tuple(range(2500)))
+    fake_dataset = cast(
+        HistoricalDataset,
+        SimpleNamespace(candles=tuple(range(2500))),
+    )
 
     with patch.object(
-        evaluator.HistoricalDatasetStore, "load", return_value=fake_dataset
+        HistoricalDatasetStore, "load", return_value=fake_dataset
     ) as load_dataset:
         loaded = evaluator._load_dataset(tmp_path)
 
-    assert loaded is fake_dataset
+    assert loaded is cast(Any, fake_dataset)
     load_dataset.assert_called_once_with(dataset_id, dataset_version)
