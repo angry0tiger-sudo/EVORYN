@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -115,7 +116,11 @@ def test_sma_meta_labels_are_next_open_cost_aware_and_exclude_incomplete_horizon
     assert events
     assert all(event.entry_index == event.signal_index + 1 for event in events)
     assert all(event.exit_index == event.signal_index + 6 for event in events)
-    assert all(event.net_return_after_costs == pytest.approx(event.gross_return - 0.003) for event in events)
+    assert all(
+        event.net_return_after_costs
+        == pytest.approx(event.gross_return - 0.003)
+        for event in events
+    )
     assert all(event.label == int(event.net_return_after_costs > 0) for event in events)
     assert all(event.exit_index < len(candles) for event in events)
 
@@ -132,7 +137,7 @@ def test_feature_selection_uses_only_supplied_train_rows() -> None:
     pytest.importorskip("numpy")
     pytest.importorskip("sklearn")
     # Clear synthetic dependence helps verify deterministic ranking and return shape.
-    import numpy as np
+    np = importlib.import_module("numpy")
 
     rng = np.random.default_rng(41)
     signal = rng.normal(size=240)
