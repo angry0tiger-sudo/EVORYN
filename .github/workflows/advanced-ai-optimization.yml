@@ -57,7 +57,7 @@ jobs:
       - name: Run strict typing before public network access
         run: |
           set -o pipefail
-          python -m mypy src tests scripts/evaluate_advanced_meta_label.py 2>&1 | tee mypy.log
+          python -m mypy src/evoryn/learning_lab/advanced_meta_label.py tests/unit/test_advanced_meta_label.py scripts/evaluate_advanced_meta_label.py 2>&1 | tee mypy.log
       - name: Run focused static security scan before public network access
         run: |
           set -o pipefail
