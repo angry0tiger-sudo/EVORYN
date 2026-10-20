@@ -146,7 +146,7 @@ def _higher_timeframe_features(
         average = _mean([close_at(index) for index in indices])
         return close_at(current) / average - 1.0 if average > 0 else 0.0
 
-    has_4h = current_4h is not None and current_4h >= 5 * 4
+    has_4h = current_4h is not None and current_4h >= 6 * 4
     has_1d = current_1d is not None and current_1d >= 7 * 24
     return (
         tf_return(current_4h, 1, 4),
