@@ -1,6 +1,6 @@
 # Windows Paper Runtime Supervision Design
 
-**Status:** Design only. No installer was run, no Task Scheduler entry was registered, and no Windows host was accessed.
+**Status:** Task Scheduler provisioning and the unattended composition root remain design-only. The repository now includes a process-wide single-instance locking primitive with a Windows CI test job. No installer was run, no Task Scheduler entry was registered, and no owner Windows host was accessed.
 
 ## Decision
 
@@ -13,7 +13,7 @@ Before implementation is enabled, provide and review:
 - A completed-candle source with timestamp, staleness, duplicate, future-candle and gap rules.
 - A Paper-only dependency graph: model loader pinned to independently trusted artifact and manifest digests, regime detector, selector, intent builder, deterministic Risk Engine, Mock/Paper broker, reconciler and durable SQLite journal.
 - An explicit paper data-source ID and deterministic Paper account seed.
-- A process-wide named mutex and exclusive journal lock; duplicate instances must exit without mutating the ledger.
+- The existing `src/evoryn/runtime/single_instance.py` process-wide named mutex and exclusive journal lock; duplicate instances must exit without mutating the ledger. Exact-PR Windows CI evidence is still required.
 - Sanitized rotating logs, a health state, shutdown signal handling and nonzero exit codes for data integrity, journal, reconciliation or HALT failures.
 - No Live exchange connector or write-capable credential in the Paper task environment. Feed/model faults must never fall back to Live.
 
@@ -50,4 +50,4 @@ A restart from HALTED or unknown operation state requires an operator-reviewed r
 - Evidence that the task cannot load Live credentials, call write endpoints or enable Spot writes.
 - Owner-host Windows 11 validation of permissions, startup, logs, recovery, registration and uninstallation.
 
-**Current gate:** production composition root, verified feed, production account/fill reconciliation, durable audit wiring, independent risk/security review and owner-host acceptance remain open. This is a design document, not permission to install or start an autonomous bot.
+**Current gate:** dedicated Paper-only composition root/launcher, safe offline or explicitly approved Paper feed contract, Task Scheduler registration/unregistration scripts, launcher failure-path tests, production account/fill reconciliation, durable audit wiring, independent risk/security review and owner-host acceptance remain open. This is a design document, not permission to install or start an autonomous bot.
