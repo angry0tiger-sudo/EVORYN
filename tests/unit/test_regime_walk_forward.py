@@ -212,7 +212,7 @@ def test_terminal_confirmation_geometry_stays_outside_all_research_folds() -> No
         market=MARKET,
         interval=INTERVAL,
         volume_unit="unknown",
-        source_name="synthetic-test-only",
+        source_name="synthetic-technical-features",
         source_uri="urn:evoryn:test:source",
         source_revision="fixture-v1",
         license_id="test-only-unreviewed",
