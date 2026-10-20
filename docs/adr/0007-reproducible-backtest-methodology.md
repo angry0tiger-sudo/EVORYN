@@ -123,3 +123,15 @@ The regime research schema excludes volume entirely; the backtest disables volum
 caps for this dataset and emits `UNCONSTRAINED_UNKNOWN_VOLUME_UNIT`. It is not valid to claim
 executable capacity or liquidity from those simulations. Re-enable volume features/caps only
 after independent provider semantics evidence, a schema/version update, and relevant tests.
+
+
+## Six-model challenger audit — 2026-10-20
+
+The retrieved six-model historical artifact is documented in
+[the six-model artifact audit](../research/2026-10-20-six-model-artifact-audit.md). Its ZIP hash
+was recomputed from the downloaded bytes and its 91 checksum sidecars matched. The artifact has
+11 folds and complete classification records for both label policies, but it omits all
+model-specific backtests under the forward-threshold policy. Do not infer economic validation
+from classification records alone. A fresh schema-version-3 exact-head artifact must verify
+policy-specific backtests and candidate gates before the reporting gate is closed. No model is
+approved for runtime.
