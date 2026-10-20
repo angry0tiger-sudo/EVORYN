@@ -11,12 +11,15 @@ import json
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from evoryn.domain.models import Market, MarketCandle, MarketSnapshot
@@ -413,20 +416,22 @@ def _run_paper(config_path: Path, *, max_cycles: int | None) -> int:
     journal_path: Path = config["journal_path"]
     try:
         with PaperRuntimeLocks(journal_path):
+            log_handler = RotatingFileHandler(
+                config["log_path"], maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+            )
             logging.basicConfig(
-                filename=str(config["log_path"]),
+                handlers=[log_handler],
                 level=logging.INFO,
                 format="%(asctime)s %(levelname)s %(message)s",
-                encoding="utf-8",
+                force=True,
             )
-            logging.info(
-                "paper_task_start mode=paper_only source=offline_csv champion=none config=%s",
-                config_path.resolve(),
-            )
+            logging.info("paper_task_start mode=paper_only source=offline_csv champion=none")
             supervisor = PaperRuntimeSupervisor(lambda: _build_runtime(config))
+            stop_event = Event()
             scheduler = PaperRuntimeScheduler(
                 supervisor,
                 interval_seconds=float(_positive_int(config, "cycle_interval_seconds")),
+                stop_event=stop_event,
                 on_result=lambda result: logging.info(
                     "paper_cycle status=%s reason=%s correlation_id=%s",
                     result.status.value,
@@ -434,7 +439,14 @@ def _run_paper(config_path: Path, *, max_cycles: int | None) -> int:
                     result.correlation_id,
                 ),
             )
-            result = scheduler.run(max_cycles=max_cycles)
+            prior_handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+            for sig in prior_handlers:
+                signal.signal(sig, lambda _signum, _frame: stop_event.set())
+            try:
+                result = scheduler.run(max_cycles=max_cycles)
+            finally:
+                for sig, handler in prior_handlers.items():
+                    signal.signal(sig, handler)
             logging.info(
                 "paper_task_exit cycles=%s status=%s reason=%s",
                 result.cycles_completed,
