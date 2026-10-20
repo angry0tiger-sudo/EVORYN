@@ -19,6 +19,7 @@ from evoryn.learning_lab.advanced_meta_label import (
     build_sma_meta_labels,
     make_meta_label_classifier,
     select_features_train_only,
+    select_meta_label_threshold,
     tune_meta_labeler,
 )
 from evoryn.learning_lab.backtest import (
@@ -260,7 +261,6 @@ def run_experiment(
     n_trials: int,
     random_seed: int,
     top_k: int,
-    probability_threshold: float,
 ) -> dict[str, Any]:
     """Fit only within fold history and keep runtime promotion unconditionally disabled."""
     joblib = cast(Any, importlib.import_module("joblib"))
@@ -279,9 +279,9 @@ def run_experiment(
     )
     confirmation_bars = max(1, (len(candles) + 9) // 10)
     research_end = len(candles) - confirmation_bars
-    train_bars = int(len(candles) * 0.40)
-    validation_bars = int(len(candles) * 0.10)
-    test_bars = max(1, int(len(candles) * 0.035))
+    train_bars = int(len(candles) * 0.35)
+    validation_bars = int(len(candles) * 0.15)
+    test_bars = max(1, int(len(candles) * 0.03))
     folds = make_walk_forward_folds(
         dataset,
         train_bars=train_bars,
@@ -317,6 +317,12 @@ def run_experiment(
             "trades": [],
         }
         for name in ("xgboost", "lightgbm")
+    }
+    pooled_test_labels: dict[str, list[int]] = {
+        name: [] for name in ("xgboost", "lightgbm")
+    }
+    pooled_test_probabilities: dict[str, list[float]] = {
+        name: [] for name in ("xgboost", "lightgbm")
     }
 
     model_names: tuple[Literal["xgboost", "lightgbm"], ...] = ("xgboost", "lightgbm")
@@ -410,20 +416,29 @@ def run_experiment(
             selected_columns = tuple(name_to_index[name] for name in selected_names)
             x_train, _ = _feature_arrays(train_events, feature_rows, selected_columns)
             x_valid, _ = _feature_arrays(validation_events, feature_rows, selected_columns)
+            if len(x_valid) != len(validation_events):
+                model_record["reason"] = "validation_feature_rows_not_aligned_with_label_outcomes"
+                continue
+            tuning_seed = random_seed + fold.fold_index * 100 + model_offset
             tune_result = tune_meta_labeler(
                 model_name, x_train, y_train, x_valid, y_valid,
                 n_trials=n_trials,
-                random_seed=random_seed + fold.fold_index * 100 + model_offset,
+                random_seed=tuning_seed,
             )
-            x_fit = x_train + x_valid
-            y_fit = y_train + y_valid
+            # Fit only on the training partition so the validation-selected probability
+            # threshold remains calibrated to the same model used on the locked test block.
             final_model = make_meta_label_classifier(
-                model_name, tune_result.best_params,
-                random_seed=random_seed + fold.fold_index * 100 + model_offset,
+                model_name, tune_result.best_params, random_seed=tuning_seed
             )
             final_model.fit(
-                numpy.asarray(x_fit, dtype="float64"),
-                numpy.asarray(y_fit, dtype="int64"),
+                numpy.asarray(x_train, dtype="float64"),
+                numpy.asarray(y_train, dtype="int64"),
+            )
+            validation_probabilities = final_model.predict_proba(
+                numpy.asarray(x_valid, dtype="float64")
+            )[:, 1]
+            threshold_selection = select_meta_label_threshold(
+                validation_events, validation_probabilities
             )
 
             model_path = model_dir / f"fold-{fold.fold_index:02d}-{model_name}.joblib"
@@ -439,6 +454,14 @@ def run_experiment(
                     "train_range": [fold.train.start, fold.train.end],
                     "validation_range": [fold.validation.start, fold.validation.end],
                     "test_range": [fold.test.start, fold.test.end],
+                    "validation_threshold": threshold_selection.threshold,
+                    "threshold_selected_event_count": (
+                        threshold_selection.selected_event_count
+                    ),
+                    "validation_threshold_net_sum": (
+                        threshold_selection.summed_net_return_fraction
+                    ),
+                    "final_fit_policy": "train_only_validation_reserved_for_tuning_and_threshold"
                     "tuning_validation_average_precision": (
                         tune_result.best_validation_average_precision
                     ),
@@ -452,6 +475,11 @@ def run_experiment(
             test_probability = final_model.predict_proba(
                 numpy.asarray(test_x, dtype="float64")
             )[:, 1] if test_x else numpy.asarray([], dtype="float64")
+            if test_y:
+                pooled_test_labels[model_name].extend(int(value) for value in test_y)
+                pooled_test_probabilities[model_name].extend(
+                    float(value) for value in test_probability
+                )
             test_ap: float | None = None
             prevalence: float | None = None
             if len(test_y) >= 2 and len(set(test_y)) == 2:
@@ -464,7 +492,7 @@ def run_experiment(
                 selected_column_indices=selected_columns,
                 fast_window=12,
                 slow_window=48,
-                probability_threshold=probability_threshold,
+                probability_threshold=threshold_selection.threshold,
                 eligible_start_index=fold.test.start,
                 model_name=model_name,
                 fold_index=fold.fold_index,
@@ -487,6 +515,21 @@ def run_experiment(
                 "status": "EVALUATED",
                 "tuning": {
                     "objective": "validation_average_precision",
+                    "decision_threshold_policy": "fixed_grid_validation_net_return_with_abstain",
+                    "threshold_selection": {
+                        "threshold": threshold_selection.threshold,
+                        "validation_event_count": (
+                            threshold_selection.validation_event_count
+                        ),
+                        "selected_event_count": threshold_selection.selected_event_count,
+                        "summed_net_return_fraction": (
+                            threshold_selection.summed_net_return_fraction
+                        ),
+                        "mean_net_contribution_per_event": (
+                            threshold_selection.mean_net_contribution_per_event
+                        ),
+                        "abstain": threshold_selection.abstain,
+                    },
                     "best_validation_average_precision": (
                         tune_result.best_validation_average_precision
                     ),
@@ -618,7 +661,16 @@ def run_experiment(
             "feature_selection": "mutual information fit on train partition only",
             "hyperparameter_tuning": "seeded Optuna TPE maximizing validation average precision",
             "trials_per_fold_model": n_trials,
-            "probability_threshold": probability_threshold,
+            "threshold_policy": {
+                "method": "fixed_grid_validation_net_return_contribution",
+                "candidate_thresholds": [
+                    0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45,
+                    0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95,
+                ],
+                "minimum_selected_events": "max(3, ceil(20% of validation events))",
+                "abstain_threshold_when_no_positive_validation_net_sum": 1.01,
+                "test_threshold_selection": False,
+            },
             "train_bars": train_bars,
             "validation_bars": validation_bars,
             "test_bars": test_bars,
@@ -627,7 +679,7 @@ def run_experiment(
             "research_end_index_exclusive": research_end,
             "test_blocks_non_overlapping": True,
             "fold_scaler": "none (tree models; features are dimensionless/price-normalized)",
-            "final_fit": "train_plus_validation_after_validation_tuning",
+            "final_fit": "train_only; validation used for Optuna and threshold selection, not fitting",
             "costs": {
                 "initial_cash": "10000",
                 "allocation_fraction": "0.25",
