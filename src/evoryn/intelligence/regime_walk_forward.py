@@ -361,7 +361,6 @@ def run_walk_forward_research(
         volatility_threshold = linear_quantile(
             train_forward_volatility, options.volatility_quantile
         )
-        fold_label_policies: dict[str, dict[str, Any]] = {}
         training_matrix = numpy.asarray(
             [feature_by_index[index] for index in train_indices], dtype="float64"
         )
@@ -725,7 +724,7 @@ def run_walk_forward_research(
     report = {
         "schema_version": 1,
         "experiment_id": hashlib.sha256(
-            f"{dataset.version}|{options!r}|walk-forward-v1".encode("utf-8")
+            f"{dataset.version}|{options!r}|walk-forward-v1".encode()
         ).hexdigest(),
         "dataset": {
             "dataset_id": dataset.dataset_id,

@@ -46,7 +46,7 @@ class InvalidRegimeHistory(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class RegimeFeatureVector:
-    """Four-dimensional causal vector; the fourth slot is zero unless volume is explicitly trusted."""
+    """Causal feature vector; volume is zero unless its unit is trusted."""
 
     as_of: datetime
     sample_count: int
