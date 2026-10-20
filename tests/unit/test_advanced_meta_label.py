@@ -53,7 +53,7 @@ def test_advanced_features_are_finite_causal_and_versioned() -> None:
 
     assert ADVANCED_FEATURE_SCHEMA_VERSION == "1.0.0-mtf-fibonacci-swing-proxy"
     assert names == advanced_feature_names()
-    assert len(indices) == len(rows) == len(candles) - 47
+    assert len(indices) == len(rows) == len(candles) - 48
     assert len(set(names)) == len(names)
     assert len(rows[-1]) == len(names)
     assert all(math.isfinite(value) for row in rows for value in row)
