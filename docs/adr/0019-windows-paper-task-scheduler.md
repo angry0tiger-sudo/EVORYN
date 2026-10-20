@@ -41,8 +41,7 @@ model.
 6. **Current implementation status:** code for user-level Task Scheduler registration/status/
    unregistration, local CSV validation, no-Champion runtime composition, rotating logs, credential-
    environment scrubbing, graceful stop signalling, bounded restarts, and process/journal locks is
-   implemented on the PR branch. Windows CI includes PowerShell parsing and a register/status/
-   unregister round trip; its result must be green on the exact final PR HEAD before this gate closes.
+   implemented on the PR branch. Checkpoint [CI Run #1018](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39486110714) passed all seven jobs on SHA `7eaaaacd2f2c38d91e0bd2cb87352410e08cb648`; the Windows job parsed the PowerShell helper and passed the disposable task lifecycle tests (12 passed, 1 POSIX-only skip). Later documentation/workflow commits require another exact-final-HEAD CI run before merge.
    The owner Windows 11 host has not been accessed and no user-machine task was registered. Native
    account ACL, restart/fault, and owner-host acceptance remain open.
 7. Model promotion and Task Scheduler registration are independent release gates. A scheduled
