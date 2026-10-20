@@ -123,7 +123,7 @@ Label windows crossing train/validation/test boundaries are purged.
 ## Current evidence boundary
 
 The challenger workflow is research-only. It compares Random Forest, HistGradientBoosting,
-XGBoost, a forward-filtered Gaussian HMM, and a compact CPU LSTM under two weak-label policies.
+XGBoost, LightGBM, a forward-filtered Gaussian HMM, and a compact CPU LSTM under two weak-label policies.
 Ten chronological test windows, per-policy fold objects, majority-class metrics, and same-fold
 portfolio simulations after assumed commission/spread/slippage costs are persisted.
 
@@ -142,3 +142,13 @@ this workflow. Spot/Margin execution and hard risk modules remain unchanged.
 ## Exact-head research result — 2026-10-20
 
 The final candidate SHA `c08096a8ff8c28d78a9879977cc5c30fde2d5f77` passed six-gate CI [#39397941134](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941134) and research run [#39397941187](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187). See [the complete report](../research/2026-10-20-regime-challenger-walk-forward.md). Train-only majority Accuracy averaged 63.062% for forward-threshold labels and 63.445% for Triple-Barrier labels; all five candidates had lower mean Accuracy than the Triple-Barrier baseline. No model passed the combined classification/economic gate; no model is wired into runtime. Research schema v3 remains separate from the production loader contract.
+
+
+## Six-model evaluation status — 2026-10-20
+
+LightGBM is included as an optional, pinned research challenger. The retrieved six-model artifact
+confirms that all six models have fold-level classification outputs, but its schema-version-2
+report omits policy-specific backtests for the forward-threshold label policy. Treat those
+economic comparisons as incomplete in that artifact. The schema-version-3 pipeline and a fresh
+exact-head artifact must be checked before closing the reporting gate. No model has been selected
+for runtime; `selected_model_for_runtime=null` remains mandatory.
