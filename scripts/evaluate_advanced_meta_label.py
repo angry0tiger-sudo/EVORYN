@@ -520,10 +520,11 @@ def run_experiment(
         folds_evaluated = len(values["net"])
         complete_coverage = folds_evaluated == len(folds) and len(folds) >= 10
         intervals: dict[str, Any] = {}
-        for metric in ("vs_buy_hold", "vs_sma", "vs_sma_event"):
+        interval_offsets = {"vs_buy_hold": 0, "vs_sma": 1, "vs_sma_event": 2}
+        for metric, offset in interval_offsets.items():
             if values[metric]:
                 intervals[metric] = _bootstrap_interval(
-                    values[metric], seed=random_seed + 5000 + model_index * 10 + (0 if metric == "vs_buy_hold" else 1)
+                    values[metric], seed=random_seed + 5000 + model_index * 10 + offset
                 )
         classification_gate = (
             len(values["ap"]) == len(folds)
