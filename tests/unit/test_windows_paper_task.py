@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from evoryn.domain.models import Market
 from scripts.windows_paper_task import (
     DEFAULT_TASK_NAME,
     OfflineCsvPaperFeed,
@@ -21,6 +20,8 @@ from scripts.windows_paper_task import (
     load_and_validate_config,
     preflight,
 )
+
+from evoryn.domain.models import Market
 
 INTERVAL = timedelta(hours=1)
 
