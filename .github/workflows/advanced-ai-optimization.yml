@@ -26,7 +26,7 @@ permissions:
 
 concurrency:
   group: advanced-ai-optimization-research
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   advanced-meta-label-research:
