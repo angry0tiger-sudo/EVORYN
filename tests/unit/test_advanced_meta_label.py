@@ -17,10 +17,12 @@ import pytest
 from evoryn.domain.models import Market, MarketCandle
 from evoryn.learning_lab.advanced_meta_label import (
     ADVANCED_FEATURE_SCHEMA_VERSION,
+    MetaLabelEvent,
     advanced_feature_names,
     build_advanced_feature_matrix,
     build_sma_meta_labels,
     select_features_train_only,
+    select_meta_label_threshold,
     tune_meta_labeler,
 )
 from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
@@ -201,3 +203,47 @@ def test_advanced_evaluator_loads_the_versioned_dataset_store_reference(
 
     assert loaded is cast(Any, fake_dataset)
     load_dataset.assert_called_once_with(dataset_id, dataset_version)
+
+
+def test_validation_threshold_optimizes_after_cost_return_and_respects_minimum_count() -> None:
+    net_returns = (0.01, 0.02, 0.03, -0.04, -0.01, -0.02, -0.03, -0.04)
+    events = tuple(
+        MetaLabelEvent(
+            signal_index=index * 10,
+            entry_index=index * 10 + 1,
+            exit_index=index * 10 + 6,
+            gross_return=net_return + 0.005,
+            net_return_after_costs=net_return,
+            round_trip_cost_bps=50.0,
+            label=int(net_return > 0),
+        )
+        for index, net_return in enumerate(net_returns)
+    )
+    probabilities = (0.95, 0.82, 0.71, 0.68, 0.40, 0.30, 0.20, 0.10)
+
+    selected = select_meta_label_threshold(events, probabilities)
+
+    assert selected.threshold == 0.70
+    assert selected.selected_event_count == 3
+    assert selected.summed_net_return_fraction == pytest.approx(0.06)
+    assert selected.abstain is False
+
+
+def test_validation_threshold_abstains_when_no_cutoff_has_positive_net_sum() -> None:
+    events = tuple(
+        MetaLabelEvent(
+            signal_index=index * 10,
+            entry_index=index * 10 + 1,
+            exit_index=index * 10 + 6,
+            gross_return=-0.005,
+            net_return_after_costs=-0.01,
+            round_trip_cost_bps=50.0,
+            label=0,
+        )
+        for index in range(8)
+    )
+    selected = select_meta_label_threshold(events, (0.99, 0.90, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30))
+
+    assert selected.threshold == 1.01
+    assert selected.selected_event_count == 0
+    assert selected.abstain is True
