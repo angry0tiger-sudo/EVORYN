@@ -79,6 +79,7 @@ jobs:
             --resolution 60 \
             --lookback-days "$DAYS" \
             --max-pages 40 \
+            --fetch-only \
             --output artifacts/nobitex-regime 2>&1 | tee public-history-run.log
       - name: Run strict walk-forward feature-selection and meta-label study
         run: |
@@ -97,6 +98,7 @@ jobs:
           name: advanced-ai-optimization-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/nobitex-regime/training-report.json
+            artifacts/nobitex-regime/training-report.json.sha256
             artifacts/nobitex-regime/advanced-meta-label/
             python-version.log
             pip-install.log
