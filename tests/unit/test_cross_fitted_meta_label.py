@@ -12,6 +12,7 @@ from evoryn.learning_lab.cross_fitted_meta_label import (
     CrossFittedMetaConfig,
     TripleBarrierEventPolicy,
     _average_precision_above_prevalence,
+    _canonical_json_bytes,
     _calibrate_probabilities,
     _fit_probability_calibrator,
     select_validation_threshold,
@@ -225,4 +226,20 @@ def test_average_precision_must_strictly_beat_positive_prevalence(
     assert (
         _average_precision_above_prevalence(average_precision, positive_prevalence)
         is expected
+    )
+
+
+
+def test_canonical_json_serializes_decimal_config_without_float_conversion() -> None:
+    encoded = _canonical_json_bytes(
+        {
+            "commission_bps": Decimal("10.00"),
+            "quantity_step": Decimal("1E-8"),
+        }
+    )
+    assert encoded.decode("utf-8") == (
+        '{\n'
+        '  "commission_bps": "10.00",\n'
+        '  "quantity_step": "0.00000001"\n'
+        '}\n'
     )

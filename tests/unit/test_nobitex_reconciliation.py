@@ -118,7 +118,7 @@ def test_order_page_is_authenticated_scoped_and_preserves_partial_fill() -> None
     reader = make_reader(transport)
 
     page = reader.get_orders_page(
-        MARKET, status=UserOrderStatus.OPEN, page=None, page_size=100, from_id=100
+        MARKET, status=UserOrderStatus.OPEN, page_size=100, from_id=100
     )
 
     order = page.orders[0]
@@ -177,7 +177,7 @@ def test_user_trade_page_preserves_fill_fields_and_pagination() -> None:
         "/market/trades/list": {"status": "ok", "trades": [trade_row()], "hasNext": True}
     })
     page = make_reader(transport).get_user_trades_page(
-        MARKET, page=None, page_size=30, from_id=990
+        MARKET, page_size=30, from_id=990
     )
     trade = page.trades[0]
 
@@ -277,5 +277,5 @@ def test_readers_support_bounded_page_pagination_and_reject_conflicting_cursor()
         )
     with pytest.raises(InvalidExchangeRequest, match="between 1 and 500"):
         make_reader(FakeReconciliationTransport({})).get_user_trades_page(
-            MARKET, page=None, page_size=501, from_id=100
+            MARKET, page_size=501, from_id=100
         )

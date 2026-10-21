@@ -328,13 +328,15 @@ class NobitexReconciliationReader:
         market: Market,
         *,
         status: UserOrderStatus = UserOrderStatus.OPEN,
-        page: int | None = 1,
+        page: int | None = None,
         page_size: int = 100,
         from_id: int | None = None,
     ) -> NobitexOrderPage:
         """Fetch one authenticated order-list result without assuming a complete ledger."""
         base, quote = self._validate_market(market)
         token = self._require_token()
+        if page is None and from_id is None:
+            page = 1
         if not isinstance(status, UserOrderStatus):
             raise InvalidExchangeRequest("Order-list status must be an explicit UserOrderStatus.")
         if type(page_size) is not int or not 1 <= page_size <= 1000:
@@ -461,13 +463,15 @@ class NobitexReconciliationReader:
         self,
         market: Market,
         *,
-        page: int | None = 1,
+        page: int | None = None,
         page_size: int = 30,
         from_id: int | None = None,
     ) -> NobitexTradePage:
         """Fetch one authenticated trade page; provider history limits remain explicit."""
         base, quote = self._validate_market(market)
         token = self._require_token()
+        if page is None and from_id is None:
+            page = 1
         if type(page_size) is not int or not 1 <= page_size <= 500:
             raise InvalidExchangeRequest("trade page_size must be between 1 and 500.")
         if from_id is not None and page is not None:

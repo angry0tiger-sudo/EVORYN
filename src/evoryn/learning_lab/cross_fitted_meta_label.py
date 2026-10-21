@@ -216,6 +216,13 @@ class TripleBarrierEventPolicy:
         return _ONE
 
 
+def _canonical_json_default(value: object) -> str:
+    """Serialize Decimal configuration as a canonical, exponent-free string."""
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    raise TypeError(f"Unsupported type for canonical JSON: {type(value).__name__}")
+
+
 def _canonical_json_bytes(value: object) -> bytes:
     return (
         json.dumps(
@@ -224,6 +231,7 @@ def _canonical_json_bytes(value: object) -> bytes:
             indent=2,
             ensure_ascii=False,
             allow_nan=False,
+            default=_canonical_json_default,
         )
         + "\n"
     ).encode("utf-8")
