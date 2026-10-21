@@ -147,7 +147,7 @@ def _bootstrap_lower_95(values: Sequence[float], *, seed: int) -> float | None:
     """Deterministic paired-fold bootstrap lower percentile; descriptive, not IID proof."""
     if len(values) < 2:
         return None
-    generator = random.Random(seed)
+    generator = random.Random(seed)  # nosec B311: deterministic statistical bootstrap, not security use
     draws = [
         sum(generator.choice(values) for _ in values) / len(values)
         for _ in range(4000)
