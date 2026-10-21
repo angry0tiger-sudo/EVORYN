@@ -203,6 +203,43 @@ class NobitexHTTPTransport:
                 "srcCurrency", "dstCurrency", "fromId", "page", "pageSize"
             }
             if (
+                params is None
+                or set(params) - allowed_trade_params
+                or not self._is_ascii_alphanumeric(
+                    params.get("srcCurrency", "").strip()
+                )
+                or params.get("dstCurrency", "").strip().casefold() != "usdt"
+                or ("page" in params and "fromId" in params)
+                or (
+                    "fromId" in params
+                    and (
+                        not self._is_ascii_digits(params["fromId"])
+                        or len(params["fromId"]) > 19
+                        or int(params["fromId"]) < 1
+                    )
+                )
+                or (
+                    "page" in params
+                    and (
+                        not self._is_ascii_digits(params["page"])
+                        or len(params["page"]) > 3
+                        or not 1 <= int(params["page"]) <= 100
+                    )
+                )
+                or (
+                    "pageSize" in params
+                    and (
+                        not self._is_ascii_digits(params["pageSize"])
+                        or len(params["pageSize"]) > 3
+                        or not 1 <= int(params["pageSize"]) <= 500
+                    )
+                )
+            ):
+                raise InvalidExchangeRequest(
+                    "Nobitex user-trade reads require a bounded Spot/USDT query."
+                )
+
+        if (
             normalized_method == "GET"
             and path == "/v2/wallets"
             and (
@@ -212,9 +249,10 @@ class NobitexHTTPTransport:
                 or set(params) != {"currencies", "type"}
             )
         ):
-                raise InvalidExchangeRequest(
-                    "Nobitex wallet reads are restricted to USDT Spot or Margin balances."
-                )
+            raise InvalidExchangeRequest(
+                "Nobitex wallet reads are restricted to USDT Spot or Margin balances."
+            )
+
         if (
             normalized_method == "GET"
             and path == "/market/stats"
