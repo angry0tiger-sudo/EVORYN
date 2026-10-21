@@ -268,8 +268,9 @@ class GaussianHMMRegimeModel:
             )
 
         try:
-            import numpy as np  # type: ignore[import-not-found]
-            from hmmlearn.hmm import GaussianHMM  # type: ignore[import-not-found]
+            np = importlib.import_module("numpy")
+            hmm_module = importlib.import_module("hmmlearn.hmm")
+            GaussianHMM = hmm_module.GaussianHMM
         except ImportError as exc:
             raise RegimeDependencyUnavailable(
                 "Install EVORYN's optional open-source regime extra before HMM fitting."

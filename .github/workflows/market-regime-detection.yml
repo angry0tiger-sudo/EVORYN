@@ -1,0 +1,120 @@
+name: Causal Market Regime Detection Research
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/market-regime-detection.yml"
+      - "src/evoryn/learning_lab/market_regimes.py"
+      - "tests/unit/test_market_regimes.py"
+      - "scripts/evaluate_market_regimes.py"
+      - "scripts/train_nobitex_regime.py"
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: Requested public hourly history length
+        type: choice
+        options: ["365", "730"]
+        default: "730"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-regime-detection-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  causal-regime-study:
+    name: Causal regime detection and gated-SMA research
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Check out selected ref
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install bounded research dependencies
+        run: |
+          set -o pipefail
+          python --version 2>&1 | tee python-version.log
+          python -m pip install --upgrade pip 2>&1 | tee pip-install.log
+          python -m pip install -e ".[dev,regime,regime-upgrade]" 2>&1 | tee research-dependencies.log
+          python -m pip install pip-audit 2>&1 | tee pip-audit-install.log
+
+      - name: Run Ruff before public network access
+        run: |
+          set -o pipefail
+          python -m ruff check . 2>&1 | tee ruff.log
+
+      - name: Run strict type check before public network access
+        run: |
+          set -o pipefail
+          python -m mypy src tests scripts/evaluate_market_regimes.py 2>&1 | tee mypy.log
+
+      - name: Run focused security scan before public network access
+        run: |
+          set -o pipefail
+          python -m bandit -q scripts/evaluate_market_regimes.py scripts/train_nobitex_regime.py 2>&1 | tee bandit.log
+
+      - name: Run full offline test suite before public network access
+        run: |
+          set -o pipefail
+          python -m pytest -q 2>&1 | tee pytest.log
+
+      - name: Audit installed research dependencies
+        run: |
+          set -o pipefail
+          pip-audit --skip-editable 2>&1 | tee pip-audit.log
+
+      - name: Fetch bounded public OHLC history and seal immutable dataset
+        run: |
+          set -o pipefail
+          DAYS="${{ inputs.lookback_days || '730' }}"
+          python scripts/train_nobitex_regime.py \
+            --symbol BTCUSDT \
+            --resolution 60 \
+            --lookback-days "$DAYS" \
+            --max-pages 40 \
+            --fetch-only \
+            --output artifacts/nobitex-regime 2>&1 | tee public-history-run.log
+
+      - name: Train causal HMM/XGBoost regime classifiers and evaluate gated SMA
+        run: |
+          set -o pipefail
+          python scripts/evaluate_market_regimes.py \
+            --dataset-root artifacts/nobitex-regime \
+            --output artifacts/market-regime-detection 2>&1 | tee market-regime-run.log
+
+      - name: Upload dataset, model evidence, report and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-regime-detection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/nobitex-regime/training-report.json
+            artifacts/nobitex-regime/training-report.json.sha256
+            artifacts/nobitex-regime/datasets/
+            artifacts/market-regime-detection/
+            python-version.log
+            pip-install.log
+            research-dependencies.log
+            pip-audit-install.log
+            ruff.log
+            mypy.log
+            bandit.log
+            pytest.log
+            pip-audit.log
+            public-history-run.log
+            market-regime-run.log
+          if-no-files-found: warn
+          retention-days: 90
