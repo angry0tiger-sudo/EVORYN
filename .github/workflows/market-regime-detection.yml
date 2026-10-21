@@ -1,9 +1,9 @@
 name: Causal Market Regime Detection Research
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/market-regime-detection
+      - main
     paths:
       - ".github/workflows/market-regime-detection.yml"
       - "src/evoryn/learning_lab/market_regimes.py"
