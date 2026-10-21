@@ -74,7 +74,9 @@ def _load_dataset(dataset_root: Path) -> tuple[HistoricalDataset, dict[str, Any]
         dataset_id = reference["dataset_id"]
         dataset_version = reference["dataset_version"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError("Verified dataset reference is missing from training-report.json.") from exc
+        raise ValueError(
+            "Verified dataset reference is missing from training-report.json."
+        ) from exc
     if not isinstance(dataset_id, str) or not isinstance(dataset_version, str):
         raise ValueError("Dataset reference fields must be strings.")
     dataset = HistoricalDatasetStore(dataset_root / "datasets").load(dataset_id, dataset_version)
@@ -340,7 +342,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     candle_count = len(dataset.candles)
     if candle_count < 2500:
-        raise ValueError("At least 2500 contiguous hourly candles are required for this walk-forward study.")
+        raise ValueError(
+            "At least 2500 contiguous hourly candles are required for this walk-forward study."
+        )
 
     indices, all_features = build_causal_feature_matrix(dataset.candles, lookback=72)
     feature_by_index = dict(zip(indices, all_features, strict=True))
@@ -576,7 +580,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "schema_version": 1,
         "research_schema": REGIME_SCHEMA_VERSION,
         "experiment_id": hashlib.sha256(
-            f"{dataset.version}:{REGIME_SCHEMA_VERSION}:{_SEED}".encode("utf-8")
+            f"{dataset.version}:{REGIME_SCHEMA_VERSION}:{_SEED}".encode()
         ).hexdigest(),
         "created_at": datetime.now(UTC).isoformat(),
         "dataset": {
@@ -596,7 +600,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         },
         "problem_definition": {
             "target": "current descriptive state: BULL_TREND, BEAR_TREND, or RANGE",
-            "target_policy": "sign of trailing 24-bar return outside a train-only magnitude threshold",
+            "target_policy": (
+                "sign of trailing 24-bar return outside a train-only magnitude threshold"
+            ),
             "threshold_quantile": 0.55,
             "threshold_fit_scope": "training partition only, separately per fold",
             "future_price_label_inputs": False,
@@ -694,12 +700,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"DATASET_VERSION={dataset.version}")
     print(f"FOLDS_EXPECTED={len(folds)}")
     for family, gate in candidate_gates.items():
+        balanced_accuracy = model_reports[family]["classification_summary"]["mean_metrics"][
+            "balanced_accuracy"
+        ]
+        mean_net_return = model_reports[family]["regime_gated_sma_strategy_summary"][
+            "mean_net_return_fraction"
+        ]
         print(
             f"MODEL={family} FOLDS={model_reports[family]['evaluated_folds']}/{len(folds)} "
-            f"BALANCED_ACCURACY="
-            f"{model_reports[family]['classification_summary']['mean_metrics']['balanced_accuracy']} "
-            f"MEAN_NET_RETURN="
-            f"{model_reports[family]['regime_gated_sma_strategy_summary']['mean_net_return_fraction']} "
+            f"BALANCED_ACCURACY={balanced_accuracy} "
+            f"MEAN_NET_RETURN={mean_net_return} "
             f"CANDIDATE_GATE={gate['empirical_candidate_gate_passed']}"
         )
     print("SELECTED_MODEL_FOR_RUNTIME=null")
