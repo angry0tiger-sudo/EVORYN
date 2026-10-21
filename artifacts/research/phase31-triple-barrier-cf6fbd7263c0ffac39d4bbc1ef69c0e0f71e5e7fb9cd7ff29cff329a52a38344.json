@@ -1,0 +1,173 @@
+{
+  "acceptance": {
+    "champion": null,
+    "economic_gate": "NOT_EVALUATED_LABELING_PHASE_ONLY",
+    "phase31_labeling_only": true,
+    "runtime_promotion_allowed": false,
+    "selected_model_for_runtime": null,
+    "split_coverage_gate_passed": true
+  },
+  "configuration": {
+    "config": {
+      "long_window": 48,
+      "profit_taking_multiple": 1.5,
+      "round_trip_cost_bps": 30.0,
+      "short_window": 12,
+      "stop_loss_multiple": 1.0,
+      "vertical_horizon_bars": 24,
+      "volatility_lookback": 48
+    },
+    "feature_schema_version": "1.0.0-event-time-only",
+    "split_plan": {
+      "embargo_bars": 24,
+      "expected_fold_count": 5,
+      "step_event_count": 5,
+      "test_event_count": 5,
+      "train_event_count": 20,
+      "validation_event_count": 5
+    },
+    "triple_barrier_schema_version": "1.0.0-sma12-48-closed-bar"
+  },
+  "dataset": {
+    "allow_gaps": false,
+    "candle_count": 11439,
+    "candles_sha256": "76bb3693dc9e13b1f87de2798c6c0d9aa8d718a3ff2e47681f677e4ba504ae01",
+    "data_use_review": "UNREVIEWED",
+    "dataset_id": "nobitex-btc-usdt-60m",
+    "dataset_version": "cf6fbd7263c0ffac39d4bbc1ef69c0e0f71e5e7fb9cd7ff29cff329a52a38344",
+    "first_candle_open": "2025-07-01T13:30:00.000000Z",
+    "gap_count": 0,
+    "last_candle_open": "2026-10-21T03:30:00.000000Z",
+    "license_id": "UNREVIEWED_PROVIDER_TERMS",
+    "manifest_sha256": "cf0e9701169019acff8a96f6f9fc059abc699829fb7c57db91ae10d6c835624c",
+    "market": {
+      "market_type": "spot",
+      "symbol": "BTC-USDT",
+      "venue": "nobitex"
+    },
+    "source_name": "nobitex-public-ohlcv",
+    "source_revision": "udf-history:BTCUSDT:60:1729483200:1792557180",
+    "volume_features_used": false,
+    "volume_unit": "unknown"
+  },
+  "experiment": {
+    "configuration_sha256": "964354f97d70ae85c3e73f4c2295e0654e2378956dbe2030282c087170e015db",
+    "name": "triple-barrier-event-labeling",
+    "phase": 31,
+    "research_only": true
+  },
+  "feature_contract": {
+    "feature_names": [
+      "sma_short_gap",
+      "sma_spread_fraction",
+      "return_1",
+      "return_6",
+      "trailing_volatility",
+      "utc_hour_sin",
+      "utc_hour_cos"
+    ],
+    "future_ohlc_used_for_features": false,
+    "future_ohlc_used_for_label_only": true,
+    "information_set": "completed bars at or before event time only",
+    "schema_version": "1.0.0-event-time-only"
+  },
+  "labeling": {
+    "cost_interpretation": "fixed simulation assumption, not measured spread/slippage or realized fills",
+    "detected_bullish_crossovers": 143,
+    "emitted_event_count": 142,
+    "event_ledger_sha256": "bae9ef0f8b2e7d68b81ff95419bc3f33dac66387c3e94cdbd44ba76711089f1d",
+    "favorable_target_gap": "capped at frozen target price",
+    "incomplete_horizon_skipped": 1,
+    "invalid_barrier_geometry_skipped": 0,
+    "label_interval_semantics": "inclusive event bar index through outcome bar index",
+    "outcome_distribution_and_event_returns": {
+      "ambiguous_horizontal_touch_count": 0,
+      "event_count": 142,
+      "mean_gross_event_return_fraction": 0.0006177076486460571,
+      "mean_holding_bars": 20.253521126760564,
+      "mean_net_event_return_fraction_after_assumed_costs": -0.0023822923513539427,
+      "median_holding_bars": 24.0,
+      "median_net_event_return_fraction_after_assumed_costs": -0.0025367009831780887,
+      "net_positive_event_fraction": 0.4225352112676056,
+      "profit_taking_count": 22,
+      "stop_loss_count": 33,
+      "vertical_expiry_count": 87
+    },
+    "round_trip_cost_bps": 30.0,
+    "same_bar_horizontal_tie": "conservative stop-loss, adverse stop gap where applicable",
+    "zero_volatility_skipped": 0
+  },
+  "limitations": [
+    "Public-provider data-use terms have not been reviewed.",
+    "Historical volume units are unverified and volume is not used as a feature.",
+    "Historical order-book depth is unavailable.",
+    "Fixed cost assumptions are not observed spreads, slippage, or executable fills.",
+    "Event-return summaries are labels, not portfolio returns or evidence of profitability."
+  ],
+  "model": {
+    "model_sha256": null,
+    "not_applicable_reason": "Phase 31 creates labels and split manifests; no model is trained.",
+    "training_executed": false
+  },
+  "purged_chronological_splits": {
+    "actual_fold_count": 5,
+    "coverage_complete": true,
+    "embargo_rule": "expand each evaluation interval by embargo_bars on both sides",
+    "expected_fold_count": 5,
+    "folds": [
+      {
+        "embargo_bars": 24,
+        "fold_index": 0,
+        "purged_train_count": 0,
+        "purged_validation_count": 0,
+        "status": "EVALUABLE",
+        "test_event_count": 5,
+        "train_event_count_after_purge": 112,
+        "validation_event_count_after_purge": 5
+      },
+      {
+        "embargo_bars": 24,
+        "fold_index": 1,
+        "purged_train_count": 0,
+        "purged_validation_count": 1,
+        "status": "EVALUABLE",
+        "test_event_count": 5,
+        "train_event_count_after_purge": 117,
+        "validation_event_count_after_purge": 4
+      },
+      {
+        "embargo_bars": 24,
+        "fold_index": 2,
+        "purged_train_count": 1,
+        "purged_validation_count": 1,
+        "status": "EVALUABLE",
+        "test_event_count": 5,
+        "train_event_count_after_purge": 121,
+        "validation_event_count_after_purge": 4
+      },
+      {
+        "embargo_bars": 24,
+        "fold_index": 3,
+        "purged_train_count": 1,
+        "purged_validation_count": 1,
+        "status": "EVALUABLE",
+        "test_event_count": 5,
+        "train_event_count_after_purge": 126,
+        "validation_event_count_after_purge": 4
+      },
+      {
+        "embargo_bars": 24,
+        "fold_index": 4,
+        "purged_train_count": 1,
+        "purged_validation_count": 0,
+        "status": "EVALUABLE",
+        "test_event_count": 5,
+        "train_event_count_after_purge": 131,
+        "validation_event_count_after_purge": 5
+      }
+    ],
+    "purge_rule": "remove training labels overlapping evaluation intervals",
+    "split_order": "expanding chronological train, validation, then test"
+  },
+  "schema_version": 1
+}
