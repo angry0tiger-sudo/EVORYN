@@ -164,7 +164,7 @@ def label_regimes(
 
 def forward_filter_probabilities(model: Any, observations: Sequence[Sequence[float]]) -> tuple[tuple[float, ...], ...]:
     """Run an HMM forward filter; unlike smoothed posteriors, it never sees future rows."""
-    if not observations:
+    if len(observations) == 0:
         return ()
     start_probabilities = [float(value) for value in model.startprob_.tolist()]
     transition = [
