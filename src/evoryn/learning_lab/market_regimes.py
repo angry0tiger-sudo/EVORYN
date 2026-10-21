@@ -173,7 +173,11 @@ def forward_filter_probabilities(
     transition = [
         [float(value) for value in row] for row in model.transmat_.tolist()
     ]
-    emissions_array = model._compute_log_likelihood(observations)
+    numpy = __import__("numpy")
+    numeric_observations = numpy.asarray(observations, dtype="float64")
+    if numeric_observations.ndim != 2:
+        raise ValueError("HMM observations must form a two-dimensional numeric matrix.")
+    emissions_array = model._compute_log_likelihood(numeric_observations)
     emissions = [[float(value) for value in row] for row in emissions_array.tolist()]
     if not emissions or len(emissions) != len(observations):
         raise ValueError("HMM returned an invalid emission matrix.")
