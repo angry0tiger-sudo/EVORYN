@@ -407,6 +407,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ]
             local_indices = [index for index in indices if index >= fold.train.start]
             train_rows = [feature_by_index[index] for index in train_indices]
+            test_rows = [feature_by_index[index] for index in test_indices]
             local_rows = [feature_by_index[index] for index in local_indices]
             try:
                 threshold = fit_trend_threshold(train_rows)
