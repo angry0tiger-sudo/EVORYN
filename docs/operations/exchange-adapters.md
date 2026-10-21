@@ -55,6 +55,20 @@ The common `ExchangePort` declares `submit_order` and `cancel_order` for archite
 
 Order-writing implementation requires the later execution and risk phases, verified API/order-lifecycle contracts, reconciliation and idempotency tests, independent review, and explicit release authorization. This adapter must not be described as production-ready for real-money trading.
 
+
+## Authenticated order/trade snapshots for reconciliation research (Phase 32)
+
+The dedicated `NobitexReconciliationReader` uses two documented GET-only user endpoints:
+
+- `GET /market/orders/list` returns user order snapshots and supports pagination (default 100 rows, `pageSize` up to 1,000). A `page` and `fromId` cursor must not be sent together.
+- `GET /market/trades/list` returns user trades and supports pagination (default 30 rows, maximum `pageSize=500`, maximum page number 100). Current first-party docs describe up to 180 days of Spot user-trade history.
+
+The reader exposes `page/pageSize` and `fromId` modes, but reads one page per call. The low-level transport allowlists these exact paths, requires a read-only API token, limits requests to a validated BASE/USDT pair, rejects unknown query keys, and adds no order mutation capability. Missing order-list `hasNext`, absent `tradeType`, unknown order status or quantity inconsistencies leave a page ineligible for authoritative reconciliation.
+
+Official contract references: [Nobitex user-order list](https://apidocs.nobitex.ir/spot_trade/%D9%81%D9%87%D8%B1%D8%B3%D8%AA-%D8%B3%D9%81%D8%A7%D8%B1%D8%B4-%D9%87%D8%A7%DB%8C-%DA%A9%D8%A7%D8%B1%D8%A8%D8%B1) and [Nobitex user-trade list](https://apidocs.nobitex.ir/spot_trade/%D9%81%D9%87%D8%B1%D8%B3%D8%AA-%D9%85%D8%B9%D8%A7%D9%85%D9%84%D8%A7%D8%AA-%DA%A9%D8%A7%D8%B1%D8%A8%D8%B1).
+
+These read primitives are not wired into Live Runtime and do not enable writes. Before using them as an authoritative reconciliation source, EVORYN still needs a pagination/recovery state machine and contract tests against sanitized exchange responses, including journal state, balances, active/closed orders, partial fills, fees and restart behavior. Unknown state must continue to block new submissions.
+
 ## Phase 21A capability evidence boundary
 
 The legacy `ExchangeCapabilities` booleans continue to describe the existing common adapter contract; they do

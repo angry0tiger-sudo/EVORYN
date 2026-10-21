@@ -1,0 +1,125 @@
+name: Phase 32 Cross-Fitted Meta-Label Research
+
+on:
+  push:
+    branches:
+      - research/phase32-cross-fitted-meta-label-20261021
+    paths:
+      - ".github/workflows/phase32-cross-fitted-meta-label.yml"
+      - "src/evoryn/learning_lab/cross_fitted_meta_label.py"
+      - "src/evoryn/learning_lab/triple_barrier.py"
+      - "scripts/evaluate_cross_fitted_meta_label.py"
+      - "tests/unit/test_cross_fitted_meta_label.py"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase32-cross-fitted-meta-label.yml"
+      - "src/evoryn/learning_lab/cross_fitted_meta_label.py"
+      - "src/evoryn/learning_lab/triple_barrier.py"
+      - "scripts/evaluate_cross_fitted_meta_label.py"
+      - "tests/unit/test_cross_fitted_meta_label.py"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: phase32-meta-label-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-fitted-meta-label:
+    name: Cross-fitted Triple-Barrier meta-label OOF study
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Check out selected ref
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install bounded research dependencies
+        run: |
+          set -o pipefail
+          python --version 2>&1 | tee phase32-python-version.log
+          python -m pip install --upgrade pip 2>&1 | tee phase32-pip-install.log
+          python -m pip install -e ".[dev,regime,regime-upgrade]" 2>&1 | tee phase32-research-dependencies.log
+          python -m pip install pip-audit 2>&1 | tee phase32-pip-audit-install.log
+
+      - name: Run Ruff before reading research artifact
+        run: |
+          set -o pipefail
+          python -m ruff check . 2>&1 | tee phase32-ruff.log
+
+      - name: Run strict type check before reading research artifact
+        run: |
+          set -o pipefail
+          python -m mypy src tests scripts/evaluate_cross_fitted_meta_label.py 2>&1 | tee phase32-mypy.log
+
+      - name: Run focused security scan before reading research artifact
+        run: |
+          set -o pipefail
+          python -m bandit -q scripts/evaluate_cross_fitted_meta_label.py 2>&1 | tee phase32-bandit.log
+
+      - name: Run full offline test suite
+        run: |
+          set -o pipefail
+          python -m pytest -q 2>&1 | tee phase32-pytest.log
+
+      - name: Audit research dependencies
+        run: |
+          set -o pipefail
+          pip-audit --skip-editable 2>&1 | tee phase32-pip-audit.log
+
+      - name: Download the pinned public-history research artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: market-regime-detection-39544524629-1
+          repository: ${{ github.repository }}
+          run-id: 39544524629
+          github-token: ${{ github.token }}
+          path: artifacts/phase32-input
+
+      - name: Verify the pinned dataset version and run Phase 32 OOF study
+        run: |
+          set -o pipefail
+          python scripts/evaluate_cross_fitted_meta_label.py \
+            --dataset-root artifacts/phase32-input/artifacts/nobitex-regime/datasets \
+            --dataset-id nobitex-btc-usdt-60m \
+            --dataset-version cf6fbd7263c0ffac39d4bbc1ef69c0e0f71e5e7fb9cd7ff29cff329a52a38344 \
+            --seed 41 \
+            --expected-folds 8 \
+            --train-events 30 \
+            --validation-events 30 \
+            --test-events 10 \
+            --step-events 10 \
+            --embargo-bars 24 \
+            --output artifacts/phase32-meta-label 2>&1 | tee phase32-research-run.log
+
+      - name: Upload immutable Phase 32 report, models and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase32-cross-fitted-meta-label-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/phase32-meta-label/
+            phase32-python-version.log
+            phase32-pip-install.log
+            phase32-research-dependencies.log
+            phase32-pip-audit-install.log
+            phase32-ruff.log
+            phase32-mypy.log
+            phase32-bandit.log
+            phase32-pytest.log
+            phase32-pip-audit.log
+            phase32-research-run.log
+          if-no-files-found: warn
+          retention-days: 90

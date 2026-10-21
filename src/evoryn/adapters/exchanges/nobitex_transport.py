@@ -81,6 +81,8 @@ class NobitexHTTPTransport:
             if path in {
                 "/market/stats",
                 "/market/udf/history",
+                "/market/orders/list",
+                "/market/trades/list",
                 "/v2/wallets",
                 "/v2/options",
             }:
@@ -93,6 +95,19 @@ class NobitexHTTPTransport:
                 and path.removeprefix("/v2/trades/").isalnum()
             )
         return method == "POST" and path == "/market/orders/status"
+
+    @staticmethod
+    def _is_ascii_alphanumeric(value: str) -> bool:
+        return bool(value) and all(
+            "0" <= character <= "9"
+            or "A" <= character <= "Z"
+            or "a" <= character <= "z"
+            for character in value
+        )
+
+    @staticmethod
+    def _is_ascii_digits(value: str) -> bool:
+        return bool(value) and all("0" <= character <= "9" for character in value)
 
     @staticmethod
     def _is_usdt_symbol(symbol: str) -> bool:
@@ -141,6 +156,89 @@ class NobitexHTTPTransport:
         normalized_method = method.upper()
         if not self._is_allowed_route(normalized_method, path):
             raise InvalidExchangeRequest("Nobitex transport blocked a non-allowlisted route.")
+        if normalized_method == "GET" and path == "/market/orders/list":
+            allowed_order_params = {
+                "srcCurrency", "dstCurrency", "details", "status",
+                "fromId", "page", "pageSize",
+            }
+            if (
+                params is None
+                or set(params) - allowed_order_params
+                or not self._is_ascii_alphanumeric(params.get("srcCurrency", "").strip())
+                or params.get("dstCurrency", "").strip().casefold() != "usdt"
+                or params.get("details", "2") not in {"1", "2"}
+                or params.get("status", "open").strip().casefold()
+                not in {"all", "open", "done", "close"}
+                or ("page" in params and "fromId" in params)
+                or (
+                    "fromId" in params
+                    and (
+                        not self._is_ascii_digits(params["fromId"])
+                        or len(params["fromId"]) > 19
+                        or int(params["fromId"]) < 1
+                    )
+                )
+                or (
+                    "page" in params
+                    and (
+                        not self._is_ascii_digits(params["page"])
+                        or len(params["page"]) > 9
+                        or int(params["page"]) < 1
+                    )
+                )
+                or (
+                    "pageSize" in params
+                    and (
+                        not self._is_ascii_digits(params["pageSize"])
+                        or len(params["pageSize"]) > 4
+                        or not 1 <= int(params["pageSize"]) <= 1000
+                    )
+                )
+            ):
+                raise InvalidExchangeRequest(
+                    "Nobitex order-list reads require a bounded Spot/USDT query."
+                )
+        if normalized_method == "GET" and path == "/market/trades/list":
+            allowed_trade_params = {
+                "srcCurrency", "dstCurrency", "fromId", "page", "pageSize"
+            }
+            if (
+                params is None
+                or set(params) - allowed_trade_params
+                or not self._is_ascii_alphanumeric(
+                    params.get("srcCurrency", "").strip()
+                )
+                or params.get("dstCurrency", "").strip().casefold() != "usdt"
+                or ("page" in params and "fromId" in params)
+                or (
+                    "fromId" in params
+                    and (
+                        not self._is_ascii_digits(params["fromId"])
+                        or len(params["fromId"]) > 19
+                        or int(params["fromId"]) < 1
+                    )
+                )
+                or (
+                    "page" in params
+                    and (
+                        not self._is_ascii_digits(params["page"])
+                        or len(params["page"]) > 3
+                        or not 1 <= int(params["page"]) <= 100
+                    )
+                )
+                or (
+                    "pageSize" in params
+                    and (
+                        not self._is_ascii_digits(params["pageSize"])
+                        or len(params["pageSize"]) > 3
+                        or not 1 <= int(params["pageSize"]) <= 500
+                    )
+                )
+            ):
+                raise InvalidExchangeRequest(
+                    "Nobitex user-trade reads require a bounded Spot/USDT query."
+                )
+
         if (
             normalized_method == "GET"
             and path == "/v2/wallets"
@@ -151,9 +249,10 @@ class NobitexHTTPTransport:
                 or set(params) != {"currencies", "type"}
             )
         ):
-                raise InvalidExchangeRequest(
-                    "Nobitex wallet reads are restricted to USDT Spot or Margin balances."
-                )
+            raise InvalidExchangeRequest(
+                "Nobitex wallet reads are restricted to USDT Spot or Margin balances."
+            )
+
         if (
             normalized_method == "GET"
             and path == "/market/stats"
@@ -207,8 +306,18 @@ class NobitexHTTPTransport:
         url = f"{self.base_url.rstrip('/')}{path}{query}"
         headers = {"Accept": "application/json", "User-Agent": "EVORYN/0.1"}
         selected_token = token or self.token
-        if selected_token:
-            headers["Authorization"] = f"Token {selected_token}"
+        private_read_routes = {
+            "/v2/wallets",
+            "/market/orders/status",
+            "/market/orders/list",
+            "/market/trades/list",
+        }
+        if path in private_read_routes and not (selected_token or "").strip():
+            raise AuthenticationError(
+                "A read-only Nobitex API token is required for private account/order reads."
+            )
+        if selected_token and selected_token.strip():
+            headers["Authorization"] = f"Token {selected_token.strip()}"
 
         body: bytes | None = None
         if payload is not None:
