@@ -182,6 +182,16 @@ def _decimal(
     return result
 
 
+def _required_decimal(
+    value: object, *, field_name: str, allow_zero: bool
+) -> Decimal:
+    """Parse a mandatory decimal and fail closed if a future parser permits None."""
+    result = _decimal(value, field_name=field_name, allow_zero=allow_zero)
+    if result is None:
+        raise MalformedExchangeResponse(f"Nobitex {field_name} is required.")
+    return result
+
+
 def _optional_decimal(
     value: object, *, field_name: str, market_word_allowed: bool = False
 ) -> Decimal | None:
@@ -252,7 +262,7 @@ class NobitexReconciliationReader:
         *,
         rate_limiter: RateLimiterPort | None = None,
         clock: Callable[[], datetime] | None = None,
-    ) -> "NobitexReconciliationReader":
+    ) -> NobitexReconciliationReader:
         """Build from validated read-only API configuration without network I/O."""
 
         transport = NobitexHTTPTransport(
@@ -380,14 +390,15 @@ class NobitexReconciliationReader:
         )
         if trade_type is not None and trade_type != "spot":
             raise MalformedExchangeResponse("Nobitex returned a non-Spot order in a Spot query.")
-        amount = _decimal(raw.get("amount"), field_name="order.amount", allow_zero=False)
-        matched = _decimal(
+        amount = _required_decimal(
+            raw.get("amount"), field_name="order.amount", allow_zero=False
+        )
+        matched = _required_decimal(
             raw.get("matchedAmount"), field_name="order.matchedAmount", allow_zero=True
         )
-        unmatched = _decimal(
+        unmatched = _required_decimal(
             raw.get("unmatchedAmount"), field_name="order.unmatchedAmount", allow_zero=True
         )
-        assert amount is not None and matched is not None and unmatched is not None
         price = _optional_decimal(
             raw.get("price"), field_name="order.price", market_word_allowed=True
         )
@@ -484,11 +495,16 @@ class NobitexReconciliationReader:
         )
         if trade_type is not None and trade_type != "spot":
             raise MalformedExchangeResponse("Nobitex returned a non-Spot trade in a Spot query.")
-        quantity = _decimal(raw.get("amount"), field_name="trade.amount", allow_zero=False)
-        price = _decimal(raw.get("price"), field_name="trade.price", allow_zero=False)
-        total = _decimal(raw.get("total"), field_name="trade.total", allow_zero=True)
-        fee = _decimal(raw.get("fee"), field_name="trade.fee", allow_zero=True)
-        assert quantity is not None and price is not None and total is not None and fee is not None
+        quantity = _required_decimal(
+            raw.get("amount"), field_name="trade.amount", allow_zero=False
+        )
+        price = _required_decimal(
+            raw.get("price"), field_name="trade.price", allow_zero=False
+        )
+        total = _required_decimal(
+            raw.get("total"), field_name="trade.total", allow_zero=True
+        )
+        fee = _required_decimal(raw.get("fee"), field_name="trade.fee", allow_zero=True)
         return NobitexUserTrade(
             trade_id=trade_id,
             order_id=order_id,
