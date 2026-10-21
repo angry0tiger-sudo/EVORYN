@@ -16,22 +16,10 @@ from typing import Any
 
 from evoryn.learning_lab.cross_fitted_meta_label import (
     CrossFittedMetaConfig,
+    _canonical_json_bytes,
     run_cross_fitted_meta_label_research,
 )
 from evoryn.learning_lab.historical_data import HistoricalDatasetStore
-
-
-def _canonical_json_bytes(value: object) -> bytes:
-    return (
-        json.dumps(
-            value,
-            sort_keys=True,
-            indent=2,
-            ensure_ascii=False,
-            allow_nan=False,
-        )
-        + "\n"
-    ).encode("utf-8")
 
 
 def _write_immutable(path: Path, content: bytes) -> None:
