@@ -486,7 +486,9 @@ def make_purged_event_folds(
     if type(embargo_bars) is not int or embargo_bars < 0:
         raise ValueError("embargo_bars must be a non-negative integer.")
     if step_event_count < test_event_count:
-        raise ValueError("step_event_count must be >= test_event_count to keep test folds disjoint.")
+        raise ValueError(
+            "step_event_count must be >= test_event_count to keep test folds disjoint."
+        )
     indices = [event.event_index for event in events]
     if indices != sorted(indices) or len(indices) != len(set(indices)):
         raise ValueError("Events must be in strict chronological order with unique bar indices.")
