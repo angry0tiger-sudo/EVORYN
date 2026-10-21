@@ -59,3 +59,18 @@ Report the distribution across seeds and scenarios, not the single best score. C
 The current Task Scheduler runner is a local **offline CSV replay**. It scrubs EVORYN/Nobitex credentials from its process environment, uses \`NoChampionClassifier\`, and cannot load the research HMM/XGBoost artifacts. It is suitable for validating Paper orchestration and SQLite recovery, not for testing the newly learned regime strategy. See [Windows 11 Paper handover](../operations/windows11-paper-handover.md) and the [Windows Task Scheduler runbook](../operations/windows-paper-task-scheduler.md).
 
 For every phase, deliver the code, unit/integration tests, protocol/ADR updates, exact-head CI, immutable empirical artifact and updated technical-debt ledger. Do not combine an experimental classifier change with enabling any Live/Spot-write gate.
+
+
+## Phase 31 implementation candidate — research evidence only
+
+A reviewable candidate is on branch `research/phase31-triple-barrier-20261021`; the code has not been merged. It implements the phase as a labeling and split-manifest layer only, with no model fit or Runtime wiring. The runner reads only a pinned local `HistoricalDatasetStore` version and writes immutable JSON plus a SHA-256 sidecar.
+
+- Dataset version: `cf6fbd7263c0ffac39d4bbc1ef69c0e0f71e5e7fb9cd7ff29cff329a52a38344`
+- Candle CSV SHA-256: `76bb3693dc9e13b1f87de2798c6c0d9aa8d718a3ff2e47681f677e4ba504ae01`
+- Dataset manifest SHA-256: `cf0e9701169019acff8a96f6f9fc059abc699829fb7c57db91ae10d6c835624c`
+- Event-ledger SHA-256: `bae9ef0f8b2e7d68b81ff95419bc3f33dac66387c3e94cdbd44ba76711089f1d`
+- Report SHA-256: `e23b9c5f48bcfa61e4bbdaf86110a9ea785df5b11a7e8d3c26f901d3f6b0f427`
+- 142 events: 22 profit-taking, 33 stop-loss, 87 vertical expiry; one incomplete horizon is explicitly skipped.
+- Fold manifest: 5/5 expected folds evaluable, with 24-bar embargo. The economic gate is intentionally `NOT_EVALUATED_LABELING_PHASE_ONLY`.
+
+The mean per-event return after the assumed 30 bps cost is -0.2382%. It describes label outcomes, not an executable strategy return. Dataset rights and volume semantics remain unresolved, and historical order-book depth is absent. Local synthetic tests passed (7 tests); the exact-head GitHub CI and independent review remain pending. Champion stays null and runtime promotion remains forbidden.
