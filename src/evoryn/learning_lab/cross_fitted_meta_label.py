@@ -283,7 +283,9 @@ def _fit_meta_model(model_name: MetaModelName, seed: int) -> Any:
     return make_meta_label_classifier(model_name, params, random_seed=seed)
 
 
-def _fit_probability_calibrator(raw_probabilities: Sequence[float], labels: Sequence[int], seed: int) -> Any:
+def _fit_probability_calibrator(
+    raw_probabilities: Sequence[float], labels: Sequence[int], seed: int
+) -> Any:
     """Fit Platt scaling on a separate, later calibration partition only."""
     numpy = importlib.import_module("numpy")
     linear_model = importlib.import_module("sklearn.linear_model")
@@ -302,7 +304,9 @@ def _fit_probability_calibrator(raw_probabilities: Sequence[float], labels: Sequ
         or int((target == 0).sum()) < 2
         or int((target == 1).sum()) < 2
     ):
-        raise ValueError("Calibration partition needs >=10 finite samples and both classes (>=2 each).")
+        raise ValueError(
+            "Calibration partition needs >=10 finite samples and both classes (>=2 each)."
+        )
     clipped = numpy.clip(probabilities, 1e-6, 1.0 - 1e-6)
     logits = numpy.log(clipped / (1.0 - clipped)).reshape(-1, 1)
     calibrator = linear_model.LogisticRegression(
@@ -422,7 +426,9 @@ def _metrics(result: Any) -> dict[str, Any]:
     }
 
 
-def _bootstrap_mean_interval(values: Sequence[float], *, seed: int) -> dict[str, float | int] | None:
+def _bootstrap_mean_interval(
+    values: Sequence[float], *, seed: int
+) -> dict[str, float | int] | None:
     numpy = importlib.import_module("numpy")
     array = numpy.asarray(values, dtype="float64")
     if array.ndim != 1 or len(array) < 2 or not numpy.isfinite(array).all():
@@ -466,7 +472,10 @@ def run_cross_fitted_meta_label_research(
 ) -> dict[str, Any]:
     """Run two predeclared challengers on purged, chronological, out-of-fold test windows."""
     options = config or CrossFittedMetaConfig()
-    if dataset.market.market_type.casefold() != "spot" or not dataset.market.symbol.upper().endswith("-USDT"):
+    if (
+        dataset.market.market_type.casefold() != "spot"
+        or not dataset.market.symbol.upper().endswith("-USDT")
+    ):
         raise ValueError("Meta-label research is restricted to Spot/USDT.")
     if dataset.allow_gaps or dataset.gap_count:
         raise ValueError("Meta-label research refuses datasets with gaps.")
@@ -667,7 +676,11 @@ def run_cross_fitted_meta_label_research(
                 test_probabilities, dtype="float64"
             )
             label_array = importlib.import_module("numpy").asarray(test_y, dtype="int64")
-            brier = float(importlib.import_module("numpy").mean((probability_array - label_array) ** 2))
+            brier = float(
+                importlib.import_module("numpy").mean(
+                    (probability_array - label_array) ** 2
+                )
+            )
             log_loss_value = float(scoring.log_loss(label_array, probability_array, labels=[0, 1]))
             ap: float | None = None
             positive_count = int(label_array.sum())
@@ -675,7 +688,10 @@ def run_cross_fitted_meta_label_research(
                 ap = float(scoring.average_precision_score(label_array, probability_array))
             precision_threshold = threshold_selection.threshold
             selected_test_events = tuple(
-                event for event, probability in zip(fold.test_events, test_probabilities, strict=True)
+                event
+                for event, probability in zip(
+                    fold.test_events, test_probabilities, strict=True
+                )
                 if probability >= precision_threshold
             )
             record["classification"] = {
@@ -887,7 +903,9 @@ def run_cross_fitted_meta_label_research(
             "research_only": True,
             "random_seed": options.random_seed,
             "configuration": asdict(options),
-            "configuration_sha256": hashlib.sha256(_canonical_json_bytes(asdict(options))).hexdigest(),
+            "configuration_sha256": hashlib.sha256(
+                _canonical_json_bytes(asdict(options))
+            ).hexdigest(),
         },
         "dataset": {
             "dataset_id": dataset.dataset_id,
@@ -943,14 +961,21 @@ def run_cross_fitted_meta_label_research(
             ).hexdigest(),
         },
         "cross_fitting": {
-            "primary_signal": "fixed deterministic SMA-12/48 golden cross; no fit-able primary-model parameters",
+            "primary_signal": (
+                "fixed deterministic SMA-12/48 golden cross; "
+                "no fit-able primary-model parameters"
+            ),
             "primary_proposals_are_causal": True,
             "meta_model_fit_rows": "earlier purged event rows only",
             "calibration_fit_rows": "separate, later validation slice with its own labels",
-            "threshold_selection_rows": "later validation slice purged from calibration intervals and outer test",
+            "threshold_selection_rows": (
+                "later validation slice purged from calibration intervals and outer test"
+            ),
             "test_rows_used_for_fitting_or_calibration": False,
             "test_predictions_are_out_of_fold": True,
-            "purge_rule": "inclusive label intervals overlapping validation/test are removed from train",
+            "purge_rule": (
+                "inclusive label intervals overlapping validation/test are removed from train"
+            ),
             "embargo_bars": options.embargo_bars,
             "expected_fold_count": options.expected_fold_count,
             "actual_fold_count": fold_set.actual_fold_count,
@@ -983,11 +1008,26 @@ def run_cross_fitted_meta_label_research(
             "runtime_promotion_allowed": False,
         },
         "limitations": [
-            "Historical UDF volume units remain unknown; no volume feature or volume-based capacity was used.",
-            "Historical order-book depth is unavailable; spread/slippage are fixed assumptions, not observed fills.",
+            (
+                "Historical UDF volume units remain unknown; no volume feature "
+                "or volume-based capacity was used."
+            ),
+            (
+                "Historical order-book depth is unavailable; spread/slippage are fixed "
+                "assumptions, not observed fills."
+            ),
             "Public provider data-use terms are unreviewed.",
-            "Triple-Barrier targets are event labels; the backtest separately simulates entries/exits from completed-bar observations.",
-            "Model parameter grids were fixed before the outer OOF test folds; only the separate validation block selected the probability threshold.",
-            "No exchange client, credentials, private account endpoint, order-write path or Runtime model loader is used.",
+            (
+                "Triple-Barrier targets are event labels; the backtest separately "
+                "simulates entries/exits from completed-bar observations."
+            ),
+            (
+                "Model parameter grids were fixed before the outer OOF test folds; "
+                "only the separate validation block selected the probability threshold."
+            ),
+            (
+                "No exchange client, credentials, private account endpoint, order-write "
+                "path or Runtime model loader is used."
+            ),
         ],
     }
