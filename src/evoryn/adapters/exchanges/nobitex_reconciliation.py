@@ -111,6 +111,8 @@ class NobitexOrderPage:
     market: Market
     requested_status: UserOrderStatus
     requested_from_id: int | None
+    requested_page: int | None
+    requested_page_size: int
     orders: tuple[NobitexUserOrder, ...]
     has_next: bool | None
     observed_at: datetime
@@ -129,6 +131,8 @@ class NobitexTradePage:
 
     market: Market
     requested_from_id: int | None
+    requested_page: int | None
+    requested_page_size: int
     trades: tuple[NobitexUserTrade, ...]
     has_next: bool
     observed_at: datetime
@@ -324,23 +328,36 @@ class NobitexReconciliationReader:
         market: Market,
         *,
         status: UserOrderStatus = UserOrderStatus.OPEN,
+        page: int | None = 1,
+        page_size: int = 100,
         from_id: int | None = None,
     ) -> NobitexOrderPage:
-        """Fetch one authenticated order-list page; does not claim pagination is complete."""
+        """Fetch one authenticated order-list result without assuming a complete ledger."""
         base, quote = self._validate_market(market)
         token = self._require_token()
         if not isinstance(status, UserOrderStatus):
             raise InvalidExchangeRequest("Order-list status must be an explicit UserOrderStatus.")
-        if from_id is not None and (type(from_id) is not int or from_id < 1):
-            raise InvalidExchangeRequest("from_id must be a positive integer when supplied.")
+        if type(page_size) is not int or not 1 <= page_size <= 1000:
+            raise InvalidExchangeRequest("order page_size must be between 1 and 1000.")
+        if from_id is not None and page is not None:
+            raise InvalidExchangeRequest("Use page or from_id for order listing, not both.")
+        if page is not None and (type(page) is not int or page < 1):
+            raise InvalidExchangeRequest("order page must be a positive integer.")
+        if from_id is not None and (
+            type(from_id) is not int or from_id < 1 or len(str(from_id)) > 19
+        ):
+            raise InvalidExchangeRequest("from_id must be a bounded positive integer.")
         params = {
             "srcCurrency": base,
             "dstCurrency": quote,
             "details": "2",
             "status": status.value,
+            "pageSize": str(page_size),
         }
         if from_id is not None:
             params["fromId"] = str(from_id)
+        elif page is not None:
+            params["page"] = str(page)
         self.rate_limiter.acquire("nobitex:user_order_list", _ORDER_LIST_LIMIT)
         response = self.transport.request(
             "GET", "/market/orders/list", params=params, token=token
@@ -358,6 +375,8 @@ class NobitexReconciliationReader:
             market=market,
             requested_status=status,
             requested_from_id=from_id,
+            requested_page=page,
+            requested_page_size=page_size,
             orders=orders,
             has_next=has_next_raw,
             observed_at=self._now(),
@@ -442,16 +461,32 @@ class NobitexReconciliationReader:
         self,
         market: Market,
         *,
+        page: int | None = 1,
+        page_size: int = 30,
         from_id: int | None = None,
     ) -> NobitexTradePage:
-        """Fetch one authenticated recent trade page; history is provider-window-limited."""
+        """Fetch one authenticated trade page; provider history limits remain explicit."""
         base, quote = self._validate_market(market)
         token = self._require_token()
-        if from_id is not None and (type(from_id) is not int or from_id < 1):
-            raise InvalidExchangeRequest("from_id must be a positive integer when supplied.")
-        params = {"srcCurrency": base, "dstCurrency": quote}
+        if type(page_size) is not int or not 1 <= page_size <= 500:
+            raise InvalidExchangeRequest("trade page_size must be between 1 and 500.")
+        if from_id is not None and page is not None:
+            raise InvalidExchangeRequest("Use page or from_id for trade listing, not both.")
+        if page is not None and (type(page) is not int or not 1 <= page <= 100):
+            raise InvalidExchangeRequest("trade page must be between 1 and 100.")
+        if from_id is not None and (
+            type(from_id) is not int or from_id < 1 or len(str(from_id)) > 19
+        ):
+            raise InvalidExchangeRequest("from_id must be a bounded positive integer.")
+        params = {
+            "srcCurrency": base,
+            "dstCurrency": quote,
+            "pageSize": str(page_size),
+        }
         if from_id is not None:
             params["fromId"] = str(from_id)
+        elif page is not None:
+            params["page"] = str(page)
         self.rate_limiter.acquire("nobitex:user_trade_list", _USER_TRADE_LIST_LIMIT)
         response = self.transport.request(
             "GET", "/market/trades/list", params=params, token=token
@@ -466,6 +501,8 @@ class NobitexReconciliationReader:
         return NobitexTradePage(
             market=market,
             requested_from_id=from_id,
+            requested_page=page,
+            requested_page_size=page_size,
             trades=trades,
             has_next=has_next_raw,
             observed_at=self._now(),

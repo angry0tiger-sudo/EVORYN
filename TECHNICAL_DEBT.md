@@ -347,5 +347,5 @@ No open item may be closed by inference. This ledger does not authorize live tra
 
 - [x] Added a separate, read-only `NobitexReconciliationReader` candidate over the documented user-order and user-trade list endpoints. The low-level transport permits only these exact GET routes, requires a private read token, and validates the requested BASE/USDT scope.
 - [x] Added offline tests for partial fills, trade IDs/fees, status normalization, pagination uncertainty, private-auth requirements, and rejecting non-USDT/unknown parameters.
-- [ ] Do not treat the new page reader as a completed ledger reconciler: the API's order-list pagination/completeness semantics and the user-trades three-day window need an explicit recovery policy; `tradeType` must be present to count a row as authoritative Spot state.
+- [ ] Do not treat the new page reader as a completed ledger reconciler: the API's order-list pagination/completeness semantics and the documented 180-day Spot user-trade history limit need an explicit recovery policy; `tradeType` must be present to count a row as authoritative Spot state.
 - [ ] Wire the reader into a reconciliation state machine only after tests show restart recovery across journal state, active/open orders, completed/partial fills, fees, and account balances. No new order may be submitted while an outcome is unknown.

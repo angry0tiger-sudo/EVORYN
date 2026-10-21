@@ -117,7 +117,9 @@ def test_order_page_is_authenticated_scoped_and_preserves_partial_fill() -> None
     )
     reader = make_reader(transport)
 
-    page = reader.get_orders_page(MARKET, status=UserOrderStatus.OPEN, from_id=100)
+    page = reader.get_orders_page(
+        MARKET, status=UserOrderStatus.OPEN, page=None, page_size=100, from_id=100
+    )
 
     order = page.orders[0]
     assert page.has_next is False
@@ -138,6 +140,7 @@ def test_order_page_is_authenticated_scoped_and_preserves_partial_fill() -> None
                 "dstCurrency": "usdt",
                 "details": "2",
                 "status": "open",
+                "pageSize": "100",
                 "fromId": "100",
             },
             "mock-read-token",
@@ -173,7 +176,9 @@ def test_user_trade_page_preserves_fill_fields_and_pagination() -> None:
     transport = FakeReconciliationTransport({
         "/market/trades/list": {"status": "ok", "trades": [trade_row()], "hasNext": True}
     })
-    page = make_reader(transport).get_user_trades_page(MARKET, from_id=990)
+    page = make_reader(transport).get_user_trades_page(
+        MARKET, page=None, page_size=30, from_id=990
+    )
     trade = page.trades[0]
 
     assert page.has_next is True
@@ -185,7 +190,7 @@ def test_user_trade_page_preserves_fill_fields_and_pagination() -> None:
     assert trade.occurred_at == datetime(2026, 10, 21, 7, 59, 10, tzinfo=UTC)
     assert page.reconciliation_ready is False
     assert transport.calls[0][2] == {
-        "srcCurrency": "btc", "dstCurrency": "usdt", "fromId": "990"
+        "srcCurrency": "btc", "dstCurrency": "usdt", "pageSize": "30", "fromId": "990"
     }
 
 
@@ -233,4 +238,44 @@ def test_transport_allows_only_scoped_private_read_routes() -> None:
             "GET", "/market/trades/list",
             params={"srcCurrency": "btc", "dstCurrency": "usdt", "myTradesOnly": "no"},
             token="mock-token",
+        )
+
+
+
+def test_readers_support_bounded_page_pagination_and_reject_conflicting_cursor() -> None:
+    order_transport = FakeReconciliationTransport({
+        "/market/orders/list": {"status": "ok", "orders": [], "hasNext": False}
+    })
+    order_page = make_reader(order_transport).get_orders_page(MARKET, page=2, page_size=250)
+    assert order_page.requested_page == 2
+    assert order_page.requested_page_size == 250
+    assert order_transport.calls[0][2] == {
+        "srcCurrency": "btc",
+        "dstCurrency": "usdt",
+        "details": "2",
+        "status": "open",
+        "pageSize": "250",
+        "page": "2",
+    }
+
+    trade_transport = FakeReconciliationTransport({
+        "/market/trades/list": {"status": "ok", "trades": [], "hasNext": False}
+    })
+    trade_page = make_reader(trade_transport).get_user_trades_page(MARKET, page=3, page_size=250)
+    assert trade_page.requested_page == 3
+    assert trade_page.requested_page_size == 250
+    assert trade_transport.calls[0][2] == {
+        "srcCurrency": "btc",
+        "dstCurrency": "usdt",
+        "pageSize": "250",
+        "page": "3",
+    }
+
+    with pytest.raises(InvalidExchangeRequest, match="not both"):
+        make_reader(FakeReconciliationTransport({})).get_orders_page(
+            MARKET, page=2, from_id=100
+        )
+    with pytest.raises(InvalidExchangeRequest, match="between 1 and 500"):
+        make_reader(FakeReconciliationTransport({})).get_user_trades_page(
+            MARKET, page=None, page_size=501, from_id=100
         )

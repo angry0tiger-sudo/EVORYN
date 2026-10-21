@@ -145,16 +145,19 @@ class NobitexHTTPTransport:
             raise InvalidExchangeRequest("Nobitex transport blocked a non-allowlisted route.")
         if normalized_method == "GET" and path == "/market/orders/list":
             allowed_order_params = {
-                "srcCurrency", "dstCurrency", "details", "status", "fromId"
+                "srcCurrency", "dstCurrency", "details", "status",
+                "fromId", "page", "pageSize",
             }
             if (
                 params is None
                 or set(params) - allowed_order_params
+                or not params.get("srcCurrency", "").strip().isascii()
                 or not params.get("srcCurrency", "").strip().isalnum()
                 or params.get("dstCurrency", "").strip().casefold() != "usdt"
                 or params.get("details", "2") not in {"1", "2"}
                 or params.get("status", "open").strip().casefold()
                 not in {"all", "open", "done", "close"}
+                or ("page" in params and "fromId" in params)
                 or (
                     "fromId" in params
                     and (
@@ -164,13 +167,72 @@ class NobitexHTTPTransport:
                         or int(params["fromId"]) < 1
                     )
                 )
+                or (
+                    "page" in params
+                    and (
+                        not params["page"].isascii()
+                        or not params["page"].isdigit()
+                        or len(params["page"]) > 9
+                        or int(params["page"]) < 1
+                    )
+                )
+                or (
+                    "pageSize" in params
+                    and (
+                        not params["pageSize"].isascii()
+                        or not params["pageSize"].isdigit()
+                        or len(params["pageSize"]) > 4
+                        or not 1 <= int(params["pageSize"]) <= 1000
+                    )
+                )
             ):
                 raise InvalidExchangeRequest(
                     "Nobitex order-list reads require a bounded Spot/USDT query."
                 )
         if normalized_method == "GET" and path == "/market/trades/list":
-            allowed_trade_params = {"srcCurrency", "dstCurrency", "fromId"}
+            allowed_trade_params = {
+                "srcCurrency", "dstCurrency", "fromId", "page", "pageSize"
+            }
             if (
+                params is None
+                or set(params) - allowed_trade_params
+                or not params.get("srcCurrency", "").strip().isascii()
+                or not params.get("srcCurrency", "").strip().isalnum()
+                or params.get("dstCurrency", "").strip().casefold() != "usdt"
+                or ("page" in params and "fromId" in params)
+                or (
+                    "fromId" in params
+                    and (
+                        not params["fromId"].isascii()
+                        or not params["fromId"].isdigit()
+                        or len(params["fromId"]) > 19
+                        or int(params["fromId"]) < 1
+                    )
+                )
+                or (
+                    "page" in params
+                    and (
+                        not params["page"].isascii()
+                        or not params["page"].isdigit()
+                        or len(params["page"]) > 3
+                        or not 1 <= int(params["page"]) <= 100
+                    )
+                )
+                or (
+                    "pageSize" in params
+                    and (
+                        not params["pageSize"].isascii()
+                        or not params["pageSize"].isdigit()
+                        or len(params["pageSize"]) > 3
+                        or not 1 <= int(params["pageSize"]) <= 500
+                    )
+                )
+            ):
+                raise InvalidExchangeRequest(
+                    "Nobitex user-trade reads require a bounded Spot/USDT query."
+                )
+
+        if (
                 params is None
                 or set(params) - allowed_trade_params
                 or not params.get("srcCurrency", "").strip().isalnum()

@@ -63,7 +63,7 @@ The dedicated `NobitexReconciliationReader` uses two documented GET-only user en
 - `GET /market/orders/list` for filtered Spot/USDT user-order snapshots, including matched/unmatched amounts and order identity where the provider returns those fields.
 - `GET /market/trades/list` for user-trade records with the originating order ID, fee and provider pagination marker.
 
-The low-level transport allowlists these exact paths only. It requires a read-only API token, requires a bounded BASE/USDT query, rejects unknown query keys, and performs no order mutation. The provider returns one page at a time; it does **not** claim the account ledger is complete. Missing `hasNext`, absent `tradeType`, unknown status, or quantity inconsistencies leave a page ineligible for authoritative reconciliation. Nobitex documents the user-trade history window as three days, so this endpoint alone cannot rebuild an arbitrarily old ledger.
+The low-level transport allowlists these exact paths only. It requires a read-only API token, requires a bounded BASE/USDT query, rejects unknown query keys, and performs no order mutation. The provider returns one page at a time; it does **not** claim the account ledger is complete. Missing `hasNext`, absent `tradeType`, unknown status, or quantity inconsistencies leave a page ineligible for authoritative reconciliation. The current official docs describe up to 180 days of Spot user-trade history; this endpoint does not promise an unlimited historical ledger.
 
 Official contract reference: [Nobitex Spot API documentation](https://apidocs.nobitex.ir/), sections “فهرست سفارش‌های کاربر” and “فهرست معاملات کاربر”.
 
