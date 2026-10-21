@@ -97,9 +97,6 @@ class NobitexHistoryConfig:
             raise ValueError("retry_backoff_seconds must be in [0, 5].")
 
     @property
-            raise ValueError("minimum_candles must be an integer >= 100.")
-
-    @property
     def interval(self) -> timedelta:
         return timedelta(minutes=_SUPPORTED_RESOLUTIONS_MINUTES[self.resolution])
 

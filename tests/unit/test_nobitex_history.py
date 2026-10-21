@@ -286,9 +286,10 @@ def test_tls_certificate_verification_failure_is_diagnosed_without_retry(
         clock=lambda: datetime.fromtimestamp(START + 10_000, tz=UTC),
     )
 
-    with caplog.at_level(logging.WARNING, logger="evoryn.learning_lab.nobitex_history"):
-        with pytest.raises(HistoricalFetchError, match="category=TLS_CERTIFICATE"):
-            client._read_page(config.request_url(1))
+    with caplog.at_level(logging.WARNING, logger="evoryn.learning_lab.nobitex_history"), pytest.raises(
+        HistoricalFetchError, match="category=TLS_CERTIFICATE"
+    ):
+        client._read_page(config.request_url(1))
 
     assert len(opener.requests) == 1
     assert sleeps == []
@@ -319,9 +320,10 @@ def test_transport_retry_limit_fails_closed_with_final_diagnostics(
         clock=lambda: datetime.fromtimestamp(START + 10_000, tz=UTC),
     )
 
-    with caplog.at_level(logging.WARNING, logger="evoryn.learning_lab.nobitex_history"):
-        with pytest.raises(HistoricalFetchError, match="category=TIMEOUT"):
-            client._read_page(config.request_url(1))
+    with caplog.at_level(logging.WARNING, logger="evoryn.learning_lab.nobitex_history"), pytest.raises(
+        HistoricalFetchError, match="category=TIMEOUT"
+    ):
+        client._read_page(config.request_url(1))
 
     assert len(opener.requests) == 3
     assert sleeps == [pytest.approx(0.25), pytest.approx(0.5)]
