@@ -409,9 +409,9 @@ def _transport_error_details(
     raw_errno = getattr(reason, "errno", None)
     error_number = str(raw_errno) if isinstance(raw_errno, (int, str)) else "none"
     detail = " ".join(str(reason).split())
-    detail = re.sub(r"https?://\\S+", "<url>", detail)
+    detail = re.sub(r"https?://\S+", "<url>", detail)
     detail = re.sub(
-        r"(?i)\\b(?:token|authorization|password|secret|api[_-]?key)\\b\\s*[:=]\\s*\\S+",
+        r"(?i)\b(?:token|authorization|password|secret|api[_-]?key)\b\s*[:=]\s*\S+",
         "<redacted>",
         detail,
     )[:180]
