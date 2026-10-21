@@ -83,7 +83,9 @@ def test_event_features_are_prefix_invariant_and_future_data_only_changes_labels
     prefix_result = build_triple_barrier_events(
         enough_prefix, TripleBarrierConfig(vertical_horizon_bars=12)
     )
-    prefix_event = next(event for event in prefix_result.events if event.event_id == target.event_id)
+    prefix_event = next(
+        event for event in prefix_result.events if event.event_id == target.event_id
+    )
 
     assert target.feature_schema_version == FEATURE_SCHEMA_VERSION
     assert target.feature_names == FEATURE_NAMES
