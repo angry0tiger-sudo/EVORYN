@@ -46,3 +46,10 @@ Thumbs.db
 *.pfx
 secrets/
 credentials/
+# Local Windows Paper-only state and private config (never commit owner-host state)
+config/*.local.json
+data/paper-candles.csv
+data/*.sqlite3
+data/*.sqlite3-*
+data/*.db
+logs/
