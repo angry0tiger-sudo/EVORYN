@@ -5,6 +5,20 @@ Canonical repository: `angry0tiger-sudo/EVORYN`
 
 This ledger records open verification and runtime-integration obligations. Close an item only with a command/runner or review record, exact commit/model/data identity, result, and inspectable output. A file or test definition is not execution evidence. A green CI run does not establish production readiness.
 
+
+> # CRITICAL AI MODEL TRAP — HIGH CLASSIFICATION SCORE, FAILED ECONOMICS
+>
+> **Do not select or promote a model on accuracy alone.** The merged regime experiment's XGBoost reached 99.85% mean accuracy / 99.73% balanced accuracy, yet regime-gated SMA net return averaged **-2.3676% per test fold**, worse than unfiltered SMA (-0.1999%) and Buy-and-Hold (+0.9950%) under the same simulated cost assumptions. HMM's gated strategy also failed (-1.9954% per fold). Both economic gates failed; `selected_model_for_runtime = null`, `runtime_promotion_allowed = false`, and Champion = none.
+>
+> **Leakage diagnosis:** the regime target was thresholded trailing 24-bar return and `return_24` was itself an input. This is target/feature (definitional) leakage: the high score mainly reflects reproducing the label rule. The current evidence does **not** by itself prove classical future-row look-ahead leakage in the feature builder; use the precise label-leakage term unless a temporal leak is separately demonstrated. Future targets in Triple-Barrier labels are valid only if each feature snapshot is frozen at event time and event intervals are purged/embargoed.
+>
+> **Prior Meta-Label candidates also remain rejected.** XGBoost and LightGBM evaluated only 11/13 expected folds; each abstained in all evaluated folds and had zero closed trades. Complete-fold coverage and economic acceptance failed. Do not reduce gates to manufacture a pass.
+>
+> **Current governance state:** PR #32 merged; PR #33 merged at `201d7493615458c9b482fbbb21f98ec2936952f0`. Next proposed phases are ADR-0020 / [AI Intelligence Core roadmap](docs/research/ai-intelligence-core-roadmap.md): (31) Triple-Barrier labels, (32) cross-fitted Meta-Labeling, (33) calibrated dynamic sizing behind deterministic Risk Engine, and (34) offline RL last. Every phase remains research-only until full data/model provenance, exact-head CI, complete walk-forward coverage and positive predeclared net economic evidence.
+>
+> **Data limitations remain material:** UDF volume units are unverified; historic order-book depth is absent; spread/slippage are assumptions; provider-use terms are unreviewed. Do not call the simulator liquidity-realistic or claim commercial data rights. Windows Paper runtime is offline CSV replay and deliberately uses no Champion.
+
+
 ## Phase 18 — Connectivity Manager
 
 - [ ] **Verify the original conditional-merge commit directly.** Phase 18 was merged to `main` under the owner's documented conditional waiver while hosted-runner allocation was unavailable. Later superseding-tree CI evidence does not retroactively prove that the exact Phase 18 merge SHA `bf111eb06fa13f28279154c2c4b30077a67999ca` was tested on its own.
