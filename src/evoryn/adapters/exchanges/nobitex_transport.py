@@ -158,7 +158,9 @@ class NobitexHTTPTransport:
                 or (
                     "fromId" in params
                     and (
-                        not params["fromId"].isdigit()
+                        not params["fromId"].isascii()
+                        or not params["fromId"].isdigit()
+                        or len(params["fromId"]) > 19
                         or int(params["fromId"]) < 1
                     )
                 )

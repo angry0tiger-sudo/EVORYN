@@ -14,7 +14,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from evoryn.adapters.exchanges.nobitex_transport import NobitexHTTPTransport
-from evoryn.config import MarketPolicy
+from evoryn.config import MarketPolicy, NobitexReadOnlyConfig
 from evoryn.domain.models import Market, OrderStatus, Side
 from evoryn.infrastructure.exchange.rate_limit import SlidingWindowRateLimiter
 from evoryn.ports.contracts import RateLimiterPort
@@ -157,7 +157,7 @@ def _identifier(value: object, *, field_name: str) -> str:
     if isinstance(value, bool) or not isinstance(value, (str, int)):
         raise MalformedExchangeResponse(f"Nobitex {field_name} is not an identifier.")
     result = str(value).strip()
-    if not result.isdigit() or int(result) < 1:
+    if not result.isascii() or not result.isdigit() or len(result) > 19 or int(result) < 1:
         raise MalformedExchangeResponse(f"Nobitex {field_name} is not a positive integer.")
     return result
 
@@ -248,16 +248,13 @@ class NobitexReconciliationReader:
     @classmethod
     def from_config(
         cls,
-        config: object,
+        config: NobitexReadOnlyConfig,
         *,
         rate_limiter: RateLimiterPort | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> "NobitexReconciliationReader":
-        """Build from an object exposing a read-only API token and validated host settings."""
-        from evoryn.config import NobitexReadOnlyConfig
+        """Build from validated read-only API configuration without network I/O."""
 
-        if not isinstance(config, NobitexReadOnlyConfig):
-            raise TypeError("config must be NobitexReadOnlyConfig")
         transport = NobitexHTTPTransport(
             base_url=config.base_url,
             token=config.read_only_api_token,

@@ -21,6 +21,7 @@ from evoryn.ports.exchange_errors import (
     AuthenticationError,
     InvalidExchangeRequest,
     MalformedExchangeResponse,
+    UnsupportedExchangeCapability,
 )
 
 NOW = datetime(2026, 10, 21, 8, 0, tzinfo=UTC)
@@ -158,7 +159,7 @@ def test_user_trade_page_preserves_fill_fields_and_pagination() -> None:
     assert trade.price == Decimal("100.4")
     assert trade.fee == Decimal("0.1")
     assert trade.occurred_at == datetime(2026, 10, 21, 7, 59, 10, tzinfo=UTC)
-    assert page.reconciliation_ready is False is not True
+    assert page.reconciliation_ready is False
     assert transport.calls[0][2] == {
         "srcCurrency": "btc", "dstCurrency": "usdt", "fromId": "990"
     }
@@ -180,7 +181,7 @@ def test_private_reader_rejects_missing_token_and_non_usdt_before_request() -> N
     with pytest.raises(AuthenticationError):
         reader.get_user_trades_page(MARKET)
     non_usdt = Market(symbol="BTC-IRT", venue="nobitex", market_type="spot")
-    with pytest.raises(Exception):
+    with pytest.raises(UnsupportedExchangeCapability, match="allowlisted USDT"):
         make_reader(transport).get_user_trades_page(non_usdt)
     assert transport.calls == []
 
