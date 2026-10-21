@@ -30,7 +30,7 @@ def make_candles(count: int = 240) -> tuple[MarketCandle, ...]:
     candles: list[MarketCandle] = []
     prior = 100.0
     for index in range(count):
-        close_value = 100.0 * math.exp(0.0004 * index + 0.025 * math.sin(index / 9.0))
+        close_value = 100.0 * math.exp(0.002 * index + 0.01 * math.sin(index / 9.0))
         opening = Decimal(str(prior))
         close = Decimal(str(close_value))
         candles.append(
