@@ -18,6 +18,7 @@ from evoryn.learning_lab.cross_fitted_meta_label import (
 from evoryn.learning_lab.triple_barrier import (
     BarrierOutcome,
     TripleBarrierConfig,
+    TripleBarrierEvent,
     build_triple_barrier_events,
     make_purged_event_folds,
 )
@@ -51,7 +52,7 @@ def make_candles(count: int = 720) -> tuple[MarketCandle, ...]:
     return tuple(result)
 
 
-def make_events() -> tuple:
+def make_events() -> tuple[TripleBarrierEvent, ...]:
     return build_triple_barrier_events(
         make_candles(),
         TripleBarrierConfig(
@@ -134,18 +135,23 @@ def test_backtest_policy_uses_frozen_barriers_but_not_realized_label_outcome() -
             ),
         ).events
     )
-    altered_label = replace(
+    safe_event = replace(
         event,
+        profit_taking_price=event.reference_price * Decimal("2"),
+        stop_loss_price=event.reference_price * Decimal("0.5"),
+    )
+    altered_label = replace(
+        safe_event,
         outcome=(
             BarrierOutcome.STOP_LOSS
-            if event.outcome is not BarrierOutcome.STOP_LOSS
+            if safe_event.outcome is not BarrierOutcome.STOP_LOSS
             else BarrierOutcome.PROFIT_TAKING
         ),
         net_return_fraction=-99.0,
     )
     policy_a = TripleBarrierEventPolicy(
-        events_by_index={event.event_index: event},
-        allowed_event_indices={event.event_index},
+        events_by_index={safe_event.event_index: safe_event},
+        allowed_event_indices={safe_event.event_index},
         horizon_bars=6,
     )
     policy_b = TripleBarrierEventPolicy(
@@ -153,26 +159,26 @@ def test_backtest_policy_uses_frozen_barriers_but_not_realized_label_outcome() -
         allowed_event_indices={event.event_index},
         horizon_bars=6,
     )
-    at_event = candles[: event.event_index + 1]
+    at_event = candles[: safe_event.event_index + 1]
     assert policy_a.target_exposure(at_event) == Decimal("1")
     assert policy_b.target_exposure(at_event) == Decimal("1")
-    assert policy_a.target_exposure(candles[: event.event_index + 2]) == Decimal("1")
+    assert policy_a.target_exposure(candles[: safe_event.event_index + 2]) == Decimal("1")
     assert policy_b.target_exposure(candles[: event.event_index + 2]) == Decimal("1")
 
     triggered = list(candles)
-    next_candle = triggered[event.event_index + 1]
+    next_candle = triggered[safe_event.event_index + 1]
     triggered[event.event_index + 1] = MarketCandle(
         market=next_candle.market,
         timestamp=next_candle.timestamp,
         interval=next_candle.interval,
         open=next_candle.open,
-        high=max(next_candle.high, event.profit_taking_price),
+        high=max(next_candle.high, safe_event.profit_taking_price),
         low=next_candle.low,
         close=next_candle.close,
         volume=next_candle.volume,
         source=next_candle.source,
     )
-    assert policy_a.target_exposure(tuple(triggered[: event.event_index + 2])) == Decimal("0")
+    assert policy_a.target_exposure(tuple(triggered[: safe_event.event_index + 2])) == Decimal("0")
     assert policy_b.target_exposure(tuple(triggered[: event.event_index + 2])) == Decimal("0")
 
 
