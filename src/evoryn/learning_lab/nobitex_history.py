@@ -8,7 +8,9 @@ or configurable host. Responses are treated as untrusted input and validated bef
 from __future__ import annotations
 
 import json
+import logging
 import re
+import socket
 import ssl
 import time
 from dataclasses import dataclass
@@ -47,6 +49,7 @@ _SUPPORTED_RESOLUTIONS_MINUTES = {
 _SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{3,24}$")
 _MAX_ROWS_PER_PAGE = 500
 _MAX_RESPONSE_BYTES = 2_000_000
+_logger = logging.getLogger(__name__)
 
 
 class HistoricalFetchError(RuntimeError):
@@ -65,6 +68,8 @@ class NobitexHistoryConfig:
     timeout_seconds: float = 10.0
     throttle_seconds: float = 1.05
     minimum_candles: int = 500
+    max_retries: int = 2
+    retry_backoff_seconds: float = 0.5
 
     def __post_init__(self) -> None:
         if not isinstance(self.symbol, str) or not _SYMBOL_PATTERN.fullmatch(self.symbol):
@@ -86,6 +91,10 @@ class NobitexHistoryConfig:
             raise ValueError("throttle_seconds must be in [0, 5].")
         if type(self.minimum_candles) is not int or self.minimum_candles < 100:
             raise ValueError("minimum_candles must be an integer >= 100.")
+        if type(self.max_retries) is not int or not 0 <= self.max_retries <= 3:
+            raise ValueError("max_retries must be an integer in [0, 3].")
+        if not 0 <= self.retry_backoff_seconds <= 5:
+            raise ValueError("retry_backoff_seconds must be in [0, 5].")
 
     @property
     def interval(self) -> timedelta:
@@ -302,42 +311,107 @@ class NobitexHistoricalClient:
         return ordered
 
     def _read_page(self, url: str) -> object:
-        """Issue one GET only; requests never carry Authorization or other credentials."""
-        try:
-            request = Request(
-                url,
-                headers={
-                    "Accept": "application/json",
-                    "User-Agent": "EVORYN-research/1.0",
-                },
-                method="GET",
-            )
-            with self._opener.open(request, timeout=self._config.timeout_seconds) as response:
-                final_url = response.geturl()
-                from urllib.parse import urlsplit
-
-                parsed = urlsplit(final_url)
-                if (
-                    parsed.scheme != "https"
-                    or parsed.hostname != NOBITEX_PUBLIC_HOST
-                    or parsed.path != NOBITEX_HISTORY_PATH
-                    or parsed.username is not None
-                    or parsed.password is not None
-                ):
-                    raise HistoricalFetchError("Historical response escaped the fixed HTTPS route.")
-                body = response.read(_MAX_RESPONSE_BYTES + 1)
-            if len(body) > _MAX_RESPONSE_BYTES:
-                raise HistoricalFetchError("Historical UDF response exceeded the body size limit.")
+        """Issue a bounded GET with safe transport diagnostics and retry on transient errors."""
+        total_attempts = self._config.max_retries + 1
+        for attempt in range(1, total_attempts + 1):
             try:
-                return json.loads(body.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                request = Request(
+                    url,
+                    headers={
+                        "Accept": "application/json",
+                        "User-Agent": "EVORYN-research/1.0",
+                    },
+                    method="GET",
+                )
+                with self._opener.open(request, timeout=self._config.timeout_seconds) as response:
+                    final_url = response.geturl()
+                    from urllib.parse import urlsplit
+
+                    parsed = urlsplit(final_url)
+                    if (
+                        parsed.scheme != "https"
+                        or parsed.hostname != NOBITEX_PUBLIC_HOST
+                        or parsed.path != NOBITEX_HISTORY_PATH
+                        or parsed.username is not None
+                        or parsed.password is not None
+                    ):
+                        raise HistoricalFetchError(
+                            "Historical response escaped the fixed HTTPS route."
+                        )
+                    body = response.read(_MAX_RESPONSE_BYTES + 1)
+                if len(body) > _MAX_RESPONSE_BYTES:
+                    raise HistoricalFetchError(
+                        "Historical UDF response exceeded the body size limit."
+                    )
+                try:
+                    return json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise HistoricalFetchError(
+                        "Historical UDF response is not valid UTF-8 JSON."
+                    ) from exc
+            except HTTPError as exc:
+                # Provider response bodies, request URLs, and headers stay out of logs.
                 raise HistoricalFetchError(
-                    "Historical UDF response is not valid UTF-8 JSON."
-                ) from exc
-        except HTTPError as exc:
-            # Do not propagate the raw server body, URL query, or headers to logs.
-            raise HistoricalFetchError(f"Historical UDF GET returned HTTP {exc.code}.") from None
-        except (URLError, TimeoutError, OSError) as exc:
-            raise HistoricalFetchError(
-                f"Historical UDF GET failed with {type(exc).__name__}."
-            ) from None
+                    f"Historical UDF GET returned HTTP {exc.code}."
+                ) from None
+            except (URLError, TimeoutError, OSError) as exc:
+                category, reason_type, error_number, detail, reason = (
+                    _transport_error_details(exc)
+                )
+                _logger.warning(
+                    "Historical UDF GET transport failure: attempt=%d/%d "
+                    "category=%s reason_type=%s errno=%s detail=%s",
+                    attempt,
+                    total_attempts,
+                    category,
+                    reason_type,
+                    error_number,
+                    detail,
+                )
+                certificate_failure = isinstance(reason, ssl.SSLCertVerificationError)
+                if attempt < total_attempts and not certificate_failure:
+                    delay = min(
+                        self._config.retry_backoff_seconds * (2 ** (attempt - 1)),
+                        5.0,
+                    )
+                    if delay:
+                        self._sleep(delay)
+                    continue
+                raise HistoricalFetchError(
+                    "Historical UDF GET failed: "
+                    f"category={category}; reason_type={reason_type}; "
+                    f"errno={error_number}; detail={detail}"
+                ) from None
+        raise HistoricalFetchError("Historical UDF GET failed after all retry attempts.")
+
+
+def _transport_error_details(
+    exc: URLError | TimeoutError | OSError,
+) -> tuple[str, str, str, str, object]:
+    """Classify common transport failures without logging URLs, headers, or raw responses."""
+    reason: object = exc.reason if isinstance(exc, URLError) else exc
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        category = "TLS_CERTIFICATE"
+    elif isinstance(reason, ssl.SSLError):
+        category = "TLS"
+    elif isinstance(reason, socket.gaierror):
+        category = "DNS"
+    elif isinstance(reason, (TimeoutError, socket.timeout)):
+        category = "TIMEOUT"
+    elif isinstance(reason, ConnectionError):
+        category = "CONNECTION"
+    else:
+        category = "NETWORK"
+    reason_type = type(reason).__name__
+    raw_errno = getattr(reason, "errno", None)
+    error_number = str(raw_errno) if isinstance(raw_errno, (int, str)) else "none"
+    detail = " ".join(str(reason).split())
+    detail = re.sub(r"https?://\S+", "<url>", detail)
+    detail = re.sub(
+        r"(?i)\b(?:token|authorization|password|secret|api[_-]?key)\b\s*[:=]\s*\S+",
+        "<redacted>",
+        detail,
+    )[:180]
+    if not detail:
+        detail = reason_type
+    return category, reason_type, error_number, detail, reason

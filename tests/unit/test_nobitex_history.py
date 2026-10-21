@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
+import socket
+import ssl
 from datetime import UTC, datetime, timedelta
+from urllib.error import URLError
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -62,6 +66,26 @@ class FakeResponse:
 
     def read(self, size: int = -1) -> bytes:
         return self._body[:size]
+
+
+class SequencedOpener:
+    def __init__(self, outcomes: list[object]) -> None:
+        self.outcomes = outcomes
+        self.requests: list[tuple[str, str, dict[str, str]]] = []
+
+    def open(self, request: object, timeout: float) -> FakeResponse:
+        from urllib.request import Request
+
+        assert isinstance(request, Request)
+        assert 0 < timeout <= 30
+        self.requests.append(
+            (request.get_method(), request.full_url, dict(request.header_items()))
+        )
+        outcome = self.outcomes[len(self.requests) - 1]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        assert isinstance(outcome, FakeResponse)
+        return outcome
 
 
 class FakeOpener:
@@ -183,3 +207,132 @@ def test_public_fetch_paginates_only_fixed_route_and_sends_no_credentials() -> N
         assert "Authorization" not in headers
         assert "token" not in parsed.query.casefold()
     assert len(sleeps) == 1 and sleeps[0] == pytest.approx(1.05)
+
+
+@pytest.mark.parametrize(
+    ("error", "category"),
+    [
+        pytest.param(
+            URLError(socket.gaierror(socket.EAI_AGAIN, "Temporary failure in name resolution")),
+            "DNS",
+            id="temporary-dns-resolution",
+        ),
+        pytest.param(URLError(TimeoutError("timed out")), "TIMEOUT", id="timeout"),
+        pytest.param(
+            URLError(ConnectionResetError(104, "Connection reset by peer")),
+            "CONNECTION",
+            id="connection-reset",
+        ),
+    ],
+)
+def test_transient_transport_errors_are_logged_and_retried(
+    error: BaseException, category: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = NobitexHistoryConfig(
+        symbol="BTCUSDT",
+        resolution="60",
+        from_unix_seconds=START,
+        to_unix_seconds=START + 100_000,
+        max_pages=2,
+        minimum_candles=100,
+        timeout_seconds=20,
+        max_retries=2,
+        retry_backoff_seconds=0.25,
+    )
+    response = FakeResponse(
+        config.request_url(1), json.dumps(payload()).encode("utf-8")
+    )
+    opener = SequencedOpener([error, response])
+    sleeps: list[float] = []
+    client = NobitexHistoricalClient(
+        config,
+        opener=opener,
+        sleep=sleeps.append,
+        clock=lambda: datetime.fromtimestamp(START + 10_000, tz=UTC),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="evoryn.learning_lab.nobitex_history"):
+        assert client._read_page(config.request_url(1)) == payload()
+
+    assert len(opener.requests) == 2
+    assert sleeps == [pytest.approx(0.25)]
+    assert f"category={category}" in caplog.text
+    assert "attempt=1/3" in caplog.text
+    assert "detail=" in caplog.text
+    assert "Authorization" not in caplog.text
+    assert "password=super-secret" not in caplog.text
+
+
+def test_tls_certificate_verification_failure_is_diagnosed_without_retry(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = NobitexHistoryConfig(
+        symbol="BTCUSDT",
+        resolution="60",
+        from_unix_seconds=START,
+        to_unix_seconds=START + 100_000,
+        max_pages=2,
+        minimum_candles=100,
+        max_retries=2,
+        retry_backoff_seconds=0.25,
+    )
+    error = URLError(ssl.SSLCertVerificationError("certificate verify failed"))
+    opener = SequencedOpener([error])
+    sleeps: list[float] = []
+    client = NobitexHistoricalClient(
+        config,
+        opener=opener,
+        sleep=sleeps.append,
+        clock=lambda: datetime.fromtimestamp(START + 10_000, tz=UTC),
+    )
+
+    with (
+        caplog.at_level(logging.WARNING, logger="evoryn.learning_lab.nobitex_history"),
+        pytest.raises(
+            HistoricalFetchError,
+            match="category=TLS_CERTIFICATE",
+        ),
+    ):
+        client._read_page(config.request_url(1))
+
+    assert len(opener.requests) == 1
+    assert sleeps == []
+    assert "certificate verify failed" in caplog.text
+    assert "category=TLS_CERTIFICATE" in caplog.text
+
+
+def test_transport_retry_limit_fails_closed_with_final_diagnostics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = NobitexHistoryConfig(
+        symbol="BTCUSDT",
+        resolution="60",
+        from_unix_seconds=START,
+        to_unix_seconds=START + 100_000,
+        max_pages=2,
+        minimum_candles=100,
+        max_retries=2,
+        retry_backoff_seconds=0.25,
+    )
+    error = URLError(TimeoutError("timed out"))
+    opener = SequencedOpener([error, error, error])
+    sleeps: list[float] = []
+    client = NobitexHistoricalClient(
+        config,
+        opener=opener,
+        sleep=sleeps.append,
+        clock=lambda: datetime.fromtimestamp(START + 10_000, tz=UTC),
+    )
+
+    with (
+        caplog.at_level(logging.WARNING, logger="evoryn.learning_lab.nobitex_history"),
+        pytest.raises(
+            HistoricalFetchError,
+            match="category=TIMEOUT",
+        ),
+    ):
+        client._read_page(config.request_url(1))
+
+    assert len(opener.requests) == 3
+    assert sleeps == [pytest.approx(0.25), pytest.approx(0.5)]
+    assert "attempt=3/3" in caplog.text

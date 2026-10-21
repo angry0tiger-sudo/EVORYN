@@ -150,3 +150,10 @@ This is a safety-oriented implementation candidate, not a launchable automated t
 ## Follow-up research and Windows supervision
 
 The exact-head challenger on branch `research/walk-forward-labels-volume-audit-20261020` passed all six CI gates [#39397941134](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941134) and research [#39397941187](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39397941187). No model passed the majority-baseline and cost-adjusted Buy-and-Hold gate, so no candidate is connected to Runtime. See [the final walk-forward evidence](docs/research/2026-10-20-regime-challenger-walk-forward.md). Nobitex UDF volume remains unknown and excluded. Windows Task Scheduler remains design-only; no OS task was registered and no owner Windows host was accessed.
+
+
+## Advanced AI Optimization (research-only)
+
+Branch feat/ai-advanced-optimization introduces causal completed-bar multi-timeframe features, rolling Fibonacci/swing proxies, SMA meta-labeling, train-only feature selection, bounded Optuna tuning for XGBoost/LightGBM, and paired walk-forward economic gates. See docs/research/advanced-ai-optimization-protocol.md.
+
+The longer-data experiment is available only through the manually dispatched .github/workflows/advanced-ai-optimization.yml workflow. Historical volume units and order-book depth remain unverified, capacity constraints are therefore disabled in the research simulator, and **no model is selected for Runtime**. A workflow definition is not an empirical result; inspect the immutable artifact and exact run identity before drawing conclusions.
