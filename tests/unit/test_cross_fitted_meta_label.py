@@ -91,7 +91,7 @@ def test_fold_coverage_fails_when_expected_oof_test_folds_are_missing() -> None:
     assert folds.coverage_complete is False
 
 
-def test_validation_threshold_abstains_when_no_nonoverlapping_cutoff_has_positive_net_return() -> None:
+def test_validation_threshold_abstains_when_cutoff_has_no_positive_net_return() -> None:
     events = make_events()[:10]
     assert len(events) >= 5
     losing = tuple(replace(event, net_return_fraction=-0.01) for event in events)

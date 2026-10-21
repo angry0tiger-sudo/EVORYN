@@ -25,7 +25,6 @@ from evoryn.learning_lab.triple_barrier import (
     FEATURE_NAMES,
     FEATURE_SCHEMA_VERSION,
     BarrierOutcome,
-    PurgedEventFold,
     TripleBarrierConfig,
     TripleBarrierEvent,
     build_triple_barrier_events,
@@ -766,14 +765,18 @@ def run_cross_fitted_meta_label_research(
             )
             model_reports[model_name]["test_labels"].extend(int(value) for value in test_y.tolist())
             model_reports[model_name]["test_probabilities"].extend(test_probabilities)
-            model_reports[model_name]["fold_net_returns"].append(meta_metrics["net_return_fraction"])
+            model_reports[model_name]["fold_net_returns"].append(
+                meta_metrics["net_return_fraction"]
+            )
             model_reports[model_name]["fold_base_net_returns"].append(
                 base_metrics["net_return_fraction"]
             )
             model_reports[model_name]["fold_buy_hold_net_returns"].append(
                 hold_metrics["net_return_fraction"]
             )
-            model_reports[model_name]["fold_drawdowns"].append(meta_metrics["max_drawdown_fraction"])
+            model_reports[model_name]["fold_drawdowns"].append(
+                meta_metrics["max_drawdown_fraction"]
+            )
             model_reports[model_name]["closed_trades_total"] += meta_metrics["closed_trade_count"]
             model_reports[model_name]["closed_trade_returns"].extend(
                 float(trade.net_return_fraction) for trade in model_backtest.trades

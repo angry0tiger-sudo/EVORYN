@@ -25,7 +25,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: phase32-meta-label-\${{ github.ref }}
+  group: phase32-meta-label-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -83,9 +83,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: market-regime-detection-39544524629-1
-          repository: \${{ github.repository }}
+          repository: ${{ github.repository }}
           run-id: 39544524629
-          github-token: \${{ github.token }}
+          github-token: ${{ github.token }}
           path: artifacts/phase32-input
 
       - name: Verify the pinned dataset version and run Phase 32 OOF study
@@ -108,7 +108,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: phase32-cross-fitted-meta-label-\${{ github.run_id }}-\${{ github.run_attempt }}
+          name: phase32-cross-fitted-meta-label-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/phase32-meta-label/
             phase32-python-version.log

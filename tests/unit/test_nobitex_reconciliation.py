@@ -106,7 +106,15 @@ def trade_row(**overrides: object) -> dict[str, object]:
 
 
 def test_order_page_is_authenticated_scoped_and_preserves_partial_fill() -> None:
-    transport = FakeReconciliationTransport({"/market/orders/list": {"status": "ok", "orders": [order_row()], "hasNext": False}})
+    transport = FakeReconciliationTransport(
+        {
+            "/market/orders/list": {
+                "status": "ok",
+                "orders": [order_row()],
+                "hasNext": False,
+            }
+        }
+    )
     reader = make_reader(transport)
 
     page = reader.get_orders_page(MARKET, status=UserOrderStatus.OPEN, from_id=100)
@@ -125,14 +133,22 @@ def test_order_page_is_authenticated_scoped_and_preserves_partial_fill() -> None
         (
             "GET",
             "/market/orders/list",
-            {"srcCurrency": "btc", "dstCurrency": "usdt", "details": "2", "status": "open", "fromId": "100"},
+            {
+                "srcCurrency": "btc",
+                "dstCurrency": "usdt",
+                "details": "2",
+                "status": "open",
+                "fromId": "100",
+            },
             "mock-read-token",
         )
     ]
 
 
 def test_order_page_does_not_claim_complete_when_provider_omits_has_next() -> None:
-    transport = FakeReconciliationTransport({"/market/orders/list": {"status": "ok", "orders": [order_row()]}})
+    transport = FakeReconciliationTransport(
+        {"/market/orders/list": {"status": "ok", "orders": [order_row()]}}
+    )
     page = make_reader(transport).get_orders_page(MARKET)
     assert page.has_next is None
     assert page.reconciliation_ready is False
@@ -140,7 +156,15 @@ def test_order_page_does_not_claim_complete_when_provider_omits_has_next() -> No
 
 def test_order_page_rejects_non_spot_or_mismatched_market_rows() -> None:
     for row in (order_row(tradeType="Margin"), order_row(market="ETH-USDT")):
-        transport = FakeReconciliationTransport({"/market/orders/list": {"status": "ok", "orders": [row], "hasNext": False}})
+        transport = FakeReconciliationTransport(
+            {
+                "/market/orders/list": {
+                    "status": "ok",
+                    "orders": [row],
+                    "hasNext": False,
+                }
+            }
+        )
         with pytest.raises(MalformedExchangeResponse):
             make_reader(transport).get_orders_page(MARKET)
 

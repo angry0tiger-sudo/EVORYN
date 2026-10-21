@@ -340,7 +340,9 @@ class NobitexReconciliationReader:
             raise MalformedExchangeResponse("Nobitex order-list response lacks an orders array.")
         has_next_raw = response.get("hasNext")
         if has_next_raw is not None and not isinstance(has_next_raw, bool):
-            raise MalformedExchangeResponse("Nobitex order-list hasNext must be boolean when present.")
+            raise MalformedExchangeResponse(
+                "Nobitex order-list hasNext must be boolean when present."
+            )
         orders = tuple(self._normalize_order(row, market) for row in raw_orders)
         return NobitexOrderPage(
             market=market,
@@ -367,7 +369,9 @@ class NobitexReconciliationReader:
             _normalized_market_symbol(remote_market)
             != _normalized_market_symbol(market.symbol)
         ):
-            raise MalformedExchangeResponse("Nobitex order-list row mismatches the requested market.")
+            raise MalformedExchangeResponse(
+                "Nobitex order-list row mismatches the requested market."
+            )
         trade_type_raw = raw.get("tradeType")
         trade_type = (
             _required_text(trade_type_raw, field_name="order.tradeType").casefold()
