@@ -143,7 +143,9 @@ def _build_report(
             "embargo_bars": embargo_bars,
         },
     }
-    configuration_sha256 = hashlib.sha256(_canonical_json_bytes(experiment_configuration)).hexdigest()
+    configuration_sha256 = hashlib.sha256(
+        _canonical_json_bytes(experiment_configuration)
+    ).hexdigest()
     return {
         "schema_version": 1,
         "experiment": {
@@ -190,7 +192,10 @@ def _build_report(
             "event_ledger_sha256": _event_ledger_sha256(built.events),
             "outcome_distribution_and_event_returns": event_counts,
             "round_trip_cost_bps": config.round_trip_cost_bps,
-            "cost_interpretation": "fixed simulation assumption, not measured spread/slippage or realized fills",
+            "cost_interpretation": (
+                "fixed simulation assumption, not measured spread/slippage "
+                "or realized fills"
+            ),
         },
         "purged_chronological_splits": {
             "expected_fold_count": folds.expected_fold_count,
@@ -204,7 +209,9 @@ def _build_report(
         "model": {
             "training_executed": False,
             "model_sha256": None,
-            "not_applicable_reason": "Phase 31 creates labels and split manifests; no model is trained.",
+            "not_applicable_reason": (
+                "Phase 31 creates labels and split manifests; no model is trained."
+            ),
         },
         "acceptance": {
             "phase31_labeling_only": True,
@@ -219,7 +226,10 @@ def _build_report(
             "Historical volume units are unverified and volume is not used as a feature.",
             "Historical order-book depth is unavailable.",
             "Fixed cost assumptions are not observed spreads, slippage, or executable fills.",
-            "Event-return summaries are labels, not portfolio returns or evidence of profitability.",
+            (
+                "Event-return summaries are labels, not portfolio returns "
+                "or evidence of profitability."
+            ),
         ],
     }
 
@@ -285,7 +295,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report_sha256 = hashlib.sha256(report_bytes).hexdigest()
     report_path = args.output.expanduser().resolve()
     _write_immutable(report_path, report_bytes)
-    sidecar = f"{report_sha256}  {report_path.name}\n".encode("utf-8")
+    sidecar = f"{report_sha256}  {report_path.name}\n".encode()
     _write_immutable(report_path.with_suffix(report_path.suffix + ".sha256"), sidecar)
     print(json.dumps({"report": str(report_path), "report_sha256": report_sha256}, sort_keys=True))
     return 0
