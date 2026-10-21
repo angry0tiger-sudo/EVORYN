@@ -111,13 +111,13 @@ def _metrics(actual: Sequence[str], predicted: Sequence[str]) -> dict[str, Any]:
         false_positive = sum(confusion[other][name] for other in REGIME_NAMES if other != name)
         false_negative = sum(confusion[name][other] for other in REGIME_NAMES if other != name)
         support = supports.get(name, 0)
-        recall = true_positive / support if support else None
+        # Missing support for a required regime is conservatively scored as zero recall.
+        recall = true_positive / support if support else 0.0
         precision_denominator = true_positive + false_positive
         precision = true_positive / precision_denominator if precision_denominator else 0.0
         f1_denominator = 2 * true_positive + false_positive + false_negative
         f1 = 2 * true_positive / f1_denominator if f1_denominator else 0.0
-        if recall is not None:
-            recalls.append(recall)
+        recalls.append(recall)
         f1_scores.append(f1)
         per_class[name] = {
             "support": support,
