@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
@@ -162,7 +163,9 @@ def label_regimes(
     return tuple(label_current_regime(row, trend_threshold) for row in rows)
 
 
-def forward_filter_probabilities(model: Any, observations: Sequence[Sequence[float]]) -> tuple[tuple[float, ...], ...]:
+def forward_filter_probabilities(
+    model: Any, observations: Sequence[Sequence[float]]
+) -> tuple[tuple[float, ...], ...]:
     """Run an HMM forward filter; unlike smoothed posteriors, it never sees future rows."""
     if len(observations) == 0:
         return ()
@@ -216,7 +219,7 @@ class RegimeGatedSmaStrategy:
 
     def __init__(
         self,
-        predicted_regimes: Mapping[object, str],
+        predicted_regimes: Mapping[datetime, str],
         *,
         fast_window: int = 12,
         slow_window: int = 48,
