@@ -26,6 +26,8 @@ EVORYN Phase 32 is research-only. The model is not a Runtime dependency and no c
 
 ### 2. Use Novaryn as a comparison source, not as a reason to broaden write permissions
 
+Phase 32 adds an isolated `NobitexReconciliationReader` candidate for the documented user-order and user-trade GET endpoints. It is deliberately a read-only page provider and is not connected to `LiveSpotExecutionService` as an authoritative reconciler. A missing pagination signal, missing Spot identity or unknown order status is not silently promoted to complete account state.
+
 Relevant design patterns to compare in Novaryn's `src/novaryn/infrastructure/exchange/nobitex/` include separate public/private clients, explicit domain mapping, Ed25519 signing, client-order IDs, order lookup, open-order listing, and normalized account/order snapshots. These are useful checklist items for EVORYN's remaining account/order/fill reconciliation.
 
 Do **not** copy Novaryn's broader Market-order surface into EVORYN without a separate API-contract review, risk review, and deterministic Paper/Mock tests. EVORYN's more restrictive Limit-only gateway is intentional. Never weaken EVORYN's host pinning, redirect policy or no-blind-retry semantics merely to match the reference client.

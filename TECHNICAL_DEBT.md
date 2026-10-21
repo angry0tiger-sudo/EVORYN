@@ -343,3 +343,9 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [ ] Keep `selected_model_for_runtime = null`, Champion = none and `runtime_promotion_allowed = false`. No candidate model is loaded by Paper or Live Runtime.
 - [ ] FreqAI remains a design reference, not a standalone dependency; any compatibility spike requires a pinned supported interface, dependency/license review and isolated tests before an integration decision.
 - [ ] The Nobitex write gateway remains a non-production candidate. Novaryn is a code reference whose README still states `VALIDATION_STATE = VALIDATION_BLOCKED_EXTERNAL`; its existence does not close EVORYN's account/open-order/fill reconciliation, fault recovery, independent review, or owner-host release gates.
+
+
+- [x] Added a separate, read-only `NobitexReconciliationReader` candidate over the documented user-order and user-trade list endpoints. The low-level transport permits only these exact GET routes, requires a private read token, and validates the requested BASE/USDT scope.
+- [x] Added offline tests for partial fills, trade IDs/fees, status normalization, pagination uncertainty, private-auth requirements, and rejecting non-USDT/unknown parameters.
+- [ ] Do not treat the new page reader as a completed ledger reconciler: the API's order-list pagination/completeness semantics and the user-trades three-day window need an explicit recovery policy; `tradeType` must be present to count a row as authoritative Spot state.
+- [ ] Wire the reader into a reconciliation state machine only after tests show restart recovery across journal state, active/open orders, completed/partial fills, fees, and account balances. No new order may be submitted while an outcome is unknown.

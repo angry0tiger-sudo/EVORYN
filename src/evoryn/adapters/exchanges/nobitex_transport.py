@@ -81,6 +81,8 @@ class NobitexHTTPTransport:
             if path in {
                 "/market/stats",
                 "/market/udf/history",
+                "/market/orders/list",
+                "/market/trades/list",
                 "/v2/wallets",
                 "/v2/options",
             }:
@@ -141,6 +143,48 @@ class NobitexHTTPTransport:
         normalized_method = method.upper()
         if not self._is_allowed_route(normalized_method, path):
             raise InvalidExchangeRequest("Nobitex transport blocked a non-allowlisted route.")
+        if normalized_method == "GET" and path == "/market/orders/list":
+            allowed_order_params = {
+                "srcCurrency", "dstCurrency", "details", "status", "fromId"
+            }
+            if (
+                params is None
+                or set(params) - allowed_order_params
+                or not params.get("srcCurrency", "").strip().isalnum()
+                or params.get("dstCurrency", "").strip().casefold() != "usdt"
+                or params.get("details", "2") not in {"1", "2"}
+                or params.get("status", "open").strip().casefold()
+                not in {"all", "open", "done", "close"}
+                or (
+                    "fromId" in params
+                    and (
+                        not params["fromId"].isdigit()
+                        or int(params["fromId"]) < 1
+                    )
+                )
+            ):
+                raise InvalidExchangeRequest(
+                    "Nobitex order-list reads require a bounded Spot/USDT query."
+                )
+        if normalized_method == "GET" and path == "/market/trades/list":
+            allowed_trade_params = {"srcCurrency", "dstCurrency", "fromId"}
+            if (
+                params is None
+                or set(params) - allowed_trade_params
+                or not params.get("srcCurrency", "").strip().isalnum()
+                or params.get("dstCurrency", "").strip().casefold() != "usdt"
+                or (
+                    "fromId" in params
+                    and (
+                        not params["fromId"].isdigit()
+                        or int(params["fromId"]) < 1
+                    )
+                )
+            ):
+                raise InvalidExchangeRequest(
+                    "Nobitex user-trade reads require a bounded Spot/USDT query."
+                )
+
         if (
             normalized_method == "GET"
             and path == "/v2/wallets"
@@ -207,8 +251,18 @@ class NobitexHTTPTransport:
         url = f"{self.base_url.rstrip('/')}{path}{query}"
         headers = {"Accept": "application/json", "User-Agent": "EVORYN/0.1"}
         selected_token = token or self.token
-        if selected_token:
-            headers["Authorization"] = f"Token {selected_token}"
+        private_read_routes = {
+            "/v2/wallets",
+            "/market/orders/status",
+            "/market/orders/list",
+            "/market/trades/list",
+        }
+        if path in private_read_routes and not (selected_token or "").strip():
+            raise AuthenticationError(
+                "A read-only Nobitex API token is required for private account/order reads."
+            )
+        if selected_token and selected_token.strip():
+            headers["Authorization"] = f"Token {selected_token.strip()}"
 
         body: bytes | None = None
         if payload is not None:

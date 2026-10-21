@@ -55,6 +55,20 @@ The common `ExchangePort` declares `submit_order` and `cancel_order` for archite
 
 Order-writing implementation requires the later execution and risk phases, verified API/order-lifecycle contracts, reconciliation and idempotency tests, independent review, and explicit release authorization. This adapter must not be described as production-ready for real-money trading.
 
+
+## Authenticated order/trade snapshots for reconciliation research (Phase 32)
+
+The dedicated `NobitexReconciliationReader` uses two documented GET-only user endpoints:
+
+- `GET /market/orders/list` for filtered Spot/USDT user-order snapshots, including matched/unmatched amounts and order identity where the provider returns those fields.
+- `GET /market/trades/list` for user-trade records with the originating order ID, fee and provider pagination marker.
+
+The low-level transport allowlists these exact paths only. It requires a read-only API token, requires a bounded BASE/USDT query, rejects unknown query keys, and performs no order mutation. The provider returns one page at a time; it does **not** claim the account ledger is complete. Missing `hasNext`, absent `tradeType`, unknown status, or quantity inconsistencies leave a page ineligible for authoritative reconciliation. Nobitex documents the user-trade history window as three days, so this endpoint alone cannot rebuild an arbitrarily old ledger.
+
+Official contract reference: [Nobitex Spot API documentation](https://apidocs.nobitex.ir/), sections “فهرست سفارش‌های کاربر” and “فهرست معاملات کاربر”.
+
+These read primitives are not wired into Live Runtime and do not enable writes. Before using them to clear a blocked submission, EVORYN still needs a complete pagination policy, exact-head contract tests against sanitized exchange responses, and a tested reconciliation state machine that compares the journal, balances, orders and fills after restart. Unknown state must continue to block new submissions.
+
 ## Phase 21A capability evidence boundary
 
 The legacy `ExchangeCapabilities` booleans continue to describe the existing common adapter contract; they do
