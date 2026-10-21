@@ -11,7 +11,6 @@ import hashlib
 import importlib
 import itertools
 import json
-import math
 import random
 from collections import Counter
 from collections.abc import Sequence
@@ -21,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 from evoryn.domain.models import MarketCandle
-from evoryn.intelligence.regime import RegimeLabel
 from evoryn.learning_lab.backtest import BacktestConfig, make_walk_forward_folds, run_backtest
 from evoryn.learning_lab.historical_data import HistoricalDataset, HistoricalDatasetStore
 from evoryn.learning_lab.market_regimes import (
@@ -197,7 +195,6 @@ def _train_hmm(
     *,
     seed: int,
 ) -> tuple[dict[int, str], list[str], Any, Any]:
-    numpy = importlib.import_module("numpy")
     preprocessing = importlib.import_module("sklearn.preprocessing")
     hmmlearn = importlib.import_module("hmmlearn.hmm")
     scaler = preprocessing.StandardScaler()
@@ -256,7 +253,8 @@ def _train_xgboost(
         n_jobs=1,
         verbosity=0,
     )
-    model.fit(_array(train_features), _array([[float(label)] for label in y_train]).reshape(-1))
+    numpy = importlib.import_module("numpy")
+    model.fit(_array(train_features), numpy.asarray(y_train, dtype="int64"))
     local_probabilities = model.predict_proba(_array(local_features))
     predictions: list[str] = []
     for probabilities in local_probabilities.tolist():
@@ -345,7 +343,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise ValueError("At least 2500 contiguous hourly candles are required for this walk-forward study.")
 
     indices, all_features = build_causal_feature_matrix(dataset.candles, lookback=72)
-    row_by_index = dict(zip(indices, all_features, strict=True))
     feature_by_index = dict(zip(indices, all_features, strict=True))
     train_bars = max(500, int(candle_count * 0.50))
     validation_bars = max(168, int(candle_count * 0.10))
@@ -410,17 +407,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             ]
             local_indices = [index for index in indices if index >= fold.train.start]
             train_rows = [feature_by_index[index] for index in train_indices]
-            test_rows = [feature_by_index[index] for index in test_indices]
             local_rows = [feature_by_index[index] for index in local_indices]
             try:
                 threshold = fit_trend_threshold(train_rows)
                 train_labels = label_regimes(train_rows, threshold)
                 test_labels = label_regimes(test_rows, threshold)
-                local_labels = label_regimes(local_rows, threshold)
                 majority_label = Counter(train_labels).most_common(1)[0][0]
-                numpy = importlib.import_module("numpy")
-                train_features = _array(train_rows)
-                local_features = _array(local_rows)
                 if family == "hmm":
                     mapping, local_predictions, model, scaler = _train_hmm(
                         train_rows, train_labels, local_rows, seed=_SEED + fold.fold_index
