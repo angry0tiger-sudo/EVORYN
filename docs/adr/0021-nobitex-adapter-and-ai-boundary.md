@@ -1,6 +1,6 @@
 # ADR-0021: EVORYN-Owned Nobitex Adapter and Research-Only AI Integration
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-21
 - **Owners:** Project owner and AI/platform engineering
 - **Related work:** ADR-0017 (gated Nobitex Spot execution), ADR-0020 (AI Intelligence Core roadmap), Phase 31 Triple-Barrier, Phase 32 cross-fitted Meta-Labeling
@@ -82,10 +82,20 @@ Missing/invalid AP or prevalence fails the classification gate. Equality with pr
 - Phase 32 reports use schema version 2 because the acceptance report now includes the classification gate and its prevalence baseline.
 - No model is promoted and no exchange writes are enabled by this ADR.
 
-## Required evidence before phase acceptance
+## Phase 32 empirical outcome (research-only; 2026-10-21)
 
-- Exact-head CI passing on the updated source/test commit.
-- The Phase 32 empirical run on the pinned dataset, with complete eight-fold evidence and preserved logs/artifacts.
-- Every classification and economic gate reported explicitly; failed candidates remain rejected with Champion set to none.
-- Independent review of event labeling, fold purging, target semantics, report schema, and economic simulation limitations.
-- Separate resolution of exchange account/fill reconciliation and owner-host acceptance before any live execution claim.
+The pinned [GitHub Actions run](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39566579109) completed with all eight predeclared outer OOF folds and schema-v2 report. Immutable report SHA-256 is `0482ae95c521953a8ed1afcd598a3d0ef593af31429411ee0a11c6e99123f62a`; dataset version is `cf6fbd7263c0ffac39d4bbc1ef69c0e0f71e5e7fb9cd7ff29cff329a52a38344`.
+
+- **LightGBM — REJECT:** pooled OOF Average Precision `0.440912` vs positive prevalence `0.425000`; the classification gate passes, but the economic gate fails. There are 16 closed trades against a predeclared minimum of 20, mean fold net return is `-0.2510%`, and the 95% paired-fold lower bounds versus both Buy-and-Hold and the unfiltered SMA are not positive.
+- **XGBoost — REJECT:** pooled OOF Average Precision `0.405893` below prevalence `0.425000`; the economic gate also fails, with 17 closed trades and mean fold net return `-0.2537%`. Neither comparator's paired 95% lower bound is positive.
+- Both candidates are rejected, Champion remains `null`, `selected_model_for_runtime` remains `null`, and `runtime_promotion_allowed` remains `false`. No gate, threshold, cost assumption or test-fold result was changed after observing outcomes.
+
+This run validates execution of the research pipeline and yields a negative/insufficient-evidence model decision. It does **not** prove strategy profitability or eliminate the need for independent methodology review. Dataset use terms remain unreviewed, volume is unused because its units are unknown, and historical order-book depth is unavailable; spread/slippage are fixed assumptions.
+
+## Remaining release gates
+
+- Independent review of event labels, target semantics, fold purging/embargo, validation threshold selection, and confidence intervals.
+- Review provider data-use terms and document the execution-cost assumptions.
+- Complete Nobitex account/open-order/fill reconciliation and restart/failure drills before any live-execution claim.
+- The live Spot/USDT write candidate remains separately gated and is not made production-ready by this research result.
+
