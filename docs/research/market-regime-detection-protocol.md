@@ -41,4 +41,16 @@ The economic gate requires complete fold coverage, positive average net return, 
 
 Regardless of classification results, this experiment hard-codes selected_model_for_runtime = null, runtime_promotion_allowed = false, and the release disposition RESEARCH_ONLY_NO_CHAMPION_NO_LIVE_TRADING. Successful training, model artifact creation, or green CI does not authorize Runtime integration, owner-host changes, credentials, or live orders.
 
-The first hosted execution of the new workflow is the empirical source of truth. Until an immutable report is inspected, no model result or profitability claim is implied by this protocol file.
+## First empirical checkpoint — 2026-10-21
+
+Research run [#39544088577](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39544088577) completed successfully on code SHA `c88eef2dd238edd5e84395c77accb30286894f91`. Exact-source standard CI [#39544088508](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39544088508) passed all seven jobs. Research covered dataset `nobitex-btc-usdt-60m`, version `36a69c6e0c3dd1a25427869fa9a1ca7b7126f0059594e69805e6b9bca6d63ef0`, 11,438 H1 candles and five non-overlapping test folds per family (4,575 test samples each).
+
+- HMM: mean balanced accuracy 89.76%, macro-F1 82.42%, but regime-gated SMA mean net return `-1.9954%` per test fold and 111 closed trades. Lower 95% paired-fold bounds versus unfiltered SMA and Buy-and-Hold: `-2.9919%` and `-5.4534%`.
+- XGBoost: mean balanced accuracy 99.73%, macro-F1 99.79%, but regime-gated SMA mean net return `-2.3676%` per test fold and 122 closed trades. Lower 95% paired-fold bounds versus unfiltered SMA and Buy-and-Hold: `-3.7861%` and `-5.2291%`.
+- The unfiltered SMA averaged `-0.1999%`; Buy-and-Hold averaged `+0.9950%`. Both candidate classification gates passed, but both economic gates failed. No Champion was selected.
+
+**Interpretation warning:** labels are produced by thresholding the trailing 24-bar return, and `return_24` is directly included among the model inputs. The high XGBoost classification score therefore largely reflects reproducing the deterministic weak-label rule; it is not evidence of future-price forecasting or tradable alpha. Independent/annotated ground-truth regimes and stronger economic validation would be needed in any next experiment.
+
+Verified artifact: [run #39544088577 artifact ZIP](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39544088577/artifacts/12320553643), artifact ID `12320553643`, ZIP SHA-256 `6f63c0a2e3d029163a8c6c42eef82f6c46a66b4b10cc44d44a15273c0166bc11`. Report SHA-256 `1ab2024cb11d64bed6056e7031e623881ad64c2f20b040d1713f1a349f20ae17`; manifest SHA-256 `a0ffa51ac92a7c70ab0febd01343f560da0ed29fd9bd3e8efe451dd85b458fbd`. Dataset volume units remain unknown, historical order-book depth is absent, and provider data-use terms are unreviewed.
+
+The release disposition remains `RESEARCH_ONLY_NO_CHAMPION_NO_LIVE_TRADING`; selected_model_for_runtime is null and runtime_promotion_allowed is false.
