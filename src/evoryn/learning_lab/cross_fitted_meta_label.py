@@ -426,6 +426,22 @@ def _metrics(result: Any) -> dict[str, Any]:
     }
 
 
+def _average_precision_above_prevalence(
+    average_precision: float | None,
+    positive_prevalence: float | None,
+) -> bool:
+    """Require pooled out-of-fold average precision to beat the no-skill prevalence baseline."""
+    if average_precision is None or positive_prevalence is None:
+        return False
+    if not math.isfinite(average_precision) or not math.isfinite(positive_prevalence):
+        return False
+    if not 0.0 <= average_precision <= 1.0:
+        return False
+    if not 0.0 <= positive_prevalence <= 1.0:
+        return False
+    return average_precision > positive_prevalence
+
+
 def _bootstrap_mean_interval(
     values: Sequence[float], *, seed: int
 ) -> dict[str, float | int] | None:
@@ -838,6 +854,21 @@ def run_cross_fitted_meta_label_research(
         )
         mean_net = sum(net_values) / len(net_values) if net_values else None
         max_drawdown = max(report["fold_drawdowns"], default=None)
+        oof_labels = report["test_labels"]
+        oof_probabilities = report["test_probabilities"]
+        pooled_prevalence = (
+            sum(oof_labels) / len(oof_labels)
+            if oof_labels
+            else None
+        )
+        pooled_average_precision = (
+            float(scoring.average_precision_score(oof_labels, oof_probabilities))
+            if oof_labels and len(set(oof_labels)) == 2
+            else None
+        )
+        classification_gate = _average_precision_above_prevalence(
+            pooled_average_precision, pooled_prevalence
+        )
         trades_gate = report["closed_trades_total"] >= options.min_closed_trades
         positive_net_gate = mean_net is not None and mean_net > 0
         improvement_base_gate = ci_base is not None and ci_base["ci95_lower"] > 0
@@ -853,19 +884,15 @@ def run_cross_fitted_meta_label_research(
             and drawdown_gate
             and tail_gate
         )
+        acceptance_gate = economic_gate and classification_gate
         aggregate[model_name] = {
             "expected_fold_count": options.expected_fold_count,
             "actual_fold_count": fold_set.actual_fold_count,
             "evaluated_fold_count": evaluated,
             "complete_fold_coverage": coverage_complete,
             "pooled_oof_event_count": len(report["oof_predictions"]),
-            "pooled_oof_average_precision": (
-                float(scoring.average_precision_score(
-                    report["test_labels"], report["test_probabilities"]
-                ))
-                if report["test_labels"] and len(set(report["test_labels"])) == 2
-                else None
-            ),
+            "pooled_oof_average_precision": pooled_average_precision,
+            "pooled_oof_positive_prevalence": pooled_prevalence,
             "pooled_oof_brier_score": (
                 float(importlib.import_module("sklearn.metrics").brier_score_loss(
                     report["test_labels"], report["test_probabilities"]
@@ -880,6 +907,7 @@ def run_cross_fitted_meta_label_research(
             "worst_5pct_closed_trade_net_return_fraction": tail_quantile,
             "gates": {
                 "complete_oof_fold_coverage": coverage_complete,
+                "pooled_oof_average_precision_above_positive_prevalence": classification_gate,
                 "minimum_closed_trade_count": trades_gate,
                 "positive_mean_net_return": bool(positive_net_gate),
                 "positive_lower_ci_vs_unfiltered_sma": bool(improvement_base_gate),
@@ -888,14 +916,18 @@ def run_cross_fitted_meta_label_research(
                 "tail_loss_within_limit": bool(tail_gate),
             },
             "economic_gate_passed": bool(economic_gate),
-            "disposition": "ACCEPT_FOR_INDEPENDENT_REVIEW" if economic_gate else "REJECT",
+            "classification_gate_passed": bool(classification_gate),
+            "acceptance_gate_passed": bool(acceptance_gate),
+            "disposition": (
+                "ACCEPT_FOR_INDEPENDENT_REVIEW" if acceptance_gate else "REJECT"
+            ),
             "runtime_promotion_allowed": False,
             "champion": None,
         }
 
     candle_bytes = dataset.candles_csv_bytes()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment": {
             "phase": 32,
             "name": "cross-fitted-triple-barrier-meta-labeling",
@@ -1000,6 +1032,10 @@ def run_cross_fitted_meta_label_research(
                 "minimum_5pct_trade_return_fraction": -options.max_tail_loss_fraction,
                 "all_expected_folds_evaluable": True,
             },
+            "classification_gate": (
+                "pooled out-of-fold average precision must be strictly greater than "
+                "pooled positive-label prevalence"
+            ),
             "model_candidates": {
                 name: aggregate[name]["disposition"] for name in _META_MODELS
             },

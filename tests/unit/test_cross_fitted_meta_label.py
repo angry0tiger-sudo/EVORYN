@@ -11,6 +11,7 @@ from evoryn.domain.models import Market, MarketCandle
 from evoryn.learning_lab.cross_fitted_meta_label import (
     CrossFittedMetaConfig,
     TripleBarrierEventPolicy,
+    _average_precision_above_prevalence,
     _calibrate_probabilities,
     _fit_probability_calibrator,
     select_validation_threshold,
@@ -198,3 +199,30 @@ def test_platt_calibration_rejects_single_class_support() -> None:
     pytest.importorskip("sklearn")
     with pytest.raises(ValueError, match="both classes"):
         _fit_probability_calibrator([0.1] * 12, [0] * 12, seed=41)
+
+
+
+@pytest.mark.parametrize(
+    ("average_precision", "positive_prevalence", "expected"),
+    [
+        (0.61, 0.40, True),
+        (0.40, 0.40, False),
+        (0.39, 0.40, False),
+        (None, 0.40, False),
+        (0.61, None, False),
+        (float("nan"), 0.40, False),
+        (0.61, float("nan"), False),
+        (1.01, 0.40, False),
+        (0.61, -0.01, False),
+        (0.61, 1.01, False),
+    ],
+)
+def test_average_precision_must_strictly_beat_positive_prevalence(
+    average_precision: float | None,
+    positive_prevalence: float | None,
+    expected: bool,
+) -> None:
+    assert (
+        _average_precision_above_prevalence(average_precision, positive_prevalence)
+        is expected
+    )

@@ -329,3 +329,17 @@ No open item may be closed by inference. This ledger does not authorize live tra
 - [ ] Independent review remains pending.
 - [ ] Provider data-use terms remain unreviewed, volume unit remains unknown, historical order-book depth is unavailable, and spread/slippage remain assumptions.
 - [ ] No model was trained. `model_sha256 = null`; `selected_model_for_runtime = null`; Champion = none; `runtime_promotion_allowed = false`. Phase 31 does not evaluate an economic strategy gate and does not authorize Runtime changes.
+
+
+
+## Phase 32 — Cross-fitted Meta-Labeling candidate
+
+- [x] Reviewed the current phase-32 candidate branch against the phase roadmap: the primary SMA-12/48 event rule is deterministic; features are frozen at completed event time; outer train/validation/test splits are chronological; inclusive Triple-Barrier label intervals are purged with a declared embargo; calibration and threshold selection use separate purged validation slices.
+- [x] Hardened the acceptance contract so pooled out-of-fold Average Precision must be **strictly greater than pooled positive-label prevalence**. Missing/invalid values or equality fail this classification gate. This criterion is in addition to, never a replacement for, complete-fold coverage, trade-count, cost-adjusted net return, paired confidence-bound, drawdown and tail-loss gates.
+- [x] Bumped the Phase 32 report schema from 1 to 2 to record pooled positive prevalence, classification-gate outcome and overall acceptance disposition explicitly.
+- [x] Added focused boundary tests for the average-precision/prevalence comparison, including equality, missing values, non-finite values and invalid ranges.
+- [ ] Exact-head CI and the pinned Phase 32 empirical workflow must execute on the resulting source/test SHA before the phase is considered validated. The existence of this source or workflow is not empirical evidence.
+- [ ] Preserve the report, dataset/model/calibrator SHA-256 identities and run logs. If fewer than eight predeclared folds are evaluable, any required metric is undefined, AP does not beat prevalence, or any economic gate fails, both XGBoost and LightGBM remain rejected.
+- [ ] Keep `selected_model_for_runtime = null`, Champion = none and `runtime_promotion_allowed = false`. No candidate model is loaded by Paper or Live Runtime.
+- [ ] FreqAI remains a design reference, not a standalone dependency; any compatibility spike requires a pinned supported interface, dependency/license review and isolated tests before an integration decision.
+- [ ] The Nobitex write gateway remains a non-production candidate. Novaryn is a code reference whose README still states `VALIDATION_STATE = VALIDATION_BLOCKED_EXTERNAL`; its existence does not close EVORYN's account/open-order/fill reconciliation, fault recovery, independent review, or owner-host release gates.
