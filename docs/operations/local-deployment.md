@@ -6,6 +6,10 @@ This runbook bootstraps a local EVORYN checkout for reproducible development and
 
 The current repository has no integrated production strategy loop, account/portfolio snapshot builder, fill/open-order reconciliation, protective exit policy or production process supervisor. Do not set the Spot-write feature flag to true to try to bypass those missing release components.
 
+## Current Paper-only Windows handover
+
+The user-scoped Windows Task Scheduler runner is an offline CSV replay with a no-Champion classifier; it does not load trained HMM/XGBoost artifacts or access an exchange. It is not a production/live runtime. For exact CSV, JSON config, `.env`, preflight, one-cycle, register/status/unregister commands, see [Windows 11 Paper Runtime Handover](windows11-paper-handover.md) and [Windows Paper Task Scheduler runbook](windows-paper-task-scheduler.md). `.env` does not configure this task; the strict local JSON config does. No owner-host task or local files are created by GitHub CI or this documentation change.
+
 ## Windows setup
 
 1. Install Git and Python 3.12.x from their trusted official distributions.
