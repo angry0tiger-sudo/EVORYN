@@ -5,6 +5,8 @@
 
 ## Latest exact-head execution checkpoint — 2026-10-21
 
+The transport revision now classifies DNS, timeout, TLS/certificate, connection, and other network failures in sanitized logs. Public history GET retries are bounded to three attempts total by default (20-second per-attempt timeout, 0.5-second exponential backoff starting delay), while certificate-verification failures fail immediately. No request URL, headers, credentials, or raw provider response body is logged. The research workflow is configured to run on commits changing this transport, its tests, the bounded dataset trainer, or the workflow itself, so transport fixes can be exercised by GitHub Actions without local machine activity.
+
 - Code SHA: `4343d637f2bfd6536566a8b2d23a395f37bca433`. Exact-head PR CI [Run #39493555023](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39493555023) passed all seven required jobs.
 - Advanced research workflow [Run #39493546367](https://github.com/angry0tiger-sudo/EVORYN/actions/runs/39493546367) was attempted twice on that exact SHA. Both attempts passed the research pre-network gates (Ruff, mypy, Bandit, pytest: 417 passed and 2 skipped, and pip-audit reporting no known vulnerabilities) but failed in the public-history fetch step with `Historical UDF GET failed with URLError`. The model evaluation step was skipped.
 - Attempt 1 artifact #12296199968 has ZIP SHA-256 `412e734e3301e6947ee43a66c6bf3bdec78f6ce9cfe7f3ff1e99739243a7d875`; attempt 2 artifact #12296999003 has ZIP SHA-256 `960cb4831ba5bd1c3029bd1cc2e8b975fe40c79a9785a5780a717cc0a9c7a751`. Both were inspected and contain diagnostics only, with no dataset, manifest, training report, advanced report or model files.

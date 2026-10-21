@@ -77,9 +77,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         from_unix_seconds=from_unix,
         to_unix_seconds=to_unix,
         max_pages=args.max_pages,
-        timeout_seconds=10,
+        timeout_seconds=20,
         throttle_seconds=1.05,
         minimum_candles=1000,
+        max_retries=2,
+        retry_backoff_seconds=0.5,
     )
     market = Market(
         symbol=f"{args.symbol[:-4]}-{args.symbol[-4:]}",
@@ -142,6 +144,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "pages_fetched": client.pages_fetched,
             "configured_page_limit": args.max_pages,
             "configured_lookback_days": args.lookback_days,
+            "configured_timeout_seconds": config.timeout_seconds,
+            "configured_max_retries": config.max_retries,
+            "configured_retry_backoff_seconds": config.retry_backoff_seconds,
         }
         report = {
             "schema_version": 1,

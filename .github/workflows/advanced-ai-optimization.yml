@@ -6,6 +6,9 @@ on:
       - feat/ai-advanced-optimization
     paths:
       - ".github/workflows/advanced-ai-optimization.yml"
+      - "src/evoryn/learning_lab/nobitex_history.py"
+      - "tests/unit/test_nobitex_history.py"
+      - "scripts/train_nobitex_regime.py"
   workflow_dispatch:
     inputs:
       lookback_days:
