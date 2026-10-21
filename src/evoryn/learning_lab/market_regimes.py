@@ -174,10 +174,16 @@ def forward_filter_probabilities(
     transition = [
         [float(value) for value in row] for row in model.transmat_.tolist()
     ]
-    numpy = importlib.import_module("numpy")
-    numeric_observations = numpy.asarray(observations, dtype="float64")
-    if numeric_observations.ndim != 2:
-        raise ValueError("HMM observations must form a two-dimensional numeric matrix.")
+    try:
+        numpy = importlib.import_module("numpy")
+    except ModuleNotFoundError as exc:
+        if exc.name != "numpy":
+            raise
+        numeric_observations: Any = [list(row) for row in observations]
+    else:
+        numeric_observations = numpy.asarray(observations, dtype="float64")
+        if numeric_observations.ndim != 2:
+            raise ValueError("HMM observations must form a two-dimensional numeric matrix.")
     emissions_array = model._compute_log_likelihood(numeric_observations)
     emissions = [[float(value) for value in row] for row in emissions_array.tolist()]
     if not emissions or len(emissions) != len(observations):
