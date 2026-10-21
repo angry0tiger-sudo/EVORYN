@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: market-regime-detection-\${{ github.ref }}
+  group: market-regime-detection-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -79,7 +79,7 @@ jobs:
       - name: Fetch bounded public OHLC history and seal immutable dataset
         run: |
           set -o pipefail
-          DAYS="\${{ inputs.lookback_days || '730' }}"
+          DAYS="${{ inputs.lookback_days || '730' }}"
           python scripts/train_nobitex_regime.py \
             --symbol BTCUSDT \
             --resolution 60 \
@@ -99,7 +99,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: market-regime-detection-\${{ github.run_id }}-\${{ github.run_attempt }}
+          name: market-regime-detection-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/nobitex-regime/training-report.json
             artifacts/nobitex-regime/training-report.json.sha256
