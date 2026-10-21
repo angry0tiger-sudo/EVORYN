@@ -6,6 +6,7 @@ from future returns and are not forecasts of the next price move.
 
 from __future__ import annotations
 
+import importlib
 import math
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -173,7 +174,7 @@ def forward_filter_probabilities(
     transition = [
         [float(value) for value in row] for row in model.transmat_.tolist()
     ]
-    numpy = __import__("numpy")
+    numpy = importlib.import_module("numpy")
     numeric_observations = numpy.asarray(observations, dtype="float64")
     if numeric_observations.ndim != 2:
         raise ValueError("HMM observations must form a two-dimensional numeric matrix.")
