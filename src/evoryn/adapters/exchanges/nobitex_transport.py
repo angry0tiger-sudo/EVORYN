@@ -97,6 +97,19 @@ class NobitexHTTPTransport:
         return method == "POST" and path == "/market/orders/status"
 
     @staticmethod
+    def _is_ascii_alphanumeric(value: str) -> bool:
+        return bool(value) and all(
+            "0" <= character <= "9"
+            or "A" <= character <= "Z"
+            or "a" <= character <= "z"
+            for character in value
+        )
+
+    @staticmethod
+    def _is_ascii_digits(value: str) -> bool:
+        return bool(value) and all("0" <= character <= "9" for character in value)
+
+    @staticmethod
     def _is_usdt_symbol(symbol: str) -> bool:
         """Accept only compact BASEUSDT symbols at the lowest HTTP boundary."""
         normalized = symbol.strip().upper()
@@ -151,8 +164,7 @@ class NobitexHTTPTransport:
             if (
                 params is None
                 or set(params) - allowed_order_params
-                or not params.get("srcCurrency", "").strip().isascii()
-                or not params.get("srcCurrency", "").strip().isalnum()
+                or not self._is_ascii_alphanumeric(params.get("srcCurrency", "").strip())
                 or params.get("dstCurrency", "").strip().casefold() != "usdt"
                 or params.get("details", "2") not in {"1", "2"}
                 or params.get("status", "open").strip().casefold()
@@ -161,8 +173,7 @@ class NobitexHTTPTransport:
                 or (
                     "fromId" in params
                     and (
-                        not params["fromId"].isascii()
-                        or not params["fromId"].isdigit()
+                        not self._is_ascii_digits(params["fromId"])
                         or len(params["fromId"]) > 19
                         or int(params["fromId"]) < 1
                     )
@@ -170,8 +181,7 @@ class NobitexHTTPTransport:
                 or (
                     "page" in params
                     and (
-                        not params["page"].isascii()
-                        or not params["page"].isdigit()
+                        not self._is_ascii_digits(params["page"])
                         or len(params["page"]) > 9
                         or int(params["page"]) < 1
                     )
@@ -179,8 +189,7 @@ class NobitexHTTPTransport:
                 or (
                     "pageSize" in params
                     and (
-                        not params["pageSize"].isascii()
-                        or not params["pageSize"].isdigit()
+                        not self._is_ascii_digits(params["pageSize"])
                         or len(params["pageSize"]) > 4
                         or not 1 <= int(params["pageSize"]) <= 1000
                     )
@@ -194,62 +203,6 @@ class NobitexHTTPTransport:
                 "srcCurrency", "dstCurrency", "fromId", "page", "pageSize"
             }
             if (
-                params is None
-                or set(params) - allowed_trade_params
-                or not params.get("srcCurrency", "").strip().isascii()
-                or not params.get("srcCurrency", "").strip().isalnum()
-                or params.get("dstCurrency", "").strip().casefold() != "usdt"
-                or ("page" in params and "fromId" in params)
-                or (
-                    "fromId" in params
-                    and (
-                        not params["fromId"].isascii()
-                        or not params["fromId"].isdigit()
-                        or len(params["fromId"]) > 19
-                        or int(params["fromId"]) < 1
-                    )
-                )
-                or (
-                    "page" in params
-                    and (
-                        not params["page"].isascii()
-                        or not params["page"].isdigit()
-                        or len(params["page"]) > 3
-                        or not 1 <= int(params["page"]) <= 100
-                    )
-                )
-                or (
-                    "pageSize" in params
-                    and (
-                        not params["pageSize"].isascii()
-                        or not params["pageSize"].isdigit()
-                        or len(params["pageSize"]) > 3
-                        or not 1 <= int(params["pageSize"]) <= 500
-                    )
-                )
-            ):
-                raise InvalidExchangeRequest(
-                    "Nobitex user-trade reads require a bounded Spot/USDT query."
-                )
-
-        if (
-                params is None
-                or set(params) - allowed_trade_params
-                or not params.get("srcCurrency", "").strip().isalnum()
-                or params.get("dstCurrency", "").strip().casefold() != "usdt"
-                or (
-                    "fromId" in params
-                    and (
-                        not params["fromId"].isdigit()
-                        or int(params["fromId"]) < 1
-                    )
-                )
-            ):
-                raise InvalidExchangeRequest(
-                    "Nobitex user-trade reads require a bounded Spot/USDT query."
-                )
-
-        if (
             normalized_method == "GET"
             and path == "/v2/wallets"
             and (

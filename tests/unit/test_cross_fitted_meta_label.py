@@ -12,8 +12,8 @@ from evoryn.learning_lab.cross_fitted_meta_label import (
     CrossFittedMetaConfig,
     TripleBarrierEventPolicy,
     _average_precision_above_prevalence,
-    _canonical_json_bytes,
     _calibrate_probabilities,
+    _canonical_json_bytes,
     _fit_probability_calibrator,
     select_validation_threshold,
 )

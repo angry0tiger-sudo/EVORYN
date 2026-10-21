@@ -60,14 +60,14 @@ Order-writing implementation requires the later execution and risk phases, verif
 
 The dedicated `NobitexReconciliationReader` uses two documented GET-only user endpoints:
 
-- `GET /market/orders/list` for filtered Spot/USDT user-order snapshots, including matched/unmatched amounts and order identity where the provider returns those fields.
-- `GET /market/trades/list` for user-trade records with the originating order ID, fee and provider pagination marker.
+- `GET /market/orders/list` returns user order snapshots and supports pagination (default 100 rows, `pageSize` up to 1,000). A `page` and `fromId` cursor must not be sent together.
+- `GET /market/trades/list` returns user trades and supports pagination (default 30 rows, maximum `pageSize=500`, maximum page number 100). Current first-party docs describe up to 180 days of Spot user-trade history.
 
-The low-level transport allowlists these exact paths only. It requires a read-only API token, requires a bounded BASE/USDT query, rejects unknown query keys, and performs no order mutation. The provider returns one page at a time; it does **not** claim the account ledger is complete. Missing `hasNext`, absent `tradeType`, unknown status, or quantity inconsistencies leave a page ineligible for authoritative reconciliation. The current official docs describe up to 180 days of Spot user-trade history; this endpoint does not promise an unlimited historical ledger.
+The reader exposes `page/pageSize` and `fromId` modes, but reads one page per call. The low-level transport allowlists these exact paths, requires a read-only API token, limits requests to a validated BASE/USDT pair, rejects unknown query keys, and adds no order mutation capability. Missing order-list `hasNext`, absent `tradeType`, unknown order status or quantity inconsistencies leave a page ineligible for authoritative reconciliation.
 
-Official contract reference: [Nobitex Spot API documentation](https://apidocs.nobitex.ir/), sections “فهرست سفارش‌های کاربر” and “فهرست معاملات کاربر”.
+Official contract references: [Nobitex user-order list](https://apidocs.nobitex.ir/spot_trade/%D9%81%D9%87%D8%B1%D8%B3%D8%AA-%D8%B3%D9%81%D8%A7%D8%B1%D8%B4-%D9%87%D8%A7%DB%8C-%DA%A9%D8%A7%D8%B1%D8%A8%D8%B1) and [Nobitex user-trade list](https://apidocs.nobitex.ir/spot_trade/%D9%81%D9%87%D8%B1%D8%B3%D8%AA-%D9%85%D8%B9%D8%A7%D9%85%D9%84%D8%A7%D8%AA-%DA%A9%D8%A7%D8%B1%D8%A8%D8%B1).
 
-These read primitives are not wired into Live Runtime and do not enable writes. Before using them to clear a blocked submission, EVORYN still needs a complete pagination policy, exact-head contract tests against sanitized exchange responses, and a tested reconciliation state machine that compares the journal, balances, orders and fills after restart. Unknown state must continue to block new submissions.
+These read primitives are not wired into Live Runtime and do not enable writes. Before using them as an authoritative reconciliation source, EVORYN still needs a pagination/recovery state machine and contract tests against sanitized exchange responses, including journal state, balances, active/closed orders, partial fills, fees and restart behavior. Unknown state must continue to block new submissions.
 
 ## Phase 21A capability evidence boundary
 
